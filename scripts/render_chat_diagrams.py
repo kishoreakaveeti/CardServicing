@@ -17,47 +17,80 @@ COLORS = {'browser': '#155e75', 'workflow': '#1d4ed8', 'agent': '#6d28d9',
 
 
 def render(diagram):
-    cards = []
-    y = 170
-    for number, step in enumerate(diagram['steps'], 1):
-        lines = [line for paragraph in step['body'] for line in textwrap.wrap(paragraph, 94)]
-        references = []
+    participants = diagram['participants']
+    width = max(1400, len(participants) * 260 + 140)
+    gap = (width - 260) / (len(participants) - 1)
+    positions = {p['id']: 130 + index * gap for index, p in enumerate(participants)}
+    rows, y = [], 245
+    for number, message in enumerate(diagram['messages'], 1):
+        kind = message['kind']
+        if kind in ('note', 'section'):
+            lines = textwrap.wrap(message['label'], (width - 160) // 10)
+            row_height = 36 + len(lines) * 25
+        else:
+            x1, x2 = positions[message['from']], positions[message['to']]
+            available = abs(x2 - x1) - 35 if x1 != x2 else gap - 65
+            lines = textwrap.wrap(message['label'], max(17, int(available // 9)))
+            row_height = 47 + len(lines) * 24 + (25 if x1 == x2 else 0)
+        rows.append((number, message, lines, y, row_height))
+        y += row_height
+    bottom = y + 20
+    references = []
+    for step in diagram['steps']:
         for reference in step['references']:
             path, needle = reference['path'], reference['anchor']
-            source_lines = (ROOT / path).read_text(encoding='utf-8').splitlines()
-            matches = [index for index, line in enumerate(source_lines, 1) if needle in line]
+            matches = [i for i, line in enumerate((ROOT / path).read_text(encoding='utf-8').splitlines(), 1) if needle in line]
             if not matches:
                 raise ValueError(f'Missing code anchor: {path}: {needle}')
-            references.append((path, matches[0]))
-        height = 88 + len(lines) * 27 + len(references) * 25
-        cards.append((number, step, lines, references, y, height))
-        y += height + 48
-    height = y + 65
-    parts = [f'<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="{height}" viewBox="0 0 1200 {height}" role="img" aria-labelledby="title description">',
-             f'<title id="title">{escape(diagram["title"])}</title>',
-             f'<desc id="description">{escape(diagram["subtitle"])}</desc>',
-             '<defs><marker id="arrow" markerWidth="10" markerHeight="10" refX="8" refY="5" orient="auto"><path d="M0 0 L10 5 L0 10" fill="#64748b"/></marker></defs>',
+            item = (path, matches[0])
+            if item not in references:
+                references.append(item)
+    height = bottom + 135 + len(references) * 25
+    parts = [f'<svg xmlns="http://www.w3.org/2000/svg" width="{width}" height="{height}" viewBox="0 0 {width} {height}" role="img" aria-labelledby="title description">',
+             f'<title id="title">{escape(diagram["title"])} - sequence diagram</title>',
+             f'<desc id="description">{escape(diagram["subtitle"])} Read interactions from top to bottom. Dashed arrows are replies.</desc>',
+             '<defs><marker id="arrow" markerWidth="9" markerHeight="9" refX="8" refY="4.5" orient="auto"><path d="M0 0 L9 4.5 L0 9" fill="#334155"/></marker></defs>',
              '<style>text{font-family:Consolas,"Liberation Mono",monospace}.heading{font-family:Arial,sans-serif;font-weight:700}</style>',
-             f'<rect width="1200" height="{height}" fill="#f1f5f9"/>',
-             f'<text x="60" y="65" class="heading" font-size="32" fill="#0f172a">{escape(diagram["title"])}</text>']
-    for index, line in enumerate(textwrap.wrap(diagram['subtitle'], 94)):
-        parts.append(f'<text x="60" y="{105 + index * 26}" font-size="18" fill="#475569">{escape(line)}</text>')
-    for number, step, lines, references, top, card_height in cards:
-        color = COLORS[step['owner']]
-        if number > 1:
-            parts.append(f'<path d="M600 {top - 43} V{top - 10}" stroke="#64748b" stroke-width="3" marker-end="url(#arrow)"/>')
-        parts.extend([f'<rect x="60" y="{top}" width="1080" height="{card_height}" rx="12" fill="white" stroke="#cbd5e1"/>',
-                      f'<rect x="60" y="{top}" width="9" height="{card_height}" rx="4" fill="{color}"/>',
-                      f'<text x="88" y="{top + 35}" class="heading" font-size="23" fill="{color}">{number:02d} / {escape(step["title"])}</text>'])
-        baseline = top + 69
-        for line in lines:
-            parts.append(f'<text x="88" y="{baseline}" font-size="18" fill="#1e293b">{escape(line)}</text>')
-            baseline += 27
-        baseline += 7
-        for path, line in references:
-            parts.append(f'<a href="../../{escape(path, quote=True)}"><text x="88" y="{baseline}" font-size="16" fill="#1d4ed8">{escape(path)}:{line}</text></a>')
-            baseline += 25
-    parts.append(f'<text x="60" y="{height - 28}" font-size="15" fill="#475569">Source: card-chat-flows.json | Regenerate: python scripts/render_chat_diagrams.py</text>')
+             f'<rect width="{width}" height="{height}" fill="#fff"/>',
+             f'<text x="40" y="55" class="heading" font-size="32" fill="#0f172a">{escape(diagram["title"])}</text>',
+             f'<text x="40" y="90" font-size="18" fill="#475569">{escape(diagram["subtitle"])}</text>',
+             '<text x="40" y="120" font-size="16" fill="#475569">Time flows downward | Solid arrow: call | Dashed arrow: reply | Yellow: explanation</text>']
+    for participant in participants:
+        x = positions[participant['id']]
+        color = COLORS[participant['id']]
+        parts.extend([f'<path d="M{x} 207 V{bottom}" stroke="#94a3b8" stroke-width="2" stroke-dasharray="6 6"/>',
+                      f'<rect x="{x-111}" y="155" width="222" height="52" rx="7" fill="{color}"/>',
+                      f'<text x="{x}" y="187" text-anchor="middle" class="heading" font-size="19" fill="white">{escape(participant["label"])}</text>'])
+    for number, message, lines, top, row_height in rows:
+        kind = message['kind']
+        if kind in ('note', 'section'):
+            fill = '#fef3c7' if kind == 'note' else '#e0e7ff'
+            parts.append(f'<rect x="35" y="{top}" width="{width-70}" height="{row_height-12}" rx="5" fill="{fill}" stroke="#cbd5e1"/>')
+            for index, line in enumerate(lines):
+                parts.append(f'<text x="55" y="{top+25+index*25}" font-size="17" fill="#1e293b">{escape(line)}</text>')
+            continue
+        x1, x2 = positions[message['from']], positions[message['to']]
+        arrow_y = top + len(lines) * 24 + 9
+        if x1 == x2:
+            direction = -1 if x1 > width - gap else 1
+            text_x = x1 + direction * (gap - 40) / 2
+            loop_x = x1 + direction * 65
+            path = f'M{x1} {arrow_y} H{loop_x} V{arrow_y+22} H{x1}'
+        else:
+            text_x = (x1+x2)/2
+            path = f'M{x1} {arrow_y} H{x2}'
+        label_width = max(len(line) for line in lines) * 9.5 + 16
+        parts.append(f'<rect x="{text_x-label_width/2}" y="{top-5}" width="{label_width}" height="{len(lines)*24+7}" fill="white"/>')
+        for index, line in enumerate(lines):
+            parts.append(f'<text x="{text_x}" y="{top+15+index*24}" text-anchor="middle" font-size="16" fill="#0f172a">{escape(line)}</text>')
+        dash = ' stroke-dasharray="7 5"' if kind == 'return' else ''
+        parts.append(f'<path d="{path}" fill="none" stroke="#334155" stroke-width="2"{dash} marker-end="url(#arrow)"/>')
+    baseline = bottom + 42
+    parts.append(f'<text x="40" y="{baseline}" class="heading" font-size="20" fill="#0f172a">Traceable code references</text>')
+    for path, line in references:
+        baseline += 25
+        parts.append(f'<a href="../../{escape(path, quote=True)}"><text x="40" y="{baseline}" font-size="16" fill="#1d4ed8">{escape(path)}:{line}</text></a>')
+    parts.append(f'<text x="40" y="{height-25}" font-size="15" fill="#475569">Source: card-chat-flows.json | Regenerate: python scripts/render_chat_diagrams.py</text>')
     parts.append('</svg>')
     return '\n'.join(parts) + '\n'
 

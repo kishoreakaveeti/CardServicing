@@ -10,7 +10,7 @@ Cards API owns durable card creation and idempotency.
 Open [the offline diagram viewer](diagrams/index.html) in a browser. It needs no
 server or internet connection. Use the size controls, or open an individual SVG
 and use browser zoom. SVG is vector graphics: text and lines stay sharp as you
-zoom. These are real files in the repository, not chat-only Mermaid previews.
+zoom. These are SVG sequence diagrams with participant lifelines, solid call arrows, dashed reply arrows and clearly marked conditional sections. Read time from top to bottom. They are real files in the repository, not chat-only Mermaid previews.
 
 | Diagram | Open the standalone SVG |
 | --- | --- |
@@ -409,8 +409,8 @@ timeout. Resume the API and retry with the same chat submission if necessary.
 The editable architecture source is
 [`diagrams/card-chat-flows.json`](diagrams/card-chat-flows.json). The renderer is
 [`scripts/render_chat_diagrams.py`](../scripts/render_chat_diagrams.py), using only
-the Python standard library. Each step specifies an owner, explanatory text and
-source-code anchors. The renderer resolves current line numbers and emits SVGs.
+the Python standard library. The source defines participants and ordered messages (calls, replies, notes and
+conditional sections). Detailed steps retain explanatory text and source-code anchors. The renderer resolves current line numbers and emits SVGs.
 
 When architecture changes:
 
