@@ -120,7 +120,9 @@ by native app access approval timing out. Run this harness to finish that check.
    or use **Debug Chat** directly after putting local secrets in ignored `.env`.
    The launch configuration loads `.env`; don't put the key in `launch.json`.
 4. Set breakpoints in `main.py` at `message`, `confirm`, and
-   `gateway.create`; `subProcess: true` enables child Python debugging.
+   `gateway.create`. `Debug Chat` uses `subProcess: false` to keep automatic
+   debugger attachment out of the MCP stdio child startup. The compound
+   `Debug Chat + API` still debugs both applications as independent sessions.
    To see Claude's proposal, break in `provider.py` on
    `return calls[0].name, calls[0].input` inside `AnthropicModel.propose`.
    To see the workflow execute it, break in `main.py` on
@@ -128,9 +130,12 @@ by native app access approval timing out. Run this harness to finish that check.
    Between these points, `CardServicingAgent.interpret_turn` returns the proposal
    and `confirm` checks it against the confirmed draft. Inspect `proposal` and
    `submission` locally; do not log their values.
-5. Set breakpoints in `mcp_server.create_card`, `api_client/client.py` at
-   `create_card`, and `card_servicing/cards.py` at the POST route. The API
-   breakpoint belongs to its separate host/container debugger session.
+5. Set a breakpoint in `card_servicing/cards.py` at the POST route. The API
+   breakpoint belongs to its separate host/container debugger session. With
+   automatic child attachment disabled, breakpoints in `mcp_server.create_card`
+   and `api_client/client.py` inside that child do not fire; inspect the outgoing
+   MCP arguments and returned result in `gateway.create`. Debugging the child
+   itself requires a separate attachment after it has started.
 6. Open 8020, supply synthetic details, inspect the masked review, then click
    Create card. Trace the frozen body/key into MCP and the `Idempotency-Key`
    header into REST. Avoid copying watch values or sensitive payloads into logs.

@@ -1,5 +1,12 @@
 {
   "version": "0.2.0",
+  "compounds": [
+    {
+      "name": "Debug Chat + API",
+      "configurations": ["Debug API", "Debug Chat"],
+      "stopAll": true
+    }
+  ],
   "configurations": [
     {
       "name": "Attach to Docker API",
@@ -51,7 +58,7 @@
       "envFile": "${workspaceFolder}/.env",
       "console": "integratedTerminal",
       "justMyCode": true,
-      "subProcess": true
+      "subProcess": false
     }
   ]
 }
