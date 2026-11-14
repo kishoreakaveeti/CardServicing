@@ -114,13 +114,13 @@ Build once with a release tag, then promote that existing image rather than
 rebuilding for each environment:
 
 ```powershell
-docker build -t card-servicing:prep-001 .
-docker image save --output card-servicing-prep-001.tar card-servicing:prep-001
+docker build -t card-servicing:release-001 .
+docker image save --output card-servicing-release-001.tar card-servicing:release-001
 ```
 
 Transfer and load it elsewhere with
-`docker image load --input card-servicing-prep-001.tar`, or use a registry and deploy by
-immutable digest. With this local Compose file, set `API_IMAGE_TAG=prep-001` and
+`docker image load --input card-servicing-release-001.tar`, or use a registry and deploy by
+immutable digest. With this local Compose file, set `API_IMAGE_TAG=release-001` and
 start with `--no-build`. Each environment supplies configuration, secrets, storage,
 networking, and its own deployment definition. The local bind mount and development
 credentials are not production configuration.

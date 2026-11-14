@@ -1,13 +1,13 @@
 # Architecture and technology stack
 
-This API-first local learning project mirrors API_Prep, substituting simulated
-card origination for payment instructions. The account already exists and is
-accepted without lookup. No frontend is required; Swagger, Postman or the separate
+This API-first local learning project implements simulated card origination.
+The account already exists and is accepted without lookup.
+No frontend is required; Swagger, Postman or the separate
 HTTPX client calls the API directly.
 
 | Component | Role and current status |
 | --- | --- |
-| Python 3.10+, Python 3.13 slim Docker image | Same language/runtime baseline |
+| Python 3.10+, Python 3.13 slim Docker image | Application language and container runtime |
 | FastAPI, Uvicorn, Pydantic | HTTP, validation, dependency injection and OpenAPI |
 | HTTPX | Separate client, mock transport tests |
 | pytest, pytest-cov, GitHub Actions | API/client/storage verification |
@@ -39,8 +39,8 @@ flowchart TD
 Validation returns 422 without mutation; SQL errors return 503. Names and account
 numbers are normalized before fingerprinting. A UUID-based SIM card number and
 creation timestamp are persisted once and replayed on retries. Card creation assumes
-the account exists. Redis and RabbitMQ are outside this request path, as in the
-reference application. A later outbox should commit CardCreated events with the
+the account exists. Redis and RabbitMQ are outside this request path.
+A later outbox should commit CardCreated events with the
 card, publish to RabbitMQ with confirms, and use idempotent consumers for MongoDB
 projections/notifications. Cache-aside reads should fall back to SQLite and use TTLs.
 Neither the cache nor the best-effort diagnostic queue replaces durable idempotency.
@@ -49,7 +49,7 @@ Neither the cache nor the best-effort diagnostic queue replaces durable idempote
 
 | Location | Responsibility |
 | --- | --- |
-| src/card_servicing/main.py | Factory, lifespan, wiring, trace middleware, health and retained item exercises |
+| src/card_servicing/main.py | Factory, lifespan, wiring, trace middleware, health and item CRUD exercises |
 | cards.py / models.py / config.py | Origination route, validated contract, future policy extension |
 | store.py / persistence.py / idempotency.py | Memory/SQLite stores, schema, atomic retries, canonical identity |
 | telemetry.py | Sanitized async MongoDB diagnostics |
@@ -63,7 +63,7 @@ Neither the cache nor the best-effort diagnostic queue replaces durable idempote
 
 Compose project/image `card-servicing` has separate named volumes. SQLite uses
 `data/cards.db`; MongoDB uses `card_servicing`. Fresh credentials are generated
-from `.env.example`, never copied from the payment project. Host ports: API 8010,
+from `.env.example`. Host ports: API 8010,
 Docker API 8011, debugger 5679, MongoDB 27018, Redis 6380, AMQP 5673, management 15673.
 Container ports remain 8000, 5678, 27017, 6379, 5672 and 15672 respectively.
 The container uses service DNS names. All published ports bind to localhost.
@@ -71,8 +71,9 @@ The container uses service DNS names. All published ports bind to localhost.
 The normal factory reads root `.env` with environment overrides. SQLite is the
 readiness dependency; telemetry is optional. Tests use injected isolated stores.
 CARD_CACHE_TTL_SECONDS documents a future cache setting and is not yet consumed.
-The same built image can be promoted with environment-specific configuration;
-dependency ranges and image tags are inherited, not a reproducible lockfile.
+The same built image can be promoted with environment-specific configuration.
+Dependency ranges and image tags can resolve to newer versions on rebuild;
+a reproducible lockfile is not yet provided.
 See [persistence](card-persistence.md), [infrastructure](local-infrastructure.md)
 and [Docker debugging](docker-debugging.md).
 

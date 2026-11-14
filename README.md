@@ -1,8 +1,8 @@
 # Card Servicing
 
-API-first card origination learning project, replicated from `API_Prep` with the
-same Python/FastAPI, HTTPX, SQLite, MongoDB, Redis, RabbitMQ, Docker and VS Code flow.
-This project has its own data, credentials, Compose project, volumes and host ports.
+API-first card origination learning project built with Python/FastAPI, HTTPX,
+SQLite, MongoDB, Redis, RabbitMQ, Docker and VS Code debugging.
+Local configuration includes project-specific data, credentials, volumes and ports.
 
 ## Setup and run
 
@@ -56,10 +56,10 @@ python scripts/check_infra.py
 
 The client defaults to host port 8010; set `API_BASE_URL=http://127.0.0.1:8011`
 for Docker. Exported contract: [cards.openapi.json](docs/cards.openapi.json).
-GitHub Actions runs tests on pushes and pull requests. Original `/items` exercises
-remain in memory to preserve the reference project's structure.
+GitHub Actions runs tests on pushes and pull requests. The `/items` endpoints
+provide in-memory CRUD examples for learning and implementation reference.
 
 See [architecture](docs/architecture.md), [persistence](docs/card-persistence.md),
 [infrastructure](docs/local-infrastructure.md), [health checks](docs/health-checks.md),
 and [Docker debugging](docs/docker-debugging.md). Redis caching and RabbitMQ business
-events remain provisioned future increments, matching the reference application.
+events are provisioned for future increments.

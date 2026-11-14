@@ -170,7 +170,6 @@ and open `A:\PrincipalEngineer\CardServicing\data\cards.db`. Use
 **Database Structure**, **Browse Data**, and **Execute SQL**
 to inspect it. No server, port, or login is required. Starting the API creates
 `card_statuses`, `cards`, and `card_idempotency`.
-No legacy payment data is copied.
 For the required Swagger header and replay examples, see the
 [idempotency walkthrough](card-persistence.md#try-idempotency-in-swagger). The infrastructure
 smoke check alone still creates only a temporary table.

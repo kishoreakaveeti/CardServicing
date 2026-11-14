@@ -10,7 +10,7 @@ inject `card_store=SQLiteCardStore(path)` or use `local_infrastructure=True`.
 unique simulation card number and status. `card_statuses` seeds `created`.
 `card_idempotency` stores the unique client key, canonical SHA-256 request fingerprint,
 card foreign key, original response JSON and status 201. Schema version is 1.
-There are no payment currencies, amounts or legacy payment migrations.
+The schema is dedicated to card origination and durable request replay.
 
 Every SQLite connection enables foreign keys. `BEGIN IMMEDIATE` reserves the writer
 before key lookup, coordinating concurrent threads and processes. Matching retries
