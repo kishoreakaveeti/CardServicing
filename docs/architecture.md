@@ -2,8 +2,10 @@
 
 This API-first local learning project implements simulated card origination.
 The account already exists and is accepted without lookup.
-No frontend is required; Swagger, Postman or the separate
-HTTPX client calls the API directly.
+Swagger, Postman or the separate HTTPX client calls the API directly. An optional
+[browser chat demo](chat-demo.md) adds FastAPI chat → stdio MCP → HTTPX → REST.
+The chat process calls hosted Claude through a provider adapter; the API remains
+an independent process. Drafts and confirmation state live only in chat memory.
 
 | Component | Role and current status |
 | --- | --- |

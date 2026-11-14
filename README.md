@@ -63,3 +63,12 @@ See [architecture](docs/architecture.md), [persistence](docs/card-persistence.md
 [infrastructure](docs/local-infrastructure.md), [health checks](docs/health-checks.md),
 and [Docker debugging](docs/docker-debugging.md). Redis caching and RabbitMQ business
 events are provisioned for future increments.
+
+## Conversational card demo
+
+The optional [chat demo guide](docs/chat-demo.md) includes PowerShell setup,
+VS Code debugging, credential-free verification, and a request walkthrough.
+It serves a plain browser page on port 8020 and launches a local stdio MCP child;
+the existing REST API stays in its own process on port 8010 (or Docker 8011).
+Claude extracts fields and proposes the discovered tool only after an explicit
+Create card click. The backend owns validation, confirmation and safe retries.
