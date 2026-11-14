@@ -1,5 +1,10 @@
 # Architecture and technology stack
 
+The chat workflow has a [detailed end-to-end trace](chat-end-to-end.md),
+[standalone SVG diagrams](diagrams/index.html), and version-controlled
+[diagram definitions](diagrams/card-chat-flows.json). Regenerate with
+`python scripts/render_chat_diagrams.py` when the implementation changes.
+
 This API-first local learning project implements simulated card origination.
 The account already exists and is accepted without lookup.
 Swagger, Postman or the separate HTTPX client calls the API directly. An optional

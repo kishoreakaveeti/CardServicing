@@ -1,0 +1,73 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="2129" viewBox="0 0 1200 2129" role="img" aria-labelledby="title description">
+<title id="title">02 / Each message and the question loop</title>
+<desc id="description">Claude extracts intent and values. Python chooses the question and validates completeness.</desc>
+<defs><marker id="arrow" markerWidth="10" markerHeight="10" refX="8" refY="5" orient="auto"><path d="M0 0 L10 5 L0 10" fill="#64748b"/></marker></defs>
+<style>text{font-family:Consolas,"Liberation Mono",monospace}.heading{font-family:Arial,sans-serif;font-weight:700}</style>
+<rect width="1200" height="2129" fill="#f1f5f9"/>
+<text x="60" y="65" class="heading" font-size="32" fill="#0f172a">02 / Each message and the question loop</text>
+<text x="60" y="105" font-size="18" fill="#475569">Claude extracts intent and values. Python chooses the question and validates completeness.</text>
+<rect x="60" y="170" width="1080" height="192" rx="12" fill="white" stroke="#cbd5e1"/>
+<rect x="60" y="170" width="9" height="192" rx="4" fill="#155e75"/>
+<text x="88" y="205" class="heading" font-size="23" fill="#155e75">01 / Page starts a conversation, then posts a message</text>
+<text x="88" y="239" font-size="18" fill="#1e293b">POST /conversations returns a conversation ID and greeting. JavaScript stores cid. Send posts</text>
+<text x="88" y="266" font-size="18" fill="#1e293b">{text: ...} to /conversations/{cid}/messages.</text>
+<a href="../../src/card_chat/index.html"><text x="88" y="300" font-size="16" fill="#1d4ed8">src/card_chat/index.html:19</text></a>
+<a href="../../src/card_chat/index.html"><text x="88" y="325" font-size="16" fill="#1d4ed8">src/card_chat/index.html:20</text></a>
+<path d="M600 367 V400" stroke="#64748b" stroke-width="3" marker-end="url(#arrow)"/>
+<rect x="60" y="410" width="1080" height="219" rx="12" fill="white" stroke="#cbd5e1"/>
+<rect x="60" y="410" width="9" height="219" rx="4" fill="#1d4ed8"/>
+<text x="88" y="445" class="heading" font-size="23" fill="#1d4ed8">02 / Retrieve the same Conversation object and append text</text>
+<text x="88" y="479" font-size="18" fill="#1e293b">conversations[cid] contains history, draft, review, submission and a lock. The lock serializes</text>
+<text x="88" y="506" font-size="18" fill="#1e293b">turns. Append the user answer to history; pass history and draft to the agent with</text>
+<text x="88" y="533" font-size="18" fill="#1e293b">allowed_tools={}.</text>
+<a href="../../src/card_chat/main.py"><text x="88" y="567" font-size="16" fill="#1d4ed8">src/card_chat/main.py:19</text></a>
+<a href="../../src/card_chat/main.py"><text x="88" y="592" font-size="16" fill="#1d4ed8">src/card_chat/main.py:98</text></a>
+<path d="M600 634 V667" stroke="#64748b" stroke-width="3" marker-end="url(#arrow)"/>
+<rect x="60" y="677" width="1080" height="194" rx="12" fill="white" stroke="#cbd5e1"/>
+<rect x="60" y="677" width="9" height="194" rx="4" fill="#9a3412"/>
+<text x="88" y="712" class="heading" font-size="23" fill="#9a3412">03 / Adapter sends instructions plus conversation context</text>
+<text x="88" y="746" font-size="18" fill="#1e293b">AnthropicModel.extract() calls hosted Messages. A system prompt lists supported intents and</text>
+<text x="88" y="773" font-size="18" fill="#1e293b">the three field names, requests JSON, forbids invented values and preserves leading zeros.</text>
+<text x="88" y="800" font-size="18" fill="#1e293b">History and draft are serialized into one user message.</text>
+<a href="../../src/card_chat/provider.py"><text x="88" y="834" font-size="16" fill="#1d4ed8">src/card_chat/provider.py:29</text></a>
+<path d="M600 876 V909" stroke="#64748b" stroke-width="3" marker-end="url(#arrow)"/>
+<rect x="60" y="919" width="1080" height="244" rx="12" fill="white" stroke="#cbd5e1"/>
+<rect x="60" y="919" width="9" height="244" rx="4" fill="#6d28d9"/>
+<text x="88" y="954" class="heading" font-size="23" fill="#6d28d9">04 / Agent interprets extraction and picks a controlled question</text>
+<text x="88" y="988" font-size="18" fill="#1e293b">Extraction validates intent and string-valued fields. The agent merges candidate fields with a</text>
+<text x="88" y="1015" font-size="18" fill="#1e293b">copy of the draft. QUESTIONS defines wording and order: given_name, user_name, account_number.</text>
+<text x="88" y="1042" font-size="18" fill="#1e293b">It chooses the first missing key. Unsupported actions receive a fixed explanation.</text>
+<a href="../../src/card_chat/provider.py"><text x="88" y="1076" font-size="16" fill="#1d4ed8">src/card_chat/provider.py:9</text></a>
+<a href="../../src/card_chat/agent.py"><text x="88" y="1101" font-size="16" fill="#1d4ed8">src/card_chat/agent.py:7</text></a>
+<a href="../../src/card_chat/agent.py"><text x="88" y="1126" font-size="16" fill="#1d4ed8">src/card_chat/agent.py:53</text></a>
+<path d="M600 1168 V1201" stroke="#64748b" stroke-width="3" marker-end="url(#arrow)"/>
+<rect x="60" y="1211" width="1080" height="271" rx="12" fill="white" stroke="#cbd5e1"/>
+<rect x="60" y="1211" width="9" height="271" rx="4" fill="#1d4ed8"/>
+<text x="88" y="1246" class="heading" font-size="23" fill="#1d4ed8">05 / Validate updates, then save only actual supplied fields</text>
+<text x="88" y="1280" font-size="18" fill="#1e293b">The workflow merges updates with the existing draft. CardCreate enforces trimmed nonblank</text>
+<text x="88" y="1307" font-size="18" fill="#1e293b">strings, length limits, no control characters and no extras. Temporary &#x27;pending&#x27; values</text>
+<text x="88" y="1334" font-size="18" fill="#1e293b">validate partial updates but are never saved or submitted. Invalid updates clear the review</text>
+<text x="88" y="1361" font-size="18" fill="#1e293b">and keep the previous draft.</text>
+<a href="../../src/card_chat/main.py"><text x="88" y="1395" font-size="16" fill="#1d4ed8">src/card_chat/main.py:109</text></a>
+<a href="../../src/card_chat/main.py"><text x="88" y="1420" font-size="16" fill="#1d4ed8">src/card_chat/main.py:116</text></a>
+<a href="../../src/card_servicing/models.py"><text x="88" y="1445" font-size="16" fill="#1d4ed8">src/card_servicing/models.py:13</text></a>
+<path d="M600 1487 V1520" stroke="#64748b" stroke-width="3" marker-end="url(#arrow)"/>
+<rect x="60" y="1530" width="1080" height="219" rx="12" fill="white" stroke="#cbd5e1"/>
+<rect x="60" y="1530" width="9" height="219" rx="4" fill="#1d4ed8"/>
+<text x="88" y="1565" class="heading" font-size="23" fill="#1d4ed8">06 / Incomplete? Return the next question and repeat</text>
+<text x="88" y="1599" font-size="18" fill="#1e293b">Compare saved draft keys with CardCreate.model_fields. If incomplete, save the agent&#x27;s reply</text>
+<text x="88" y="1626" font-size="18" fill="#1e293b">to history and return it. The next request carries the same cid; context is rebuilt from the</text>
+<text x="88" y="1653" font-size="18" fill="#1e293b">accumulated history and draft. This state exists only in chat memory.</text>
+<a href="../../src/card_chat/main.py"><text x="88" y="1687" font-size="16" fill="#1d4ed8">src/card_chat/main.py:118</text></a>
+<a href="../../src/card_chat/main.py"><text x="88" y="1712" font-size="16" fill="#1d4ed8">src/card_chat/main.py:68</text></a>
+<path d="M600 1754 V1787" stroke="#64748b" stroke-width="3" marker-end="url(#arrow)"/>
+<rect x="60" y="1797" width="1080" height="219" rx="12" fill="white" stroke="#cbd5e1"/>
+<rect x="60" y="1797" width="9" height="219" rx="4" fill="#1d4ed8"/>
+<text x="88" y="1832" class="heading" font-size="23" fill="#1d4ed8">07 / Complete? Fully validate and show a masked review</text>
+<text x="88" y="1866" font-size="18" fill="#1e293b">review() validates the complete draft and generates a fresh review token. JavaScript shows</text>
+<text x="88" y="1893" font-size="18" fill="#1e293b">Create card when that token is returned. An accepted edit produces a fresh review; the</text>
+<text x="88" y="1920" font-size="18" fill="#1e293b">previous token becomes invalid. No card write has happened.</text>
+<a href="../../src/card_chat/main.py"><text x="88" y="1954" font-size="16" fill="#1d4ed8">src/card_chat/main.py:72</text></a>
+<a href="../../src/card_chat/index.html"><text x="88" y="1979" font-size="16" fill="#1d4ed8">src/card_chat/index.html:16</text></a>
+<text x="60" y="2101" font-size="15" fill="#475569">Source: card-chat-flows.json | Regenerate: python scripts/render_chat_diagrams.py</text>
+</svg>

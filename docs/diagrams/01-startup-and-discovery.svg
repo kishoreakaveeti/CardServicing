@@ -1,0 +1,58 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="1706" viewBox="0 0 1200 1706" role="img" aria-labelledby="title description">
+<title id="title">01 / Startup and tool discovery</title>
+<desc id="description">The local chat backend discovers MCP. Claude does not browse OpenAPI or call localhost.</desc>
+<defs><marker id="arrow" markerWidth="10" markerHeight="10" refX="8" refY="5" orient="auto"><path d="M0 0 L10 5 L0 10" fill="#64748b"/></marker></defs>
+<style>text{font-family:Consolas,"Liberation Mono",monospace}.heading{font-family:Arial,sans-serif;font-weight:700}</style>
+<rect width="1200" height="1706" fill="#f1f5f9"/>
+<text x="60" y="65" class="heading" font-size="32" fill="#0f172a">01 / Startup and tool discovery</text>
+<text x="60" y="105" font-size="18" fill="#475569">The local chat backend discovers MCP. Claude does not browse OpenAPI or call localhost.</text>
+<rect x="60" y="170" width="1080" height="192" rx="12" fill="white" stroke="#cbd5e1"/>
+<rect x="60" y="170" width="9" height="192" rx="4" fill="#1d4ed8"/>
+<text x="88" y="205" class="heading" font-size="23" fill="#1d4ed8">01 / Chat lifespan creates the agent and model adapter</text>
+<text x="88" y="239" font-size="18" fill="#1e293b">Uvicorn serves card_chat.main:app on 8020. Server configuration supplies MODEL_ID and the</text>
+<text x="88" y="266" font-size="18" fill="#1e293b">Anthropic credential. The Cards API is a separate process on 8010 (Docker host port: 8011).</text>
+<a href="../../src/card_chat/main.py"><text x="88" y="300" font-size="16" fill="#1d4ed8">src/card_chat/main.py:39</text></a>
+<a href="../../src/card_chat/provider.py"><text x="88" y="325" font-size="16" fill="#1d4ed8">src/card_chat/provider.py:21</text></a>
+<path d="M600 367 V400" stroke="#64748b" stroke-width="3" marker-end="url(#arrow)"/>
+<rect x="60" y="410" width="1080" height="167" rx="12" fill="white" stroke="#cbd5e1"/>
+<rect x="60" y="410" width="9" height="167" rx="4" fill="#1d4ed8"/>
+<text x="88" y="445" class="heading" font-size="23" fill="#1d4ed8">02 / Gateway starts a local Python child over stdio</text>
+<text x="88" y="479" font-size="18" fill="#1e293b">connect() launches sys.executable -m card_chat.mcp_server. MCP uses the child&#x27;s stdin/stdout;</text>
+<text x="88" y="506" font-size="18" fill="#1e293b">diagnostics use stderr. The child does not listen on another HTTP port.</text>
+<a href="../../src/card_chat/gateway.py"><text x="88" y="540" font-size="16" fill="#1d4ed8">src/card_chat/gateway.py:28</text></a>
+<path d="M600 582 V615" stroke="#64748b" stroke-width="3" marker-end="url(#arrow)"/>
+<rect x="60" y="625" width="1080" height="244" rx="12" fill="white" stroke="#cbd5e1"/>
+<rect x="60" y="625" width="9" height="244" rx="4" fill="#047857"/>
+<text x="88" y="660" class="heading" font-size="23" fill="#047857">03 / Child creates FastMCP and registers create_card</text>
+<text x="88" y="694" font-size="18" fill="#1e293b">FastMCP(&#x27;Card servicing&#x27;) constructs the server. @mcp.tool() registers the Python function.</text>
+<text x="88" y="721" font-size="18" fill="#1e293b">mcp.run(transport=&#x27;stdio&#x27;) starts the protocol loop. The SDK builds a schema from the function</text>
+<text x="88" y="748" font-size="18" fill="#1e293b">signature.</text>
+<a href="../../src/card_chat/mcp_server.py"><text x="88" y="782" font-size="16" fill="#1d4ed8">src/card_chat/mcp_server.py:12</text></a>
+<a href="../../src/card_chat/mcp_server.py"><text x="88" y="807" font-size="16" fill="#1d4ed8">src/card_chat/mcp_server.py:16</text></a>
+<a href="../../src/card_chat/mcp_server.py"><text x="88" y="832" font-size="16" fill="#1d4ed8">src/card_chat/mcp_server.py:43</text></a>
+<path d="M600 874 V907" stroke="#64748b" stroke-width="3" marker-end="url(#arrow)"/>
+<rect x="60" y="917" width="1080" height="167" rx="12" fill="white" stroke="#cbd5e1"/>
+<rect x="60" y="917" width="9" height="167" rx="4" fill="#1d4ed8"/>
+<text x="88" y="952" class="heading" font-size="23" fill="#1d4ed8">04 / Backend initializes MCP and lists tools</text>
+<text x="88" y="986" font-size="18" fill="#1e293b">ClientSession.initialize() performs the handshake. list_tools() discovers create_card and its</text>
+<text x="88" y="1013" font-size="18" fill="#1e293b">inputSchema. Startup checks that it is the only tool.</text>
+<a href="../../src/card_chat/gateway.py"><text x="88" y="1047" font-size="16" fill="#1d4ed8">src/card_chat/gateway.py:36</text></a>
+<path d="M600 1089 V1122" stroke="#64748b" stroke-width="3" marker-end="url(#arrow)"/>
+<rect x="60" y="1132" width="1080" height="194" rx="12" fill="white" stroke="#cbd5e1"/>
+<rect x="60" y="1132" width="9" height="194" rx="4" fill="#1d4ed8"/>
+<text x="88" y="1167" class="heading" font-size="23" fill="#1d4ed8">05 / Gateway prepares the model-facing tool schema</text>
+<text x="88" y="1201" font-size="18" fill="#1e293b">Copy the discovered schema; remove idempotency_key from properties and required. The workflow</text>
+<text x="88" y="1228" font-size="18" fill="#1e293b">retains that key privately. Required card fields remain given_name, user_name and</text>
+<text x="88" y="1255" font-size="18" fill="#1e293b">account_number.</text>
+<a href="../../src/card_chat/gateway.py"><text x="88" y="1289" font-size="16" fill="#1d4ed8">src/card_chat/gateway.py:15</text></a>
+<path d="M600 1331 V1364" stroke="#64748b" stroke-width="3" marker-end="url(#arrow)"/>
+<rect x="60" y="1374" width="1080" height="219" rx="12" fill="white" stroke="#cbd5e1"/>
+<rect x="60" y="1374" width="9" height="219" rx="4" fill="#9a3412"/>
+<text x="88" y="1409" class="heading" font-size="23" fill="#9a3412">06 / Only after confirmation does Claude receive a tool</text>
+<text x="88" y="1443" font-size="18" fill="#1e293b">During collection: tools are absent from Anthropic requests. After confirmation: the adapter</text>
+<text x="88" y="1470" font-size="18" fill="#1e293b">sends the tool name, a configured description and the discovered card-field schema. REST</text>
+<text x="88" y="1497" font-size="18" fill="#1e293b">URL/path mapping lives in ApiClient, not in Claude.</text>
+<a href="../../src/card_chat/provider.py"><text x="88" y="1531" font-size="16" fill="#1d4ed8">src/card_chat/provider.py:17</text></a>
+<a href="../../src/api_client/client.py"><text x="88" y="1556" font-size="16" fill="#1d4ed8">src/api_client/client.py:31</text></a>
+<text x="60" y="1678" font-size="15" fill="#475569">Source: card-chat-flows.json | Regenerate: python scripts/render_chat_diagrams.py</text>
+</svg>

@@ -1,5 +1,9 @@
 # Local card chat demo
 
+For the detailed code trace and downloadable vector diagrams, see
+[the end-to-end walkthrough](chat-end-to-end.md) and
+[offline diagram viewer](diagrams/index.html).
+
 The browser talks to a separate FastAPI chat process on 8020. That process owns
 an official MCP SDK v1 stdio child, discovers `create_card` at startup, and calls
 the existing `ApiClient.create_card()` over HTTP to the separately running API.

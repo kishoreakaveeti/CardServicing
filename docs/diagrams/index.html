@@ -1,0 +1,18 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Card chat architecture diagrams</title>
+<style>
+body{font:17px system-ui;margin:0;background:#e2e8f0;color:#0f172a}header{background:#fff;padding:22px 32px;border-bottom:1px solid #cbd5e1}h1{margin:0 0 10px}p{max-width:1000px;line-height:1.5}nav a{display:inline-block;margin:6px 18px 6px 0;color:#1d4ed8}button{font:inherit;padding:7px 14px;margin-right:8px}main{padding:24px}section{margin-bottom:44px}.viewport{overflow:auto;border:1px solid #94a3b8;background:white;max-height:80vh}img{display:block;width:1200px;max-width:none}a{color:#1d4ed8}@media print{header button{display:none}.viewport{max-height:none;overflow:visible;border:none}img{width:100%!important}section{break-before:page}}
+</style></head><body>
+<header><h1>Card servicing chat: architecture diagrams</h1>
+<p>Offline, vector diagrams generated from version-controlled JSON. Scroll inside each panel. Use the size controls or open a standalone SVG for browser zoom and Save As. No app, internet access or Mermaid renderer is required.</p>
+<nav><a href="#startup">1. Startup</a><a href="#conversation">2. Conversation</a><a href="#execution">3. Execution</a><a href="#idempotency">4. Idempotency</a><a href="../chat-end-to-end.md">Detailed Markdown walkthrough</a></nav>
+<button id="smaller" type="button">Smaller</button><button id="reset" type="button">100%</button><button id="larger" type="button">Larger</button><span id="scale" role="status">100%</span></header>
+<main>
+<section id="startup"><h2>1. Startup and discovery</h2><p><a href="01-startup-and-discovery.svg" target="_blank">Open standalone SVG</a> | <a href="01-startup-and-discovery.svg" download>Save SVG</a></p><div class="viewport"><img src="01-startup-and-discovery.svg" alt="Startup: chat creates agent, launches MCP, discovers tool and prepares its schema."></div></section>
+<section id="conversation"><h2>2. Conversation and context</h2><p><a href="02-conversation-and-context.svg" target="_blank">Open standalone SVG</a> | <a href="02-conversation-and-context.svg" download>Save SVG</a></p><div class="viewport"><img src="02-conversation-and-context.svg" alt="Message loop: Claude extraction, controlled questions, validation, context and review."></div></section>
+<section id="execution"><h2>3. Confirmation to Cards API</h2><p><a href="03-confirmation-to-card-api.svg" target="_blank">Open standalone SVG</a> | <a href="03-confirmation-to-card-api.svg" download>Save SVG</a></p><div class="viewport"><img src="03-confirmation-to-card-api.svg" alt="Confirmation: validated tool proposal, MCP execution, HTTP creation and returned result."></div></section>
+<section id="idempotency"><h2>4. Idempotency and retries</h2><p><a href="04-idempotency-and-retries.svg" target="_blank">Open standalone SVG</a> | <a href="04-idempotency-and-retries.svg" download>Save SVG</a></p><div class="viewport"><img src="04-idempotency-and-retries.svg" alt="Idempotency: frozen submission, SQLite transaction, creation, replay and conflict."></div></section>
+</main><script>
+let scale=1;function resize(value){scale=Math.max(.4,Math.min(2.5,value));document.querySelectorAll('img').forEach(img=>img.style.width=(1200*scale)+'px');document.querySelector('#scale').textContent=Math.round(scale*100)+'%';}document.querySelector('#smaller').onclick=()=>resize(scale-.2);document.querySelector('#larger').onclick=()=>resize(scale+.2);document.querySelector('#reset').onclick=()=>resize(1);
+</script></body></html>

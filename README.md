@@ -66,6 +66,10 @@ events are provisioned for future increments.
 
 ## Conversational card demo
 
+Read the [end-to-end code walkthrough](docs/chat-end-to-end.md) or open the
+[zoomable offline SVG viewer](docs/diagrams/index.html). Diagram source and
+generated SVGs are committed together and checked in CI.
+
 The optional [chat demo guide](docs/chat-demo.md) includes PowerShell setup,
 VS Code debugging, credential-free verification, and a request walkthrough.
 It serves a plain browser page on port 8020 and launches a local stdio MCP child;
