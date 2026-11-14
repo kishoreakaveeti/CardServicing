@@ -18,7 +18,7 @@
         ],
         "summary": "Originate a simulated card for an existing account",
         "description": "Creates a simulation-only card number. Account existence is assumed. The same Idempotency-Key and normalized body replay the original response.",
-        "operationId": "create_card_cards_post",
+        "operationId": "create_card",
         "parameters": [
           {
             "name": "Idempotency-Key",
@@ -85,6 +85,7 @@
             "maxLength": 100,
             "minLength": 1,
             "title": "User Name",
+            "description": "The customer's user name, as nonblank text.",
             "examples": [
               "alex.smith"
             ]
@@ -94,6 +95,7 @@
             "maxLength": 100,
             "minLength": 1,
             "title": "Given Name",
+            "description": "The customer's given name, as nonblank text.",
             "examples": [
               "Alex"
             ]
@@ -103,9 +105,11 @@
             "maxLength": 64,
             "minLength": 1,
             "title": "Account Number",
+            "description": "Existing account identifier. Keep it as a string and preserve leading zeros.",
             "examples": [
               "0012345678"
-            ]
+            ],
+            "x-sensitive": true
           },
           "id": {
             "type": "string",
@@ -148,6 +152,7 @@
             "maxLength": 100,
             "minLength": 1,
             "title": "User Name",
+            "description": "The customer's user name, as nonblank text.",
             "examples": [
               "alex.smith"
             ]
@@ -157,6 +162,7 @@
             "maxLength": 100,
             "minLength": 1,
             "title": "Given Name",
+            "description": "The customer's given name, as nonblank text.",
             "examples": [
               "Alex"
             ]
@@ -166,9 +172,11 @@
             "maxLength": 64,
             "minLength": 1,
             "title": "Account Number",
+            "description": "Existing account identifier. Keep it as a string and preserve leading zeros.",
             "examples": [
               "0012345678"
-            ]
+            ],
+            "x-sensitive": true
           }
         },
         "additionalProperties": false,

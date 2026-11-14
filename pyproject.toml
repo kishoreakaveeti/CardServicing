@@ -18,7 +18,8 @@ dependencies = [
 
 [project.optional-dependencies]
 chat = [
-    "mcp>=1.12,<2",
+    "mcp>=1.30,<2",
+    "jsonschema>=4.20,<5",
     "anthropic>=0.40,<1",
 ]
 infra = [
@@ -34,7 +35,7 @@ dev = [
 where = ["src"]
 
 [tool.setuptools.package-data]
-card_chat = ["*.html"]
+card_chat = ["*.html", "*.json"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

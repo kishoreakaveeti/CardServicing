@@ -79,5 +79,7 @@ The optional [chat demo guide](docs/chat-demo.md) includes PowerShell setup,
 VS Code debugging, credential-free verification, and a request walkthrough.
 It serves a plain browser page on port 8020 and launches a local stdio MCP child;
 the existing REST API stays in its own process on port 8010 (or Docker 8011).
-Claude extracts fields and proposes the discovered tool only after an explicit
-Create card click. The backend owns validation, confirmation and safe retries.
+Claude receives the catalogue-discovered tools with automatic selection, asks
+for missing values and proposes an action for review. The backend validates and
+executes the stored proposal only after explicit confirmation, without another
+model call. See [adding tools through configuration](docs/tool-catalogue.md).

@@ -6,19 +6,20 @@ from uuid import uuid4
 
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import FileResponse
-from pydantic import BaseModel, ConfigDict, Field, ValidationError
+from pydantic import BaseModel, ConfigDict, Field
 
-from card_servicing.models import CardCreate
 from card_chat.config import settings
 from card_chat.gateway import connect
 from card_chat.provider import make_model
-from card_chat.agent import CardServicingAgent, CustomerReply, ProposedToolCall
+from card_chat.agent import CardServicingAgent
+from card_chat.turns import CustomerReply, ProposedToolCall
 
 
 @dataclass
 class Conversation:
     history: list = field(default_factory=list)
     draft: dict = field(default_factory=dict)
+    proposal: ProposedToolCall | None = None
     review: str | None = None
     submission: dict | None = None
     lock: asyncio.Lock = field(default_factory=asyncio.Lock)
@@ -67,17 +68,41 @@ def create_app(model=None, gateway=None):
 
     def reply(c, text):
         c.history.append({'role': 'assistant', 'content': text})
-        return {'message': text, 'review': c.review}
+        spec = app.state.gateway.catalogue[c.proposal.name] if c.proposal else None
+        can_confirm = bool(c.review) and not (c.submission and c.submission['attempted']
+                                             and not c.submission['result'] and not spec.safe_retry)
+        return {'message': text, 'review': c.review, 'can_confirm': can_confirm,
+                'confirmation_label': (spec.entry.confirmation_label or spec.entry.label) if spec else None}
 
-    def review(c):
-        card = CardCreate.model_validate(c.draft)
-        c.draft = card.model_dump()
-        c.review = uuid4().hex
-        # Even short accounts must not reveal the entire value.
-        account = c.draft['account_number']
-        masked = '*' * max(4, len(account) - 4) + (account[-4:] if len(account) > 4 else '')
-        return reply(c, f"Please review: given name {card.given_name}; user name {card.user_name}; "
-                     f"account {masked}. Click Create card to confirm, or tell me what to change.")
+    async def execute(c):
+        proposal = c.proposal
+        spec = app.state.gateway.catalogue[proposal.name]
+        if c.submission is None:
+            c.submission = {'tool': proposal.name, 'arguments': spec.validate(proposal.arguments),
+                            'key': uuid4().hex if spec.entry.idempotency_header else None,
+                            'result': None, 'attempted': False}
+        submission = c.submission
+        if submission['result'] is not None:
+            return reply(c, submission['result'])
+        if submission['attempted'] and not spec.safe_retry:
+            return reply(c, 'This action cannot be safely retried. Check its status before starting another request.')
+        submission['attempted'] = True
+        suffix = ('Click the confirmation button to retry the same submission safely.' if spec.safe_retry
+                  else 'The outcome may be uncertain. This action cannot be safely retried; check its status first.')
+        try:
+            # Execute the reviewed snapshot directly. Confirmation makes no model call.
+            result = await app.state.gateway.execute(submission['tool'], submission['arguments'], submission['key'])
+            if result.get('ok') is not True:
+                return reply(c, result.get('error', 'Execution failed.') + ' ' + suffix)
+            data = result.get('result')
+            if not isinstance(data, dict):
+                raise ValueError('Invalid structured API result')
+            fields = '; '.join(f'{label}: {data[key]}' for key, label in spec.entry.result_labels.items() if key in data)
+            text = f'{spec.entry.label} succeeded.' + (' ' + fields if fields else '')
+            submission['result'] = text
+            return reply(c, text)
+        except Exception:
+            return reply(c, 'Could not complete the action. ' + suffix)
 
     @app.get('/')
     async def index():
@@ -94,55 +119,46 @@ def create_app(model=None, gateway=None):
         c = get(cid)
         async with c.lock:
             if c.submission:
-                return reply(c, 'This submission is fixed. Retry with Create card, or start a new conversation for another request.')
+                return reply(c, 'This submission is fixed. Use its confirmation button for a supported retry, or start a new conversation.')
             c.history.append({'role': 'user', 'content': body.text})
+            # Every new turn invalidates any previous review before interpreting updates.
+            c.review, c.proposal = None, None
             try:
-                turn = await app.state.agent.interpret_turn(c.history, c.draft, allowed_tools={})
-                if not isinstance(turn, CustomerReply):
-                    raise ValueError('Tool calls are not allowed before confirmation')
+                turn = await app.state.agent.interpret_turn(c.history, c.draft, app.state.gateway.tools)
             except Exception:
-                c.review = None
-                return reply(c, 'The language service is unavailable or returned an invalid response. Please try again.')
-            if not turn.supplied_fields and not turn.requests_review:
-                c.review = None
+                return reply(c, 'The language service is unavailable or proposed an invalid action. Please try again.')
+            if isinstance(turn, CustomerReply):
                 return reply(c, turn.text)
-            candidate = {**c.draft, **turn.supplied_fields}
-            # Validate partial updates with the exact existing request model.
+            spec = app.state.gateway.catalogue[turn.name]
             try:
-                validated = CardCreate.model_validate({**{k: 'pending' for k in CardCreate.model_fields}, **candidate})
-            except ValidationError:
-                c.review = None
-                return reply(c, 'Please provide nonblank text: names up to 100 characters and account number up to 64, without control characters.')
-            c.draft = {k: v for k, v in validated.model_dump().items() if k in candidate}
-            c.review = None
-            if set(c.draft) != set(CardCreate.model_fields):
-                return reply(c, turn.text)
-            return review(c)
+                partial = spec.validate(turn.arguments, partial=True)
+                missing = spec.missing(partial)
+                if missing:
+                    c.draft = {'tool': turn.name, 'arguments': partial}
+                    name = missing[0]
+                    label = spec.entry.field_labels.get(name, spec.input_schema['properties'][name].get('title', name))
+                    return reply(c, f'Please provide {label}.')
+                arguments = spec.validate(partial)
+            except ValueError:
+                return reply(c, 'Those details do not match the action requirements. Please correct them; identifiers must remain strings.')
+            c.draft = {'tool': turn.name, 'arguments': arguments}
+            c.proposal = ProposedToolCall(turn.name, arguments)
+            if spec.entry.confirmation == 'none':
+                response = await execute(c)
+                c.proposal, c.submission, c.review, c.draft = None, None, None, {}
+                response.update(review=None, can_confirm=False, confirmation_label=None)
+                return response
+            c.review = uuid4().hex
+            details = '; '.join(f'{label}: {value}' for label, value in spec.masked(arguments).items())
+            return reply(c, f'Please review: {spec.entry.label}. {details}. Confirm with the button or tell me what to change.')
 
     @app.post('/conversations/{cid}/confirm')
     async def confirm(cid: str, body: Confirmation):
         c = get(cid)
         async with c.lock:
-            if not c.review or body.review != c.review:
+            if not c.review or body.review != c.review or c.proposal is None:
                 raise HTTPException(409, 'Review changed. Read the latest review before confirming.')
-            if c.submission is None:
-                c.submission = {'key': uuid4().hex, 'body': CardCreate.model_validate(c.draft).model_dump(), 'result': None}
-            submission = c.submission
-            if submission['result']:
-                return reply(c, f"Created simulated card {submission['result']['card_number']} (reference {submission['result']['id']}).")
-            try:
-                proposal = await app.state.agent.interpret_turn(
-                    c.history, submission['body'], allowed_tools={'create_card': app.state.gateway.schema})
-                if (not isinstance(proposal, ProposedToolCall) or proposal.name != 'create_card'
-                        or CardCreate.model_validate(proposal.arguments).model_dump() != submission['body']):
-                    raise ValueError('Tool call does not match confirmation')
-                result = await app.state.gateway.create(submission['body'], submission['key'])
-                if result.get('ok') is not True or not result.get('id') or not result.get('card_number'):
-                    return reply(c, result.get('error', 'Creation failed. Retry this submission with Create card.'))
-                submission['result'] = result
-                return reply(c, f"Created simulated card {result['card_number']} (reference {result['id']}).")
-            except Exception:
-                return reply(c, 'Could not complete creation. Click Create card to retry the same submission safely.')
+            return await execute(c)
 
     return app
 

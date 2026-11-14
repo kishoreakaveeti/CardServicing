@@ -20,7 +20,7 @@ def get_card_settings(request: Request) -> CardSettings:
 
 
 @router.post(
-    "", response_model=Card, status_code=status.HTTP_201_CREATED,
+    "", operation_id='create_card', response_model=Card, status_code=status.HTTP_201_CREATED,
     summary="Originate a simulated card for an existing account",
     description="Creates a simulation-only card number. Account existence is assumed. "
                 "The same Idempotency-Key and normalized body replay the original response.",

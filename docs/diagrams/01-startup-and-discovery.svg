@@ -1,70 +1,68 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="1400" height="1555" viewBox="0 0 1400 1555" role="img" aria-labelledby="title description">
+<svg xmlns="http://www.w3.org/2000/svg" width="1400" height="1491" viewBox="0 0 1400 1491" role="img" aria-labelledby="title description">
 <title id="title">01 / Startup and tool discovery - sequence diagram</title>
-<desc id="description">The local chat backend discovers MCP. Claude does not browse OpenAPI or call localhost. Read interactions from top to bottom. Dashed arrows are replies.</desc>
+<desc id="description">Catalogue and OpenAPI determine registered capabilities; the chat backend discovers tools over MCP. Read interactions from top to bottom. Dashed arrows are replies.</desc>
 <defs><marker id="arrow" markerWidth="9" markerHeight="9" refX="8" refY="4.5" orient="auto"><path d="M0 0 L9 4.5 L0 9" fill="#334155"/></marker></defs>
 <style>text{font-family:Consolas,"Liberation Mono",monospace}.heading{font-family:Arial,sans-serif;font-weight:700}</style>
-<rect width="1400" height="1555" fill="#fff"/>
+<rect width="1400" height="1491" fill="#fff"/>
 <text x="40" y="55" class="heading" font-size="32" fill="#0f172a">01 / Startup and tool discovery</text>
-<text x="40" y="90" font-size="18" fill="#475569">The local chat backend discovers MCP. Claude does not browse OpenAPI or call localhost.</text>
+<text x="40" y="90" font-size="18" fill="#475569">Catalogue and OpenAPI determine registered capabilities; the chat backend discovers tools over MCP.</text>
 <text x="40" y="120" font-size="16" fill="#475569">Time flows downward | Solid arrow: call | Dashed arrow: reply | Yellow: explanation</text>
-<path d="M130.0 207 V1170" stroke="#94a3b8" stroke-width="2" stroke-dasharray="6 6"/>
+<path d="M130.0 207 V1181" stroke="#94a3b8" stroke-width="2" stroke-dasharray="6 6"/>
 <rect x="19.0" y="155" width="222" height="52" rx="7" fill="#1d4ed8"/>
-<text x="130.0" y="187" text-anchor="middle" class="heading" font-size="19" fill="white">Chat workflow</text>
-<path d="M510.0 207 V1170" stroke="#94a3b8" stroke-width="2" stroke-dasharray="6 6"/>
+<text x="130.0" y="187" text-anchor="middle" class="heading" font-size="19" fill="white">Chat backend</text>
+<path d="M510.0 207 V1181" stroke="#94a3b8" stroke-width="2" stroke-dasharray="6 6"/>
 <rect x="399.0" y="155" width="222" height="52" rx="7" fill="#6d28d9"/>
-<text x="510.0" y="187" text-anchor="middle" class="heading" font-size="19" fill="white">Agent / adapter</text>
-<path d="M890.0 207 V1170" stroke="#94a3b8" stroke-width="2" stroke-dasharray="6 6"/>
+<text x="510.0" y="187" text-anchor="middle" class="heading" font-size="19" fill="white">Catalogue / OpenAPI</text>
+<path d="M890.0 207 V1181" stroke="#94a3b8" stroke-width="2" stroke-dasharray="6 6"/>
 <rect x="779.0" y="155" width="222" height="52" rx="7" fill="#047857"/>
 <text x="890.0" y="187" text-anchor="middle" class="heading" font-size="19" fill="white">MCP child</text>
-<path d="M1270.0 207 V1170" stroke="#94a3b8" stroke-width="2" stroke-dasharray="6 6"/>
+<path d="M1270.0 207 V1181" stroke="#94a3b8" stroke-width="2" stroke-dasharray="6 6"/>
 <rect x="1159.0" y="155" width="222" height="52" rx="7" fill="#9a3412"/>
 <text x="1270.0" y="187" text-anchor="middle" class="heading" font-size="19" fill="white">Hosted Claude</text>
-<rect x="198.0" y="240" width="244.0" height="55" fill="white"/>
-<text x="320.0" y="260" text-anchor="middle" font-size="16" fill="#0f172a">Create model adapter and</text>
-<text x="320.0" y="284" text-anchor="middle" font-size="16" fill="#0f172a">CardServicingAgent</text>
+<rect x="150.5" y="240" width="339.0" height="55" fill="white"/>
+<text x="320.0" y="260" text-anchor="middle" font-size="16" fill="#0f172a">Load tools.json; validate version,</text>
+<text x="320.0" y="284" text-anchor="middle" font-size="16" fill="#0f172a">entries and operation IDs</text>
 <path d="M130.0 302 H510.0" fill="none" stroke="#334155" stroke-width="2" marker-end="url(#arrow)"/>
-<rect x="274.0" y="335" width="472.0" height="31" fill="white"/>
-<text x="510.0" y="355" text-anchor="middle" font-size="16" fill="#0f172a">Launch python -m card_chat.mcp_server over stdio</text>
-<path d="M130.0 373 H890.0" fill="none" stroke="#334155" stroke-width="2" marker-end="url(#arrow)"/>
-<rect x="35" y="411" width="1330" height="49" rx="5" fill="#fef3c7" stroke="#cbd5e1"/>
-<text x="55" y="436" font-size="17" fill="#1e293b">Child constructs FastMCP; @mcp.tool registers create_card; mcp.run starts stdio protocol.</text>
-<rect x="378.5" y="467" width="263.0" height="31" fill="white"/>
-<text x="510.0" y="487" text-anchor="middle" font-size="16" fill="#0f172a">ClientSession.initialize()</text>
-<path d="M130.0 505 H890.0" fill="none" stroke="#334155" stroke-width="2" marker-end="url(#arrow)"/>
-<rect x="397.5" y="538" width="225.0" height="31" fill="white"/>
-<text x="510.0" y="558" text-anchor="middle" font-size="16" fill="#0f172a">MCP handshake response</text>
-<path d="M890.0 576 H130.0" fill="none" stroke="#334155" stroke-width="2" stroke-dasharray="7 5" marker-end="url(#arrow)"/>
-<rect x="445.0" y="609" width="130.0" height="31" fill="white"/>
-<text x="510.0" y="629" text-anchor="middle" font-size="16" fill="#0f172a">list_tools()</text>
-<path d="M130.0 647 H890.0" fill="none" stroke="#334155" stroke-width="2" marker-end="url(#arrow)"/>
-<rect x="383.25" y="680" width="253.5" height="31" fill="white"/>
-<text x="510.0" y="700" text-anchor="middle" font-size="16" fill="#0f172a">create_card + inputSchema</text>
-<path d="M890.0 718 H130.0" fill="none" stroke="#334155" stroke-width="2" stroke-dasharray="7 5" marker-end="url(#arrow)"/>
-<rect x="125.75" y="751" width="348.5" height="31" fill="white"/>
-<text x="300.0" y="771" text-anchor="middle" font-size="16" fill="#0f172a">Copy schema; remove idempotency_key</text>
-<path d="M130.0 789 H195.0 V811 H130.0" fill="none" stroke="#334155" stroke-width="2" marker-end="url(#arrow)"/>
-<rect x="35" y="852" width="1330" height="49" rx="5" fill="#fef3c7" stroke="#cbd5e1"/>
-<text x="55" y="877" font-size="17" fill="#1e293b">Collection turns send no tools to Claude. Discovery is performed by the local backend.</text>
-<rect x="145.75" y="908" width="348.5" height="55" fill="white"/>
-<text x="320.0" y="928" text-anchor="middle" font-size="16" fill="#0f172a">After confirmation:</text>
-<text x="320.0" y="952" text-anchor="middle" font-size="16" fill="#0f172a">allowed_tools={create_card: schema}</text>
-<path d="M130.0 970 H510.0" fill="none" stroke="#334155" stroke-width="2" marker-end="url(#arrow)"/>
-<rect x="625.5" y="1003" width="529.0" height="31" fill="white"/>
-<text x="890.0" y="1023" text-anchor="middle" font-size="16" fill="#0f172a">Messages request with confirmed fields and tool schema</text>
-<path d="M510.0 1041 H1270.0" fill="none" stroke="#334155" stroke-width="2" marker-end="url(#arrow)"/>
-<rect x="663.5" y="1074" width="453.0" height="31" fill="white"/>
-<text x="890.0" y="1094" text-anchor="middle" font-size="16" fill="#0f172a">Proposed tool_use; no direct call to local API</text>
-<path d="M1270.0 1112 H510.0" fill="none" stroke="#334155" stroke-width="2" stroke-dasharray="7 5" marker-end="url(#arrow)"/>
-<text x="40" y="1212" class="heading" font-size="20" fill="#0f172a">Traceable code references</text>
-<a href="../../src/card_chat/main.py"><text x="40" y="1237" font-size="16" fill="#1d4ed8">src/card_chat/main.py:39</text></a>
-<a href="../../src/card_chat/provider.py"><text x="40" y="1262" font-size="16" fill="#1d4ed8">src/card_chat/provider.py:21</text></a>
-<a href="../../src/card_chat/gateway.py"><text x="40" y="1287" font-size="16" fill="#1d4ed8">src/card_chat/gateway.py:28</text></a>
-<a href="../../src/card_chat/mcp_server.py"><text x="40" y="1312" font-size="16" fill="#1d4ed8">src/card_chat/mcp_server.py:12</text></a>
-<a href="../../src/card_chat/mcp_server.py"><text x="40" y="1337" font-size="16" fill="#1d4ed8">src/card_chat/mcp_server.py:16</text></a>
-<a href="../../src/card_chat/mcp_server.py"><text x="40" y="1362" font-size="16" fill="#1d4ed8">src/card_chat/mcp_server.py:43</text></a>
-<a href="../../src/card_chat/gateway.py"><text x="40" y="1387" font-size="16" fill="#1d4ed8">src/card_chat/gateway.py:36</text></a>
-<a href="../../src/card_chat/gateway.py"><text x="40" y="1412" font-size="16" fill="#1d4ed8">src/card_chat/gateway.py:15</text></a>
-<a href="../../src/card_chat/provider.py"><text x="40" y="1437" font-size="16" fill="#1d4ed8">src/card_chat/provider.py:17</text></a>
-<a href="../../src/api_client/client.py"><text x="40" y="1462" font-size="16" fill="#1d4ed8">src/api_client/client.py:31</text></a>
-<text x="40" y="1530" font-size="15" fill="#475569">Source: card-chat-flows.json | Regenerate: python scripts/render_chat_diagrams.py</text>
+<rect x="141.0" y="335" width="358.0" height="55" fill="white"/>
+<text x="320.0" y="355" text-anchor="middle" font-size="16" fill="#0f172a">Compiled method/path, public inputs,</text>
+<text x="320.0" y="379" text-anchor="middle" font-size="16" fill="#0f172a">policies and response schema</text>
+<path d="M510.0 397 H130.0" fill="none" stroke="#334155" stroke-width="2" stroke-dasharray="7 5" marker-end="url(#arrow)"/>
+<rect x="278.75" y="430" width="462.5" height="31" fill="white"/>
+<text x="510.0" y="450" text-anchor="middle" font-size="16" fill="#0f172a">Start python -m card_chat.mcp_server over stdio</text>
+<path d="M130.0 468 H890.0" fill="none" stroke="#334155" stroke-width="2" marker-end="url(#arrow)"/>
+<rect x="521.0" y="501" width="358.0" height="55" fill="white"/>
+<text x="700.0" y="521" text-anchor="middle" font-size="16" fill="#0f172a">Compile the same catalogue and local</text>
+<text x="700.0" y="545" text-anchor="middle" font-size="16" fill="#0f172a">OpenAPI document</text>
+<path d="M890.0 563 H510.0" fill="none" stroke="#334155" stroke-width="2" marker-end="url(#arrow)"/>
+<rect x="530.5" y="596" width="339.0" height="55" fill="white"/>
+<text x="700.0" y="616" text-anchor="middle" font-size="16" fill="#0f172a">Only listed operations; one shared</text>
+<text x="700.0" y="640" text-anchor="middle" font-size="16" fill="#0f172a">HTTP execution handler</text>
+<path d="M510.0 658 H890.0" fill="none" stroke="#334155" stroke-width="2" stroke-dasharray="7 5" marker-end="url(#arrow)"/>
+<rect x="312.0" y="691" width="396.0" height="31" fill="white"/>
+<text x="510.0" y="711" text-anchor="middle" font-size="16" fill="#0f172a">ClientSession.initialize(); list_tools()</text>
+<path d="M130.0 729 H890.0" fill="none" stroke="#334155" stroke-width="2" marker-end="url(#arrow)"/>
+<rect x="255.0" y="762" width="510.0" height="31" fill="white"/>
+<text x="510.0" y="782" text-anchor="middle" font-size="16" fill="#0f172a">All configured names, descriptions and input schemas</text>
+<path d="M890.0 800 H130.0" fill="none" stroke="#334155" stroke-width="2" stroke-dasharray="7 5" marker-end="url(#arrow)"/>
+<rect x="125.75" y="833" width="348.5" height="55" fill="white"/>
+<text x="300.0" y="853" text-anchor="middle" font-size="16" fill="#0f172a">Verify discovered definitions match</text>
+<text x="300.0" y="877" text-anchor="middle" font-size="16" fill="#0f172a">compiled catalogue</text>
+<path d="M130.0 895 H195.0 V917 H130.0" fill="none" stroke="#334155" stroke-width="2" marker-end="url(#arrow)"/>
+<rect x="426.0" y="953" width="548.0" height="31" fill="white"/>
+<text x="700.0" y="973" text-anchor="middle" font-size="16" fill="#0f172a">Each customer turn: all eligible tools; tool_choice=auto</text>
+<path d="M130.0 991 H1270.0" fill="none" stroke="#334155" stroke-width="2" marker-end="url(#arrow)"/>
+<rect x="459.25" y="1024" width="481.5" height="31" fill="white"/>
+<text x="700.0" y="1044" text-anchor="middle" font-size="16" fill="#0f172a">Clarifying/normal reply OR one proposed tool call</text>
+<path d="M1270.0 1062 H130.0" fill="none" stroke="#334155" stroke-width="2" stroke-dasharray="7 5" marker-end="url(#arrow)"/>
+<rect x="35" y="1100" width="1330" height="49" rx="5" fill="#fef3c7" stroke="#cbd5e1"/>
+<text x="55" y="1125" font-size="17" fill="#1e293b">Claude does not fetch OpenAPI, call localhost or supply execution headers. Keys stay outside its schema.</text>
+<text x="40" y="1223" class="heading" font-size="20" fill="#0f172a">Traceable code references</text>
+<a href="../../src/card_chat/catalogue.py"><text x="40" y="1248" font-size="16" fill="#1d4ed8">src/card_chat/catalogue.py:208</text></a>
+<a href="../../src/card_chat/catalogue.py"><text x="40" y="1273" font-size="16" fill="#1d4ed8">src/card_chat/catalogue.py:133</text></a>
+<a href="../../src/card_chat/mcp_server.py"><text x="40" y="1298" font-size="16" fill="#1d4ed8">src/card_chat/mcp_server.py:52</text></a>
+<a href="../../src/card_chat/mcp_server.py"><text x="40" y="1323" font-size="16" fill="#1d4ed8">src/card_chat/mcp_server.py:56</text></a>
+<a href="../../src/card_chat/mcp_server.py"><text x="40" y="1348" font-size="16" fill="#1d4ed8">src/card_chat/mcp_server.py:61</text></a>
+<a href="../../src/card_chat/gateway.py"><text x="40" y="1373" font-size="16" fill="#1d4ed8">src/card_chat/gateway.py:34</text></a>
+<a href="../../src/card_chat/gateway.py"><text x="40" y="1398" font-size="16" fill="#1d4ed8">src/card_chat/gateway.py:47</text></a>
+<text x="40" y="1466" font-size="15" fill="#475569">Source: card-chat-flows.json | Regenerate: python scripts/render_chat_diagrams.py</text>
 </svg>

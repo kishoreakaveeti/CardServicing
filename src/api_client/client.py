@@ -1,4 +1,5 @@
 from typing import Any
+from urllib.parse import quote
 
 import httpx
 
@@ -31,6 +32,15 @@ class ApiClient:
     def create_card(self, user_name: str, given_name: str, account_number: str, *, idempotency_key: str) -> dict[str, Any]:
         return self._request('POST', '/cards', headers={'Idempotency-Key': idempotency_key},
                              json={'user_name': user_name, 'given_name': given_name, 'account_number': account_number})
+
+    def execute_operation(self, method: str, path: str, *, path_parameters: dict,
+                          body: dict | None, execution_headers: dict) -> tuple[int, Any]:
+        """Execute a trusted, compiled operation; customer values fill parameters only."""
+        for name, value in path_parameters.items():
+            path = path.replace('{' + name + '}', quote(value, safe=''))
+        response = self._client.request(method, path, json=body, headers=execution_headers)
+        response.raise_for_status()
+        return response.status_code, response.json()
 
     def list_items(self) -> list[dict[str, Any]]:
         return self._request("GET", "/items")

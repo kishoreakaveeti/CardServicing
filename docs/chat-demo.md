@@ -4,24 +4,25 @@ For the detailed code trace and downloadable vector diagrams, see
 [the end-to-end walkthrough](chat-end-to-end.md) and
 [offline diagram viewer](diagrams/index.html).
 
-The browser talks to a separate FastAPI chat process on 8020. That process owns
-an official MCP SDK v1 stdio child, discovers `create_card` at startup, and calls
-the existing `ApiClient.create_card()` over HTTP to the separately running API.
-Anthropic Messages extracts intent/fields without tools. Only a validated review
-and explicit button click make the discovered tool available to Claude. A future
-provider implements the `Model` interface; only Anthropic is implemented today.
+The browser talks to FastAPI chat on 8020. Chat launches an official MCP SDK
+stdio child, discovers every configured tool, and sends Claude their names,
+descriptions and OpenAPI-derived input schemas with automatic tool choice.
+`CardServicingAgent` returns either a customer reply/question or a proposed call.
+The workflow validates complete proposals and renders a generic masked review.
+An explicit button click executes that exact snapshot through MCP and the shared
+HTTP client, with no additional Claude call. The Cards API stays separate on
+8010 (host) or 8011 (Docker).
 
-`CardServicingAgent` in `src/card_chat/agent.py` is the single concrete agent.
-The workflow gives `interpret_turn(history, draft, allowed_tools)` a snapshot of
-the draft and an empty tool mapping during collection. The agent uses the model
-adapter to interpret intent and extract supplied fields, then returns a
-`CustomerReply` with those updates and the next question. The workflow validates
-updates before saving them or showing a review. After an explicit confirmation,
-the workflow passes only the discovered `create_card` schema. The agent returns
-a `ProposedToolCall`; the workflow checks its name and values against the frozen
-submission, then executes MCP using the confirmed server-side body and key.
-Session state, validation, confirmation, idempotency and MCP execution all stay
-in `main.py`. The agent holds no conversation state or MCP client.
+See [tool catalogue configuration](tool-catalogue.md) for the supported operation
+shapes, how to add an entry, policies, tests and detailed VS Code breakpoints.
+Only create-card is exposed in the default production catalogue. The second
+blocking operation exists only in the integration-test fixture.
+
+The single concrete `CardServicingAgent` owns no conversation or execution state.
+The workflow passes history, previously collected details and all eligible tool
+definitions to `interpret_turn`. Anthropic remains the implemented model adapter.
+Session state, schema validation, review tokens, confirmation, idempotency and
+MCP execution stay in `main.py`. There is no fixed intent or question mapping.
 
 ## Install and run in PowerShell
 
@@ -127,21 +128,21 @@ by native app access approval timing out. Run this harness to finish that check.
    or use **Debug Chat** directly after putting local secrets in ignored `.env`.
    The launch configuration loads `.env`; don't put the key in `launch.json`.
 4. Set breakpoints in `main.py` at `message`, `confirm`, and
-   `gateway.create`. `Debug Chat` uses `subProcess: false` to keep automatic
+   `gateway.execute`. `Debug Chat` uses `subProcess: false` to keep automatic
    debugger attachment out of the MCP stdio child startup. The compound
    `Debug Chat + API` still debugs both applications as independent sessions.
    To see Claude's proposal, break in `provider.py` on
-   `return calls[0].name, calls[0].input` inside `AnthropicModel.propose`.
+   `return ProposedToolCall(calls[0].name, calls[0].input)` inside `AnthropicModel.turn`.
    To see the workflow execute it, break in `main.py` on
-   `result = await app.state.gateway.create(submission['body'], submission['key'])`.
-   Between these points, `CardServicingAgent.interpret_turn` returns the proposal
-   and `confirm` checks it against the confirmed draft. Inspect `proposal` and
+   `result = await app.state.gateway.execute(submission['tool'], submission['arguments'], submission['key'])`.
+   Between these points, the workflow validates the proposal, shows a review, and
+   waits for confirmation. Confirmation executes it without a second model call. Inspect `c.proposal` and
    `submission` locally; do not log their values.
 5. Set a breakpoint in `card_servicing/cards.py` at the POST route. The API
    breakpoint belongs to its separate host/container debugger session. With
-   automatic child attachment disabled, breakpoints in `mcp_server.create_card`
+   automatic child attachment disabled, breakpoints in `mcp_server.execute`
    and `api_client/client.py` inside that child do not fire; inspect the outgoing
-   MCP arguments and returned result in `gateway.create`. Debugging the child
+   MCP arguments and returned result in `gateway.execute`. Debugging the child
    itself requires a separate attachment after it has started.
 6. Open 8020, supply synthetic details, inspect the masked review, then click
    Create card. Trace the frozen body/key into MCP and the `Idempotency-Key`
@@ -152,35 +153,23 @@ duration and outcome; chat text, account values and keys are not logged. Tool er
 are sanitized. A debugger breakpoint longer than the REST client's ten-second
 timeout can produce a retry message; resume, then retry the same submission.
 
-## State and limitations
+## State, policies and request tracing
 
-The backend serializes each conversation, validates against `CardCreate`, creates
-a new review token after edits, and rejects stale confirmations. The first valid
-click freezes the body and generates one UUID key. The model sees only card fields;
-the backend injects the key into the MCP execution arguments. It rejects proposed
-tool names or values that differ from the confirmed draft. A completed duplicate
-click returns the saved result; failed attempts retain body/key for retry. Once
-submitted, use New conversation for different values, avoiding ambiguity after a
-timeout. API account existence remains assumed.
+Conversations, collected proposal details, reviews and submissions are in memory.
+Every new message invalidates the previous review. A valid confirmation binds the
+exact tool and arguments; duplicate successful clicks return a cached result.
+`create_card` keeps the same body/key for retries after a lost response. Writes
+without a safe replay contract cannot be retried after an uncertain attempt.
+GET entries can opt out of confirmation; every write requires it. API validation
+and authorization remain at the API boundary. Account existence remains assumed.
 
-In-memory state is lost on chat restart; do not restart chat to retry an uncertain
-submission. Durable recovery, auth, session expiry and capacity limits are outside
-this local demo. Bind to loopback and use synthetic data only. Conversation URLs
-contain unguessable IDs but are not a substitute for production authentication.
-Names and account strings are sent to the hosted provider for extraction. The
-provider adapter's returned prose never determines creation success: the backend
-renders the structured MCP/API result directly.
+Restarting chat loses its keys and context. Do not create a new submission to
+retry an uncertain write. Bind locally and use synthetic details. The hosted
+model receives supplied details and history, but no execution key or credential.
+Tool-result success comes from the actual API, not model-generated claims.
 
-## Trace one request
-
-* `src/card_chat/index.html`: message list and same-origin JSON requests; explicit confirmation button.
-* `src/card_chat/main.py`: per-conversation draft, validation, masked review, lock and frozen retry submission.
-* `src/card_chat/agent.py`: single `CardServicingAgent`, customer replies/field updates and allowed tool proposals.
-* `src/card_chat/provider.py`: provider interface and Anthropic extraction/tool-use blocks.
-* `src/card_chat/gateway.py`: child lifecycle, runtime tool listing, model-schema projection and MCP call.
-* `src/card_chat/mcp_server.py`: single tool, sanitized result/log, existing HTTP client call.
-* `src/api_client/client.py` → `src/card_servicing/cards.py`: HTTP POST and existing durable idempotent API behavior.
-* `tests/test_chat.py`: stub model plus real-process transport/retry verification.
-
-SDK references: [official MCP Python SDK v1](https://github.com/modelcontextprotocol/python-sdk/tree/v1.x),
-[Anthropic client tool handling](https://platform.claude.com/docs/en/agents-and-tools/tool-use/handle-tool-calls).
+For the complete trace, see [the walkthrough](chat-end-to-end.md). Start with
+`index.html` -> `main.message` -> `CardServicingAgent.interpret_turn` ->
+`AnthropicModel.turn` -> validated review -> `main.confirm`/`execute` ->
+`Gateway.execute` -> `mcp_server.execute` -> `ApiClient.execute_operation` ->
+`cards.create_card` -> `SQLiteCardStore.create_idempotent`.

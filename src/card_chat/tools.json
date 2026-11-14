@@ -1,0 +1,18 @@
+{
+  "version": 1,
+  "openapi": "../../docs/cards.openapi.json",
+  "tools": [
+    {
+      "name": "create_card",
+      "operation_id": "create_card",
+      "description": "Create a new simulated card for an existing account. Use for requests for a new card or card creation, not freezing, blocking or replacing a card. Collect the customer's given name, user name and existing account number. Never invent values; preserve leading zeros.",
+      "confirmation": "required",
+      "label": "Create card",
+      "confirmation_label": "Create card",
+      "idempotency_header": "Idempotency-Key",
+      "field_labels": {"given_name": "Given name", "user_name": "User name", "account_number": "Account number"},
+      "sensitive_fields": ["account_number"],
+      "result_labels": {"card_number": "Simulated card", "id": "Reference"}
+    }
+  ]
+}

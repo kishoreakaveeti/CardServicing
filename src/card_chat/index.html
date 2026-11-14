@@ -8,14 +8,14 @@ li{margin:14px 0;white-space:pre-wrap}input{width:65%;padding:12px}button{paddin
 <h1>Card servicing demo</h1><p>Simulation only. Use synthetic details. Supplied details are sent to the hosted language service.</p>
 <ol id="messages" aria-live="polite"></ol>
 <form id="form"><label for="text">Message</label><input id="text" maxlength="4000" autocomplete="off" required><button>Send</button></form>
-<button id="confirm" hidden>Create card</button><button id="restart">New conversation</button><p id="status" role="status"></p>
+<button id="confirm" hidden>Confirm action</button><button id="restart">New conversation</button><p id="status" role="status"></p>
 <script>
 let cid, review, busy=false;
 const messages=document.querySelector('#messages'), input=document.querySelector('#text'), confirmButton=document.querySelector('#confirm'), status=document.querySelector('#status');
 function append(who,text){const li=document.createElement('li');li.textContent=who+': '+text;messages.append(li);}
-function render(data){review=data.review;confirmButton.hidden=!review;append('Assistant',data.message);}
+function render(data){review=data.review;confirmButton.hidden=!review;confirmButton.dataset.allowed=String(data.can_confirm!==false);confirmButton.textContent=data.confirmation_label||'Confirm action';append('Assistant',data.message);}
 async function post(path,body={}){const r=await fetch(path,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});if(!r.ok)throw Error('Request failed ('+r.status+'). Please retry or start a new conversation.');return r.json();}
-async function run(action){if(busy)return;busy=true;document.querySelectorAll('button,input').forEach(e=>e.disabled=true);status.textContent='Working…';try{await action();status.textContent='';}catch(e){status.textContent=e.message;}finally{busy=false;document.querySelectorAll('button,input').forEach(e=>e.disabled=false);input.focus();}}
+async function run(action){if(busy)return;busy=true;document.querySelectorAll('button,input').forEach(e=>e.disabled=true);status.textContent='Working…';try{await action();status.textContent='';}catch(e){status.textContent=e.message;}finally{busy=false;document.querySelectorAll('button,input').forEach(e=>e.disabled=false);confirmButton.disabled=confirmButton.dataset.allowed==='false';input.focus();}}
 async function start(){const data=await post('/conversations');cid=data.id;messages.replaceChildren();render(data);input.value='';}
 document.querySelector('#form').onsubmit=e=>{e.preventDefault();const text=input.value;if(!text.trim())return;run(async()=>{append('You',text);input.value='';render(await post('/conversations/'+cid+'/messages',{text}));});};
 confirmButton.onclick=()=>run(async()=>render(await post('/conversations/'+cid+'/confirm',{review})));

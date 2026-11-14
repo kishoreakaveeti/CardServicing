@@ -3,99 +3,60 @@
     {
       "file": "01-startup-and-discovery.svg",
       "title": "01 / Startup and tool discovery",
-      "subtitle": "The local chat backend discovers MCP. Claude does not browse OpenAPI or call localhost.",
+      "subtitle": "Catalogue and OpenAPI determine registered capabilities; the chat backend discovers tools over MCP.",
       "steps": [
         {
           "owner": "workflow",
-          "title": "Chat lifespan creates the agent and model adapter",
+          "title": "Compile versioned catalogue",
           "body": [
-            "Uvicorn serves card_chat.main:app on 8020. Server configuration supplies MODEL_ID and the Anthropic credential. The Cards API is a separate process on 8010 (Docker host port: 8011)."
+            "Resolve local OpenAPI operation IDs and validate supported shapes, labels and policies."
           ],
           "references": [
             {
-              "path": "src/card_chat/main.py",
-              "anchor": "async def lifespan"
+              "path": "src/card_chat/catalogue.py",
+              "anchor": "def load_catalogue"
             },
             {
-              "path": "src/card_chat/provider.py",
-              "anchor": "class AnthropicModel"
-            }
-          ]
-        },
-        {
-          "owner": "workflow",
-          "title": "Gateway starts a local Python child over stdio",
-          "body": [
-            "connect() launches sys.executable -m card_chat.mcp_server. MCP uses the child's stdin/stdout; diagnostics use stderr. The child does not listen on another HTTP port."
-          ],
-          "references": [
-            {
-              "path": "src/card_chat/gateway.py",
-              "anchor": "async def connect"
+              "path": "src/card_chat/catalogue.py",
+              "anchor": "def compile_entry"
             }
           ]
         },
         {
           "owner": "mcp",
-          "title": "Child creates FastMCP and registers create_card",
+          "title": "Register listed operations",
           "body": [
-            "FastMCP('Card servicing') constructs the server. @mcp.tool() registers the Python function. mcp.run(transport='stdio') starts the protocol loop. The SDK builds a schema from the function signature."
+            "Official SDK Server list_tools/call_tool handlers dispatch only compiled names."
           ],
           "references": [
             {
               "path": "src/card_chat/mcp_server.py",
-              "anchor": "mcp = FastMCP"
+              "anchor": "def create_server"
             },
             {
               "path": "src/card_chat/mcp_server.py",
-              "anchor": "@mcp.tool()"
+              "anchor": "@server.list_tools()"
             },
             {
               "path": "src/card_chat/mcp_server.py",
-              "anchor": "mcp.run(transport='stdio')"
+              "anchor": "@server.call_tool"
             }
           ]
         },
         {
           "owner": "workflow",
-          "title": "Backend initializes MCP and lists tools",
+          "title": "Discover and verify",
           "body": [
-            "ClientSession.initialize() performs the handshake. list_tools() discovers create_card and its inputSchema. Startup checks that it is the only tool."
+            "Launch child, handshake and list every tool; validate against catalogue."
           ],
           "references": [
+            {
+              "path": "src/card_chat/gateway.py",
+              "anchor": "async def connect"
+            },
             {
               "path": "src/card_chat/gateway.py",
               "anchor": "tools = (await session.list_tools()).tools"
-            }
-          ]
-        },
-        {
-          "owner": "workflow",
-          "title": "Gateway prepares the model-facing tool schema",
-          "body": [
-            "Copy the discovered schema; remove idempotency_key from properties and required. The workflow retains that key privately. Required card fields remain given_name, user_name and account_number."
-          ],
-          "references": [
-            {
-              "path": "src/card_chat/gateway.py",
-              "anchor": "self.schema = deepcopy"
-            }
-          ]
-        },
-        {
-          "owner": "claude",
-          "title": "Only after confirmation does Claude receive a tool",
-          "body": [
-            "During collection: tools are absent from Anthropic requests. After confirmation: the adapter sends the tool name, a configured description and the discovered card-field schema. REST URL/path mapping lives in ApiClient, not in Claude."
-          ],
-          "references": [
-            {
-              "path": "src/card_chat/provider.py",
-              "anchor": "async def propose"
-            },
-            {
-              "path": "src/api_client/client.py",
-              "anchor": "def create_card"
             }
           ]
         }
@@ -103,11 +64,11 @@
       "participants": [
         {
           "id": "workflow",
-          "label": "Chat workflow"
+          "label": "Chat backend"
         },
         {
           "id": "agent",
-          "label": "Agent / adapter"
+          "label": "Catalogue / OpenAPI"
         },
         {
           "id": "mcp",
@@ -123,201 +84,127 @@
           "kind": "call",
           "from": "workflow",
           "to": "agent",
-          "label": "Create model adapter and CardServicingAgent"
-        },
-        {
-          "kind": "call",
-          "from": "workflow",
-          "to": "mcp",
-          "label": "Launch python -m card_chat.mcp_server over stdio"
-        },
-        {
-          "kind": "note",
-          "from": "",
-          "to": "",
-          "label": "Child constructs FastMCP; @mcp.tool registers create_card; mcp.run starts stdio protocol."
-        },
-        {
-          "kind": "call",
-          "from": "workflow",
-          "to": "mcp",
-          "label": "ClientSession.initialize()"
+          "label": "Load tools.json; validate version, entries and operation IDs"
         },
         {
           "kind": "return",
-          "from": "mcp",
-          "to": "workflow",
-          "label": "MCP handshake response"
-        },
-        {
-          "kind": "call",
-          "from": "workflow",
-          "to": "mcp",
-          "label": "list_tools()"
-        },
-        {
-          "kind": "return",
-          "from": "mcp",
-          "to": "workflow",
-          "label": "create_card + inputSchema"
-        },
-        {
-          "kind": "call",
-          "from": "workflow",
-          "to": "workflow",
-          "label": "Copy schema; remove idempotency_key"
-        },
-        {
-          "kind": "note",
-          "from": "",
-          "to": "",
-          "label": "Collection turns send no tools to Claude. Discovery is performed by the local backend."
-        },
-        {
-          "kind": "call",
-          "from": "workflow",
-          "to": "agent",
-          "label": "After confirmation: allowed_tools={create_card: schema}"
-        },
-        {
-          "kind": "call",
           "from": "agent",
+          "to": "workflow",
+          "label": "Compiled method/path, public inputs, policies and response schema"
+        },
+        {
+          "kind": "call",
+          "from": "workflow",
+          "to": "mcp",
+          "label": "Start python -m card_chat.mcp_server over stdio"
+        },
+        {
+          "kind": "call",
+          "from": "mcp",
+          "to": "agent",
+          "label": "Compile the same catalogue and local OpenAPI document"
+        },
+        {
+          "kind": "return",
+          "from": "agent",
+          "to": "mcp",
+          "label": "Only listed operations; one shared HTTP execution handler"
+        },
+        {
+          "kind": "call",
+          "from": "workflow",
+          "to": "mcp",
+          "label": "ClientSession.initialize(); list_tools()"
+        },
+        {
+          "kind": "return",
+          "from": "mcp",
+          "to": "workflow",
+          "label": "All configured names, descriptions and input schemas"
+        },
+        {
+          "kind": "call",
+          "from": "workflow",
+          "to": "workflow",
+          "label": "Verify discovered definitions match compiled catalogue"
+        },
+        {
+          "kind": "call",
+          "from": "workflow",
           "to": "claude",
-          "label": "Messages request with confirmed fields and tool schema"
+          "label": "Each customer turn: all eligible tools; tool_choice=auto"
         },
         {
           "kind": "return",
           "from": "claude",
-          "to": "agent",
-          "label": "Proposed tool_use; no direct call to local API"
+          "to": "workflow",
+          "label": "Clarifying/normal reply OR one proposed tool call"
+        },
+        {
+          "kind": "note",
+          "from": "",
+          "to": "",
+          "label": "Claude does not fetch OpenAPI, call localhost or supply execution headers. Keys stay outside its schema."
         }
       ]
     },
     {
       "file": "02-conversation-and-context.svg",
       "title": "02 / Each message and the question loop",
-      "subtitle": "Claude extracts intent and values. Python chooses the question and validates completeness.",
+      "subtitle": "Model-driven questions and action proposals; workflow validates before showing a generic review.",
       "steps": [
         {
-          "owner": "browser",
-          "title": "Page starts a conversation, then posts a message",
-          "body": [
-            "POST /conversations returns a conversation ID and greeting. JavaScript stores cid. Send posts {text: ...} to /conversations/{cid}/messages."
-          ],
-          "references": [
-            {
-              "path": "src/card_chat/index.html",
-              "anchor": "async function start()"
-            },
-            {
-              "path": "src/card_chat/index.html",
-              "anchor": "onsubmit="
-            }
-          ]
-        },
-        {
           "owner": "workflow",
-          "title": "Retrieve the same Conversation object and append text",
+          "title": "Message and context",
           "body": [
-            "conversations[cid] contains history, draft, review, submission and a lock. The lock serializes turns. Append the user answer to history; pass history and draft to the agent with allowed_tools={}."
+            "History plus validated collected proposal details are in memory by cid."
           ],
           "references": [
+            {
+              "path": "src/card_chat/main.py",
+              "anchor": "async def message"
+            },
             {
               "path": "src/card_chat/main.py",
               "anchor": "class Conversation"
-            },
-            {
-              "path": "src/card_chat/main.py",
-              "anchor": "c.history.append({'role': 'user'"
             }
           ]
         },
         {
           "owner": "claude",
-          "title": "Adapter sends instructions plus conversation context",
+          "title": "Automatic selection",
           "body": [
-            "AnthropicModel.extract() calls hosted Messages. A system prompt lists supported intents and the three field names, requests JSON, forbids invented values and preserves leading zeros. History and draft are serialized into one user message."
+            "No intent enum, fixed question mapping or forced create_card tool call."
           ],
           "references": [
             {
               "path": "src/card_chat/provider.py",
-              "anchor": "async def extract(self, history, draft)"
-            }
-          ]
-        },
-        {
-          "owner": "agent",
-          "title": "Agent interprets extraction and picks a controlled question",
-          "body": [
-            "Extraction validates intent and string-valued fields. The agent merges candidate fields with a copy of the draft. QUESTIONS defines wording and order: given_name, user_name, account_number. It chooses the first missing key. Unsupported actions receive a fixed explanation."
-          ],
-          "references": [
-            {
-              "path": "src/card_chat/provider.py",
-              "anchor": "class Extraction"
+              "anchor": "async def turn"
             },
             {
               "path": "src/card_chat/agent.py",
-              "anchor": "QUESTIONS ="
-            },
-            {
-              "path": "src/card_chat/agent.py",
-              "anchor": "question = next"
+              "anchor": "async def interpret_turn"
             }
           ]
         },
         {
           "owner": "workflow",
-          "title": "Validate updates, then save only actual supplied fields",
+          "title": "Validate proposal and review",
           "body": [
-            "The workflow merges updates with the existing draft. CardCreate enforces trimmed nonblank strings, length limits, no control characters and no extras. Temporary 'pending' values validate partial updates but are never saved or submitted. Invalid updates clear the review and keep the previous draft."
+            "Validate partial/complete arguments and required fields, then mask display values."
           ],
           "references": [
             {
-              "path": "src/card_chat/main.py",
-              "anchor": "candidate = {**c.draft"
+              "path": "src/card_chat/catalogue.py",
+              "anchor": "def validate"
             },
             {
               "path": "src/card_chat/main.py",
-              "anchor": "c.draft = {k: v"
-            },
-            {
-              "path": "src/card_servicing/models.py",
-              "anchor": "class CardCreate"
-            }
-          ]
-        },
-        {
-          "owner": "workflow",
-          "title": "Incomplete? Return the next question and repeat",
-          "body": [
-            "Compare saved draft keys with CardCreate.model_fields. If incomplete, save the agent's reply to history and return it. The next request carries the same cid; context is rebuilt from the accumulated history and draft. This state exists only in chat memory."
-          ],
-          "references": [
-            {
-              "path": "src/card_chat/main.py",
-              "anchor": "if set(c.draft) != set(CardCreate.model_fields)"
+              "anchor": "partial = spec.validate"
             },
             {
               "path": "src/card_chat/main.py",
-              "anchor": "def reply(c, text)"
-            }
-          ]
-        },
-        {
-          "owner": "workflow",
-          "title": "Complete? Fully validate and show a masked review",
-          "body": [
-            "review() validates the complete draft and generates a fresh review token. JavaScript shows Create card when that token is returned. An accepted edit produces a fresh review; the previous token becomes invalid. No card write has happened."
-          ],
-          "references": [
-            {
-              "path": "src/card_chat/main.py",
-              "anchor": "def review(c)"
-            },
-            {
-              "path": "src/card_chat/index.html",
-              "anchor": "function render(data)"
+              "anchor": "c.review = uuid4().hex"
             }
           ]
         }
@@ -333,7 +220,7 @@
         },
         {
           "id": "agent",
-          "label": "CardServicingAgent"
+          "label": "Agent / adapter"
         },
         {
           "id": "claude",
@@ -357,7 +244,7 @@
           "kind": "section",
           "from": "",
           "to": "",
-          "label": "Repeat for each customer answer"
+          "label": "For each customer message"
         },
         {
           "kind": "call",
@@ -369,111 +256,98 @@
           "kind": "call",
           "from": "workflow",
           "to": "workflow",
-          "label": "Get Conversation; lock; append user text to history"
+          "label": "Lock; append history; invalidate previous review"
         },
         {
           "kind": "call",
           "from": "workflow",
           "to": "agent",
-          "label": "interpret_turn(history, draft, allowed_tools={})"
+          "label": "interpret_turn(history, collected details, discovered tools)"
         },
         {
           "kind": "call",
           "from": "agent",
           "to": "claude",
-          "label": "extract(): instructions + serialized history and draft"
+          "label": "Messages with tool descriptions/schemas; automatic selection"
+        },
+        {
+          "kind": "section",
+          "from": "",
+          "to": "",
+          "label": "Missing information, ambiguous request or unsupported action"
         },
         {
           "kind": "return",
           "from": "claude",
           "to": "agent",
-          "label": "JSON intent + supplied field values"
-        },
-        {
-          "kind": "call",
-          "from": "agent",
-          "to": "agent",
-          "label": "Merge candidate; select first missing key in QUESTIONS"
+          "label": "One clarifying question or normal reply"
         },
         {
           "kind": "return",
           "from": "agent",
           "to": "workflow",
-          "label": "CustomerReply: predefined question + field updates"
+          "label": "CustomerReply"
+        },
+        {
+          "kind": "return",
+          "from": "workflow",
+          "to": "browser",
+          "label": "Display reply; next answer retains same cid/context"
+        },
+        {
+          "kind": "section",
+          "from": "",
+          "to": "",
+          "label": "Claude proposes one action"
+        },
+        {
+          "kind": "return",
+          "from": "claude",
+          "to": "agent",
+          "label": "tool_use(name, arguments)"
+        },
+        {
+          "kind": "return",
+          "from": "agent",
+          "to": "workflow",
+          "label": "ProposedToolCall"
         },
         {
           "kind": "call",
           "from": "workflow",
           "to": "workflow",
-          "label": "Validate updates with CardCreate; save actual fields"
+          "label": "Reject unknown tool; validate arguments with compiled schema"
         },
         {
           "kind": "note",
           "from": "",
           "to": "",
-          "label": "Invalid extraction or values: return feedback, do not save invalid updates or execute a tool."
-        },
-        {
-          "kind": "section",
-          "from": "",
-          "to": "",
-          "label": "If required fields are still missing"
+          "label": "Incomplete proposal: save valid partial details and ask for missing field. Invalid values: no review/write."
         },
         {
           "kind": "call",
           "from": "workflow",
           "to": "workflow",
-          "label": "Append assistant question to history"
+          "label": "Store complete snapshot; mask account; new review token"
         },
         {
           "kind": "return",
           "from": "workflow",
           "to": "browser",
-          "label": "Next question; next answer uses same cid"
-        },
-        {
-          "kind": "section",
-          "from": "",
-          "to": "",
-          "label": "Otherwise: all required fields present and valid"
-        },
-        {
-          "kind": "call",
-          "from": "workflow",
-          "to": "workflow",
-          "label": "Validate full draft; mask account; generate review token"
-        },
-        {
-          "kind": "return",
-          "from": "workflow",
-          "to": "browser",
-          "label": "Review + Create card button; no card write yet"
+          "label": "Generic action review and catalogue-labelled confirmation button"
         }
       ]
     },
     {
       "file": "03-confirmation-to-card-api.svg",
       "title": "03 / Confirmation to REST creation",
-      "subtitle": "A model proposal is checked locally. The workflow executes confirmed values, not model authority.",
+      "subtitle": "Confirmation executes the stored proposal directly: no Claude call and no tool-specific routing.",
       "steps": [
         {
-          "owner": "browser",
-          "title": "Customer explicitly clicks Create card",
-          "body": [
-            "POST /conversations/{cid}/confirm contains the review token, not a replacement draft. Merely typing 'yes' uses the message route and does not execute MCP."
-          ],
-          "references": [
-            {
-              "path": "src/card_chat/index.html",
-              "anchor": "confirmButton.onclick"
-            }
-          ]
-        },
-        {
           "owner": "workflow",
-          "title": "Check review token and freeze the submission",
+          "title": "Confirm stored proposal",
           "body": [
-            "Under the conversation lock, reject a stale review with 409. On the first valid click, validate the saved draft, copy it into submission.body, and generate one UUID key. If a successful result is already saved, return it immediately."
+            "Review token binds to exact tool/arguments; no model call here."
           ],
           "references": [
             {
@@ -482,92 +356,41 @@
             },
             {
               "path": "src/card_chat/main.py",
-              "anchor": "c.submission = {'key'"
-            }
-          ]
-        },
-        {
-          "owner": "claude",
-          "title": "Agent offers create_card through the Anthropic adapter",
-          "body": [
-            "allowed_tools now contains only create_card with the discovered model-facing schema. propose() sends the confirmed body, forces one named tool call, and disables parallel tool use. Claude returns tool_use with a name and arguments; it does not execute the tool."
-          ],
-          "references": [
-            {
-              "path": "src/card_chat/agent.py",
-              "anchor": "if allowed_tools:"
-            },
-            {
-              "path": "src/card_chat/provider.py",
-              "anchor": "async def propose"
-            }
-          ]
-        },
-        {
-          "owner": "workflow",
-          "title": "Approve only a matching proposal",
-          "body": [
-            "Require a ProposedToolCall named create_card. Validate its arguments with CardCreate and compare normalized values with submission.body. Reject mismatches. Call gateway.create with the frozen server-side body and submission key."
-          ],
-          "references": [
-            {
-              "path": "src/card_chat/main.py",
-              "anchor": "if (not isinstance(proposal"
-            },
-            {
-              "path": "src/card_chat/main.py",
-              "anchor": "result = await app.state.gateway.create"
+              "anchor": "async def execute(c)"
             }
           ]
         },
         {
           "owner": "mcp",
-          "title": "Gateway dispatches over stdio; MCP calls ApiClient",
+          "title": "Generic dispatch",
           "body": [
-            "ClientSession.call_tool sends create_card plus body and injected idempotency_key. The registered function validates CardCreate, creates ApiClient using CARD_API_BASE_URL, and invokes its existing create_card method."
+            "Idempotency metadata is separate from public arguments; shared handler makes HTTP call."
           ],
           "references": [
             {
               "path": "src/card_chat/gateway.py",
-              "anchor": "result = await self.session.call_tool"
+              "anchor": "async def execute"
             },
             {
               "path": "src/card_chat/mcp_server.py",
-              "anchor": "with ApiClient"
+              "anchor": "def execute(spec"
+            },
+            {
+              "path": "src/api_client/client.py",
+              "anchor": "def execute_operation"
             }
           ]
         },
         {
           "owner": "api",
-          "title": "HTTP POST /cards validates and writes idempotently",
+          "title": "API boundary",
           "body": [
-            "ApiClient sends JSON and the Idempotency-Key header over HTTP. FastAPI validates CardCreate and the required header, then invokes store.create_idempotent. The normal API uses SQLite. Account existence is assumed; there is no account lookup."
+            "Preserve validation, durable creation and replay."
           ],
           "references": [
-            {
-              "path": "src/api_client/client.py",
-              "anchor": "def create_card"
-            },
             {
               "path": "src/card_servicing/cards.py",
               "anchor": "card, replayed = store.create_idempotent"
-            }
-          ]
-        },
-        {
-          "owner": "workflow",
-          "title": "Return the actual API result to the browser",
-          "body": [
-            "REST returns 201. MCP validates the Card response and returns {ok, id, card_number}. Chat saves the successful result and formats the final reply. The browser renders textContent. No extra Claude call summarizes the result; errors/timeouts remain retryable with the frozen submission."
-          ],
-          "references": [
-            {
-              "path": "src/card_chat/mcp_server.py",
-              "anchor": "return {'ok': True"
-            },
-            {
-              "path": "src/card_chat/main.py",
-              "anchor": "submission['result'] = result"
             }
           ]
         }
@@ -580,14 +403,6 @@
         {
           "id": "workflow",
           "label": "Chat workflow"
-        },
-        {
-          "id": "agent",
-          "label": "Agent / adapter"
-        },
-        {
-          "id": "claude",
-          "label": "Hosted Claude"
         },
         {
           "id": "mcp",
@@ -604,64 +419,52 @@
       ],
       "messages": [
         {
+          "kind": "note",
+          "from": "",
+          "to": "",
+          "label": "Before this sequence, Claude has already selected an action and the workflow has validated its review."
+        },
+        {
           "kind": "call",
           "from": "browser",
           "to": "workflow",
-          "label": "Click Create card: POST /confirm {review}"
+          "label": "Click action button: POST /confirm {review}"
         },
         {
           "kind": "call",
           "from": "workflow",
           "to": "workflow",
-          "label": "Check review; freeze body; generate one key"
-        },
-        {
-          "kind": "call",
-          "from": "workflow",
-          "to": "agent",
-          "label": "Confirmed draft + allowed create_card schema"
-        },
-        {
-          "kind": "call",
-          "from": "agent",
-          "to": "claude",
-          "label": "Messages: tool schema + confirmed fields; force one call"
-        },
-        {
-          "kind": "return",
-          "from": "claude",
-          "to": "agent",
-          "label": "tool_use: create_card with arguments"
-        },
-        {
-          "kind": "return",
-          "from": "agent",
-          "to": "workflow",
-          "label": "ProposedToolCall"
+          "label": "Lock; verify token; freeze reviewed tool and arguments"
         },
         {
           "kind": "call",
           "from": "workflow",
           "to": "workflow",
-          "label": "Validate proposal; compare with confirmed body"
+          "label": "Generate one key only for a replay-supported operation"
         },
         {
           "kind": "call",
           "from": "workflow",
           "to": "mcp",
-          "label": "call_tool(create_card, confirmed body + injected key)"
+          "label": "call_tool(name, arguments, meta={idempotency_key})"
+        },
+        {
+          "kind": "call",
+          "from": "mcp",
+          "to": "mcp",
+          "label": "Validate arguments; split path/body; inject execution header"
         },
         {
           "kind": "call",
           "from": "mcp",
           "to": "api",
-          "label": "ApiClient.create_card(): POST /cards + Idempotency-Key"
+          "label": "Shared ApiClient.execute_operation: POST /cards + Idempotency-Key"
         },
         {
           "kind": "call",
           "from": "api",
           "to": "api",
-          "label": "Validate request model and required header"
+          "label": "Validate CardCreate and required header; authorization stays here"
         },
         {
           "kind": "call",
@@ -679,76 +482,73 @@
           "kind": "return",
           "from": "api",
           "to": "mcp",
-          "label": "201 Card response; Idempotency-Replayed header"
+          "label": "201 Card response"
+        },
+        {
+          "kind": "call",
+          "from": "mcp",
+          "to": "mcp",
+          "label": "Validate success status and OpenAPI response schema"
         },
         {
           "kind": "return",
           "from": "mcp",
           "to": "workflow",
-          "label": "Structured {ok, id, card_number}"
+          "label": "Structured {ok, result} or sanitized error"
         },
         {
           "kind": "call",
           "from": "workflow",
           "to": "workflow",
-          "label": "Save successful result in submission"
+          "label": "Cache success; format configured result labels"
         },
         {
           "kind": "return",
           "from": "workflow",
           "to": "browser",
-          "label": "Display actual simulated identifier and UUID"
+          "label": "Actual simulated reference; duplicate click uses cached result"
         },
         {
           "kind": "note",
           "from": "",
           "to": "",
-          "label": "Claude proposes only. The workflow executes server-owned values. No extra model call formats success."
+          "label": "Other catalogue operations use this same path with their compiled method, path parameters and JSON body."
         }
       ]
     },
     {
       "file": "04-idempotency-and-retries.svg",
       "title": "04 / Idempotency and retries",
-      "subtitle": "Chat prevents duplicate submissions in memory; SQLite durably protects repeated HTTP requests.",
+      "subtitle": "Replay-supported writes reuse a frozen key; non-idempotent writes cannot retry an uncertain attempt.",
       "steps": [
         {
           "owner": "workflow",
-          "title": "One confirmation creates one frozen body and key",
+          "title": "Policy-aware submission",
           "body": [
-            "The conversation lock serializes duplicate clicks. The first valid click generates a key; failed attempts keep the same body/key. Completed duplicate clicks return the saved result without calling Claude, MCP or REST again."
+            "Catalogue policy determines safe retry; no model call during execution."
           ],
           "references": [
             {
-              "path": "src/card_chat/main.py",
-              "anchor": "if c.submission is None:"
+              "path": "src/card_chat/catalogue.py",
+              "anchor": "def safe_retry"
             },
             {
               "path": "src/card_chat/main.py",
-              "anchor": "if submission['result']:"
-            }
-          ]
-        },
-        {
-          "owner": "api",
-          "title": "Normalize and fingerprint the request",
-          "body": [
-            "CardCreate trims surrounding whitespace and validates values. fingerprint() serializes the validated fields with sorted keys and compact JSON, then computes SHA-256. The account remains a string, including its leading zeros."
-          ],
-          "references": [
-            {
-              "path": "src/card_servicing/idempotency.py",
-              "anchor": "def fingerprint"
+              "anchor": "if submission['attempted'] and not spec.safe_retry:"
             }
           ]
         },
         {
           "owner": "storage",
-          "title": "Begin a SQLite write transaction and look up the key",
+          "title": "Durable API replay",
           "body": [
-            "BEGIN IMMEDIATE serializes writers before checking card_idempotency. Lookup and inserts share one transaction, including across separate API processes using the same SQLite database."
+            "Transactions, schema and fingerprint behavior are unchanged."
           ],
           "references": [
+            {
+              "path": "src/card_servicing/idempotency.py",
+              "anchor": "def fingerprint"
+            },
             {
               "path": "src/card_servicing/persistence.py",
               "anchor": "def create_idempotent"
@@ -756,70 +556,6 @@
             {
               "path": "src/card_servicing/persistence.py",
               "anchor": "existing = db.execute"
-            }
-          ]
-        },
-        {
-          "owner": "storage",
-          "title": "Case A: unseen key creates card plus saved response",
-          "body": [
-            "Generate a UUID id and SIM- identifier. Insert cards row and card_idempotency row with key, fingerprint, card_id and original response_json. Commit both together. Return 201 with Idempotency-Replayed: false."
-          ],
-          "references": [
-            {
-              "path": "src/card_servicing/persistence.py",
-              "anchor": "card = Card(id=uuid4()"
-            },
-            {
-              "path": "src/card_servicing/persistence.py",
-              "anchor": "db.execute('INSERT INTO card_idempotency"
-            }
-          ]
-        },
-        {
-          "owner": "storage",
-          "title": "Case B: same key and same body replays the card",
-          "body": [
-            "If the stored fingerprint matches, return the saved response instead of inserting. Return 201 with Idempotency-Replayed: true. If a commit succeeded but the first response was lost, retrying the same key/body returns that original card."
-          ],
-          "references": [
-            {
-              "path": "src/card_servicing/persistence.py",
-              "anchor": "return Card.model_validate_json(existing[1]), True"
-            },
-            {
-              "path": "src/card_servicing/cards.py",
-              "anchor": "response.headers['Idempotency-Replayed']"
-            }
-          ]
-        },
-        {
-          "owner": "api",
-          "title": "Case C: same key with a different body is a conflict",
-          "body": [
-            "A fingerprint mismatch raises IdempotencyConflict. The API returns 409; no second card is created. Storage errors return a sanitized 503. The chat retains its submission for an explicit retry rather than generating a fresh key."
-          ],
-          "references": [
-            {
-              "path": "src/card_servicing/persistence.py",
-              "anchor": "if existing[0] != identity:"
-            },
-            {
-              "path": "src/card_servicing/cards.py",
-              "anchor": "except IdempotencyConflict:"
-            }
-          ]
-        },
-        {
-          "owner": "workflow",
-          "title": "Boundary: API durability does not restore chat memory",
-          "body": [
-            "SQLite retains cards and committed keys across API restarts. Chat drafts and submission keys disappear on chat restart; do not start a new conversation to retry an uncertain write. A new key means a new operation even when the body is identical."
-          ],
-          "references": [
-            {
-              "path": "src/card_chat/main.py",
-              "anchor": "conversations = {}"
             }
           ]
         }
@@ -847,43 +583,37 @@
           "kind": "call",
           "from": "browser",
           "to": "workflow",
-          "label": "First valid Create card click"
+          "label": "First valid confirmation"
         },
         {
           "kind": "call",
           "from": "workflow",
           "to": "workflow",
-          "label": "Lock; freeze body B; generate key K once"
+          "label": "Store reviewed tool/arguments; one key if contract supports replay"
         },
         {
           "kind": "call",
           "from": "workflow",
           "to": "api",
-          "label": "Via approved agent proposal and MCP: POST body B, key K"
-        },
-        {
-          "kind": "call",
-          "from": "api",
-          "to": "api",
-          "label": "Validate and normalize B; compute SHA-256 fingerprint"
+          "label": "Via MCP/shared HTTP: confirmed body B, key K"
         },
         {
           "kind": "call",
           "from": "api",
           "to": "storage",
-          "label": "BEGIN IMMEDIATE; lookup K"
+          "label": "Normalize B; fingerprint; BEGIN IMMEDIATE; lookup K"
         },
         {
           "kind": "section",
           "from": "",
           "to": "",
-          "label": "Case A: K is new"
+          "label": "New K: atomically create card and original response snapshot"
         },
         {
           "kind": "call",
           "from": "api",
           "to": "storage",
-          "label": "Insert card AND saved response for K; commit atomically"
+          "label": "Insert cards + card_idempotency; commit"
         },
         {
           "kind": "return",
@@ -895,91 +625,79 @@
           "kind": "return",
           "from": "api",
           "to": "workflow",
-          "label": "201; replayed=false"
-        },
-        {
-          "kind": "note",
-          "from": "",
-          "to": "",
-          "label": "If response is lost after commit, keep the same submission body and key for retry."
+          "label": "201 replayed=false (response may be lost after commit)"
         },
         {
           "kind": "section",
           "from": "",
           "to": "",
-          "label": "Case B: retry K with the same normalized B"
+          "label": "Same confirmed create_card submission after uncertain outcome"
         },
         {
           "kind": "call",
           "from": "workflow",
           "to": "api",
-          "label": "Retry through MCP with the same B and K"
+          "label": "Retry via MCP with identical B and K; no model call"
         },
         {
           "kind": "call",
           "from": "api",
           "to": "storage",
-          "label": "Lookup K; fingerprint matches; read saved response"
+          "label": "Fingerprint matches K: read saved response"
         },
         {
           "kind": "return",
           "from": "storage",
           "to": "api",
-          "label": "Same original card; no insert"
+          "label": "Same original card; no second insert"
         },
         {
           "kind": "return",
           "from": "api",
           "to": "workflow",
-          "label": "201; replayed=true"
+          "label": "201 replayed=true"
         },
         {
           "kind": "return",
           "from": "workflow",
           "to": "browser",
-          "label": "Same card reference"
+          "label": "Same identifier"
         },
         {
           "kind": "section",
           "from": "",
           "to": "",
-          "label": "Completed duplicate click"
+          "label": "Completed duplicate confirmation"
         },
         {
           "kind": "call",
           "from": "browser",
           "to": "workflow",
-          "label": "Click Create card again"
+          "label": "Click same confirmation again"
         },
         {
           "kind": "return",
           "from": "workflow",
           "to": "browser",
-          "label": "Cached success; no Claude, MCP or REST call"
+          "label": "Cached success; no model, MCP or HTTP call"
         },
         {
           "kind": "section",
           "from": "",
           "to": "",
-          "label": "Case C: K reused with a different normalized body"
-        },
-        {
-          "kind": "call",
-          "from": "api",
-          "to": "storage",
-          "label": "Lookup K; fingerprint mismatch"
-        },
-        {
-          "kind": "return",
-          "from": "storage",
-          "to": "api",
-          "label": "IdempotencyConflict; no new card"
+          "label": "Other writes without safe replay"
         },
         {
           "kind": "note",
           "from": "",
           "to": "",
-          "label": "API returns 409 on conflict. API keys are durable; chat state is memory-only. New key = new operation."
+          "label": "After an attempted write loses its result, disable retry and reject repeated execution. Check status first."
+        },
+        {
+          "kind": "note",
+          "from": "",
+          "to": "",
+          "label": "Same key + different body returns 409. Chat state is memory-only; a new key is a new operation."
         }
       ]
     },

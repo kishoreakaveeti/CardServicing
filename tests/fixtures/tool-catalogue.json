@@ -1,0 +1,26 @@
+{
+  "version": 1,
+  "openapi": "tools.openapi.json",
+  "tools": [
+    {
+      "name": "create_card",
+      "operation_id": "create_card",
+      "description": "Create a new simulated card for an existing account. Not a blocking or replacement operation.",
+      "confirmation": "required",
+      "label": "Create card",
+      "idempotency_header": "Idempotency-Key",
+      "sensitive_fields": ["account_number"],
+      "result_labels": {"card_number": "Simulated card", "id": "Reference"}
+    },
+    {
+      "name": "block_card",
+      "operation_id": "block_card",
+      "description": "Block a synthetic card. Collect the explicit card identifier and reason. This operation exists only in the test fixture.",
+      "confirmation": "required",
+      "label": "Block card",
+      "confirmation_label": "Block this card",
+      "field_labels": {"card_id": "Card reference", "reason": "Reason"},
+      "result_labels": {"card_id": "Card reference", "status": "Status"}
+    }
+  ]
+}

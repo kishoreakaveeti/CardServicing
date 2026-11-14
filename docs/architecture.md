@@ -11,6 +11,11 @@ The chat workflow has a [detailed end-to-end trace](chat-end-to-end.md),
 [diagram definitions](diagrams/card-chat-flows.json). Regenerate with
 `python scripts/render_chat_diagrams.py` when the implementation changes.
 
+MCP tools are now registered from a versioned [tool catalogue](tool-catalogue.md)
+and compiled from OpenAPI operations. Claude sees all eligible discovered tools
+using automatic tool choice before review. Confirmation executes a validated
+snapshot directly through the shared HTTP handler; it makes no model call.
+
 This API-first local learning project implements simulated card origination.
 The account already exists and is accepted without lookup.
 Swagger, Postman or the separate HTTPX client calls the API directly. An optional

@@ -12,9 +12,9 @@ class Item(ItemCreate):
 
 class CardCreate(BaseModel):
     model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
-    user_name: str = Field(min_length=1, max_length=100, examples=["alex.smith"])
-    given_name: str = Field(min_length=1, max_length=100, examples=["Alex"])
-    account_number: str = Field(min_length=1, max_length=64, examples=["0012345678"])
+    user_name: str = Field(min_length=1, max_length=100, examples=["alex.smith"], description="The customer's user name, as nonblank text.")
+    given_name: str = Field(min_length=1, max_length=100, examples=["Alex"], description="The customer's given name, as nonblank text.")
+    account_number: str = Field(min_length=1, max_length=64, examples=["0012345678"], description="Existing account identifier. Keep it as a string and preserve leading zeros.", json_schema_extra={'x-sensitive': True})
 
     @field_validator('user_name', 'given_name', 'account_number')
     @classmethod

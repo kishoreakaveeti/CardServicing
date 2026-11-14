@@ -1,106 +1,91 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="1400" height="2491" viewBox="0 0 1400 2491" role="img" aria-labelledby="title description">
+<svg xmlns="http://www.w3.org/2000/svg" width="1400" height="2102" viewBox="0 0 1400 2102" role="img" aria-labelledby="title description">
 <title id="title">04 / Idempotency and retries - sequence diagram</title>
-<desc id="description">Chat prevents duplicate submissions in memory; SQLite durably protects repeated HTTP requests. Read interactions from top to bottom. Dashed arrows are replies.</desc>
+<desc id="description">Replay-supported writes reuse a frozen key; non-idempotent writes cannot retry an uncertain attempt. Read interactions from top to bottom. Dashed arrows are replies.</desc>
 <defs><marker id="arrow" markerWidth="9" markerHeight="9" refX="8" refY="4.5" orient="auto"><path d="M0 0 L9 4.5 L0 9" fill="#334155"/></marker></defs>
 <style>text{font-family:Consolas,"Liberation Mono",monospace}.heading{font-family:Arial,sans-serif;font-weight:700}</style>
-<rect width="1400" height="2491" fill="#fff"/>
+<rect width="1400" height="2102" fill="#fff"/>
 <text x="40" y="55" class="heading" font-size="32" fill="#0f172a">04 / Idempotency and retries</text>
-<text x="40" y="90" font-size="18" fill="#475569">Chat prevents duplicate submissions in memory; SQLite durably protects repeated HTTP requests.</text>
+<text x="40" y="90" font-size="18" fill="#475569">Replay-supported writes reuse a frozen key; non-idempotent writes cannot retry an uncertain attempt.</text>
 <text x="40" y="120" font-size="16" fill="#475569">Time flows downward | Solid arrow: call | Dashed arrow: reply | Yellow: explanation</text>
-<path d="M130.0 207 V2056" stroke="#94a3b8" stroke-width="2" stroke-dasharray="6 6"/>
+<path d="M130.0 207 V1842" stroke="#94a3b8" stroke-width="2" stroke-dasharray="6 6"/>
 <rect x="19.0" y="155" width="222" height="52" rx="7" fill="#155e75"/>
 <text x="130.0" y="187" text-anchor="middle" class="heading" font-size="19" fill="white">Browser</text>
-<path d="M510.0 207 V2056" stroke="#94a3b8" stroke-width="2" stroke-dasharray="6 6"/>
+<path d="M510.0 207 V1842" stroke="#94a3b8" stroke-width="2" stroke-dasharray="6 6"/>
 <rect x="399.0" y="155" width="222" height="52" rx="7" fill="#1d4ed8"/>
 <text x="510.0" y="187" text-anchor="middle" class="heading" font-size="19" fill="white">Chat workflow</text>
-<path d="M890.0 207 V2056" stroke="#94a3b8" stroke-width="2" stroke-dasharray="6 6"/>
+<path d="M890.0 207 V1842" stroke="#94a3b8" stroke-width="2" stroke-dasharray="6 6"/>
 <rect x="779.0" y="155" width="222" height="52" rx="7" fill="#0f766e"/>
 <text x="890.0" y="187" text-anchor="middle" class="heading" font-size="19" fill="white">Cards REST API</text>
-<path d="M1270.0 207 V2056" stroke="#94a3b8" stroke-width="2" stroke-dasharray="6 6"/>
+<path d="M1270.0 207 V1842" stroke="#94a3b8" stroke-width="2" stroke-dasharray="6 6"/>
 <rect x="1159.0" y="155" width="222" height="52" rx="7" fill="#334155"/>
 <text x="1270.0" y="187" text-anchor="middle" class="heading" font-size="19" fill="white">SQLite</text>
-<rect x="174.25" y="240" width="291.5" height="31" fill="white"/>
-<text x="320.0" y="260" text-anchor="middle" font-size="16" fill="#0f172a">First valid Create card click</text>
+<rect x="198.0" y="240" width="244.0" height="31" fill="white"/>
+<text x="320.0" y="260" text-anchor="middle" font-size="16" fill="#0f172a">First valid confirmation</text>
 <path d="M130.0 278 H510.0" fill="none" stroke="#334155" stroke-width="2" marker-end="url(#arrow)"/>
-<rect x="505.75" y="311" width="348.5" height="55" fill="white"/>
-<text x="680.0" y="331" text-anchor="middle" font-size="16" fill="#0f172a">Lock; freeze body B; generate key K</text>
-<text x="680.0" y="355" text-anchor="middle" font-size="16" fill="#0f172a">once</text>
+<rect x="510.5" y="311" width="339.0" height="55" fill="white"/>
+<text x="680.0" y="331" text-anchor="middle" font-size="16" fill="#0f172a">Store reviewed tool/arguments; one</text>
+<text x="680.0" y="355" text-anchor="middle" font-size="16" fill="#0f172a">key if contract supports replay</text>
 <path d="M510.0 373 H575.0 V395 H510.0" fill="none" stroke="#334155" stroke-width="2" marker-end="url(#arrow)"/>
-<rect x="521.0" y="431" width="358.0" height="55" fill="white"/>
-<text x="700.0" y="451" text-anchor="middle" font-size="16" fill="#0f172a">Via approved agent proposal and MCP:</text>
-<text x="700.0" y="475" text-anchor="middle" font-size="16" fill="#0f172a">POST body B, key K</text>
+<rect x="511.5" y="431" width="377.0" height="55" fill="white"/>
+<text x="700.0" y="451" text-anchor="middle" font-size="16" fill="#0f172a">Via MCP/shared HTTP: confirmed body B,</text>
+<text x="700.0" y="475" text-anchor="middle" font-size="16" fill="#0f172a">key K</text>
 <path d="M510.0 493 H890.0" fill="none" stroke="#334155" stroke-width="2" marker-end="url(#arrow)"/>
-<rect x="895.25" y="526" width="329.5" height="55" fill="white"/>
-<text x="1060.0" y="546" text-anchor="middle" font-size="16" fill="#0f172a">Validate and normalize B; compute</text>
-<text x="1060.0" y="570" text-anchor="middle" font-size="16" fill="#0f172a">SHA-256 fingerprint</text>
-<path d="M890.0 588 H955.0 V610 H890.0" fill="none" stroke="#334155" stroke-width="2" marker-end="url(#arrow)"/>
-<rect x="953.25" y="646" width="253.5" height="31" fill="white"/>
-<text x="1080.0" y="666" text-anchor="middle" font-size="16" fill="#0f172a">BEGIN IMMEDIATE; lookup K</text>
-<path d="M890.0 684 H1270.0" fill="none" stroke="#334155" stroke-width="2" marker-end="url(#arrow)"/>
-<rect x="35" y="722" width="1330" height="49" rx="5" fill="#e0e7ff" stroke="#cbd5e1"/>
-<text x="55" y="747" font-size="17" fill="#1e293b">Case A: K is new</text>
-<rect x="896.25" y="778" width="367.5" height="55" fill="white"/>
-<text x="1080.0" y="798" text-anchor="middle" font-size="16" fill="#0f172a">Insert card AND saved response for K;</text>
-<text x="1080.0" y="822" text-anchor="middle" font-size="16" fill="#0f172a">commit atomically</text>
-<path d="M890.0 840 H1270.0" fill="none" stroke="#334155" stroke-width="2" marker-end="url(#arrow)"/>
-<rect x="1010.25" y="873" width="139.5" height="31" fill="white"/>
-<text x="1080.0" y="893" text-anchor="middle" font-size="16" fill="#0f172a">Original card</text>
-<path d="M1270.0 911 H890.0" fill="none" stroke="#334155" stroke-width="2" stroke-dasharray="7 5" marker-end="url(#arrow)"/>
-<rect x="601.75" y="944" width="196.5" height="31" fill="white"/>
-<text x="700.0" y="964" text-anchor="middle" font-size="16" fill="#0f172a">201; replayed=false</text>
-<path d="M890.0 982 H510.0" fill="none" stroke="#334155" stroke-width="2" stroke-dasharray="7 5" marker-end="url(#arrow)"/>
-<rect x="35" y="1020" width="1330" height="49" rx="5" fill="#fef3c7" stroke="#cbd5e1"/>
-<text x="55" y="1045" font-size="17" fill="#1e293b">If response is lost after commit, keep the same submission body and key for retry.</text>
-<rect x="35" y="1081" width="1330" height="49" rx="5" fill="#e0e7ff" stroke="#cbd5e1"/>
-<text x="55" y="1106" font-size="17" fill="#1e293b">Case B: retry K with the same normalized B</text>
-<rect x="516.25" y="1137" width="367.5" height="55" fill="white"/>
-<text x="700.0" y="1157" text-anchor="middle" font-size="16" fill="#0f172a">Retry through MCP with the same B and</text>
-<text x="700.0" y="1181" text-anchor="middle" font-size="16" fill="#0f172a">K</text>
-<path d="M510.0 1199 H890.0" fill="none" stroke="#334155" stroke-width="2" marker-end="url(#arrow)"/>
-<rect x="905.75" y="1232" width="348.5" height="55" fill="white"/>
-<text x="1080.0" y="1252" text-anchor="middle" font-size="16" fill="#0f172a">Lookup K; fingerprint matches; read</text>
-<text x="1080.0" y="1276" text-anchor="middle" font-size="16" fill="#0f172a">saved response</text>
-<path d="M890.0 1294 H1270.0" fill="none" stroke="#334155" stroke-width="2" marker-end="url(#arrow)"/>
-<rect x="934.25" y="1327" width="291.5" height="31" fill="white"/>
-<text x="1080.0" y="1347" text-anchor="middle" font-size="16" fill="#0f172a">Same original card; no insert</text>
-<path d="M1270.0 1365 H890.0" fill="none" stroke="#334155" stroke-width="2" stroke-dasharray="7 5" marker-end="url(#arrow)"/>
-<rect x="606.5" y="1398" width="187.0" height="31" fill="white"/>
-<text x="700.0" y="1418" text-anchor="middle" font-size="16" fill="#0f172a">201; replayed=true</text>
-<path d="M890.0 1436 H510.0" fill="none" stroke="#334155" stroke-width="2" stroke-dasharray="7 5" marker-end="url(#arrow)"/>
-<rect x="221.75" y="1469" width="196.5" height="31" fill="white"/>
-<text x="320.0" y="1489" text-anchor="middle" font-size="16" fill="#0f172a">Same card reference</text>
-<path d="M510.0 1507 H130.0" fill="none" stroke="#334155" stroke-width="2" stroke-dasharray="7 5" marker-end="url(#arrow)"/>
-<rect x="35" y="1545" width="1330" height="49" rx="5" fill="#e0e7ff" stroke="#cbd5e1"/>
-<text x="55" y="1570" font-size="17" fill="#1e293b">Completed duplicate click</text>
-<rect x="202.75" y="1601" width="234.5" height="31" fill="white"/>
-<text x="320.0" y="1621" text-anchor="middle" font-size="16" fill="#0f172a">Click Create card again</text>
-<path d="M130.0 1639 H510.0" fill="none" stroke="#334155" stroke-width="2" marker-end="url(#arrow)"/>
-<rect x="131.5" y="1672" width="377.0" height="55" fill="white"/>
-<text x="320.0" y="1692" text-anchor="middle" font-size="16" fill="#0f172a">Cached success; no Claude, MCP or REST</text>
-<text x="320.0" y="1716" text-anchor="middle" font-size="16" fill="#0f172a">call</text>
-<path d="M510.0 1734 H130.0" fill="none" stroke="#334155" stroke-width="2" stroke-dasharray="7 5" marker-end="url(#arrow)"/>
-<rect x="35" y="1772" width="1330" height="49" rx="5" fill="#e0e7ff" stroke="#cbd5e1"/>
-<text x="55" y="1797" font-size="17" fill="#1e293b">Case C: K reused with a different normalized body</text>
-<rect x="929.5" y="1828" width="301.0" height="31" fill="white"/>
-<text x="1080.0" y="1848" text-anchor="middle" font-size="16" fill="#0f172a">Lookup K; fingerprint mismatch</text>
-<path d="M890.0 1866 H1270.0" fill="none" stroke="#334155" stroke-width="2" marker-end="url(#arrow)"/>
-<rect x="920.0" y="1899" width="320.0" height="31" fill="white"/>
-<text x="1080.0" y="1919" text-anchor="middle" font-size="16" fill="#0f172a">IdempotencyConflict; no new card</text>
-<path d="M1270.0 1937 H890.0" fill="none" stroke="#334155" stroke-width="2" stroke-dasharray="7 5" marker-end="url(#arrow)"/>
-<rect x="35" y="1975" width="1330" height="49" rx="5" fill="#fef3c7" stroke="#cbd5e1"/>
-<text x="55" y="2000" font-size="17" fill="#1e293b">API returns 409 on conflict. API keys are durable; chat state is memory-only. New key = new operation.</text>
-<text x="40" y="2098" class="heading" font-size="20" fill="#0f172a">Traceable code references</text>
-<a href="../../src/card_chat/main.py"><text x="40" y="2123" font-size="16" fill="#1d4ed8">src/card_chat/main.py:128</text></a>
-<a href="../../src/card_chat/main.py"><text x="40" y="2148" font-size="16" fill="#1d4ed8">src/card_chat/main.py:131</text></a>
-<a href="../../src/card_servicing/idempotency.py"><text x="40" y="2173" font-size="16" fill="#1d4ed8">src/card_servicing/idempotency.py:12</text></a>
-<a href="../../src/card_servicing/persistence.py"><text x="40" y="2198" font-size="16" fill="#1d4ed8">src/card_servicing/persistence.py:87</text></a>
-<a href="../../src/card_servicing/persistence.py"><text x="40" y="2223" font-size="16" fill="#1d4ed8">src/card_servicing/persistence.py:94</text></a>
-<a href="../../src/card_servicing/persistence.py"><text x="40" y="2248" font-size="16" fill="#1d4ed8">src/card_servicing/persistence.py:99</text></a>
-<a href="../../src/card_servicing/persistence.py"><text x="40" y="2273" font-size="16" fill="#1d4ed8">src/card_servicing/persistence.py:102</text></a>
-<a href="../../src/card_servicing/persistence.py"><text x="40" y="2298" font-size="16" fill="#1d4ed8">src/card_servicing/persistence.py:98</text></a>
-<a href="../../src/card_servicing/cards.py"><text x="40" y="2323" font-size="16" fill="#1d4ed8">src/card_servicing/cards.py:56</text></a>
-<a href="../../src/card_servicing/persistence.py"><text x="40" y="2348" font-size="16" fill="#1d4ed8">src/card_servicing/persistence.py:96</text></a>
-<a href="../../src/card_servicing/cards.py"><text x="40" y="2373" font-size="16" fill="#1d4ed8">src/card_servicing/cards.py:47</text></a>
-<a href="../../src/card_chat/main.py"><text x="40" y="2398" font-size="16" fill="#1d4ed8">src/card_chat/main.py:54</text></a>
-<text x="40" y="2466" font-size="15" fill="#475569">Source: card-chat-flows.json | Regenerate: python scripts/render_chat_diagrams.py</text>
+<rect x="924.75" y="526" width="310.5" height="55" fill="white"/>
+<text x="1080.0" y="546" text-anchor="middle" font-size="16" fill="#0f172a">Normalize B; fingerprint; BEGIN</text>
+<text x="1080.0" y="570" text-anchor="middle" font-size="16" fill="#0f172a">IMMEDIATE; lookup K</text>
+<path d="M890.0 588 H1270.0" fill="none" stroke="#334155" stroke-width="2" marker-end="url(#arrow)"/>
+<rect x="35" y="626" width="1330" height="49" rx="5" fill="#e0e7ff" stroke="#cbd5e1"/>
+<text x="55" y="651" font-size="17" fill="#1e293b">New K: atomically create card and original response snapshot</text>
+<rect x="920.0" y="682" width="320.0" height="55" fill="white"/>
+<text x="1080.0" y="702" text-anchor="middle" font-size="16" fill="#0f172a">Insert cards + card_idempotency;</text>
+<text x="1080.0" y="726" text-anchor="middle" font-size="16" fill="#0f172a">commit</text>
+<path d="M890.0 744 H1270.0" fill="none" stroke="#334155" stroke-width="2" marker-end="url(#arrow)"/>
+<rect x="1010.25" y="777" width="139.5" height="31" fill="white"/>
+<text x="1080.0" y="797" text-anchor="middle" font-size="16" fill="#0f172a">Original card</text>
+<path d="M1270.0 815 H890.0" fill="none" stroke="#334155" stroke-width="2" stroke-dasharray="7 5" marker-end="url(#arrow)"/>
+<rect x="525.75" y="848" width="348.5" height="55" fill="white"/>
+<text x="700.0" y="868" text-anchor="middle" font-size="16" fill="#0f172a">201 replayed=false (response may be</text>
+<text x="700.0" y="892" text-anchor="middle" font-size="16" fill="#0f172a">lost after commit)</text>
+<path d="M890.0 910 H510.0" fill="none" stroke="#334155" stroke-width="2" stroke-dasharray="7 5" marker-end="url(#arrow)"/>
+<rect x="35" y="948" width="1330" height="49" rx="5" fill="#e0e7ff" stroke="#cbd5e1"/>
+<text x="55" y="973" font-size="17" fill="#1e293b">Same confirmed create_card submission after uncertain outcome</text>
+<rect x="516.25" y="1004" width="367.5" height="55" fill="white"/>
+<text x="700.0" y="1024" text-anchor="middle" font-size="16" fill="#0f172a">Retry via MCP with identical B and K;</text>
+<text x="700.0" y="1048" text-anchor="middle" font-size="16" fill="#0f172a">no model call</text>
+<path d="M510.0 1066 H890.0" fill="none" stroke="#334155" stroke-width="2" marker-end="url(#arrow)"/>
+<rect x="915.25" y="1099" width="329.5" height="55" fill="white"/>
+<text x="1080.0" y="1119" text-anchor="middle" font-size="16" fill="#0f172a">Fingerprint matches K: read saved</text>
+<text x="1080.0" y="1143" text-anchor="middle" font-size="16" fill="#0f172a">response</text>
+<path d="M890.0 1161 H1270.0" fill="none" stroke="#334155" stroke-width="2" marker-end="url(#arrow)"/>
+<rect x="901.0" y="1194" width="358.0" height="31" fill="white"/>
+<text x="1080.0" y="1214" text-anchor="middle" font-size="16" fill="#0f172a">Same original card; no second insert</text>
+<path d="M1270.0 1232 H890.0" fill="none" stroke="#334155" stroke-width="2" stroke-dasharray="7 5" marker-end="url(#arrow)"/>
+<rect x="611.25" y="1265" width="177.5" height="31" fill="white"/>
+<text x="700.0" y="1285" text-anchor="middle" font-size="16" fill="#0f172a">201 replayed=true</text>
+<path d="M890.0 1303 H510.0" fill="none" stroke="#334155" stroke-width="2" stroke-dasharray="7 5" marker-end="url(#arrow)"/>
+<rect x="240.75" y="1336" width="158.5" height="31" fill="white"/>
+<text x="320.0" y="1356" text-anchor="middle" font-size="16" fill="#0f172a">Same identifier</text>
+<path d="M510.0 1374 H130.0" fill="none" stroke="#334155" stroke-width="2" stroke-dasharray="7 5" marker-end="url(#arrow)"/>
+<rect x="35" y="1412" width="1330" height="49" rx="5" fill="#e0e7ff" stroke="#cbd5e1"/>
+<text x="55" y="1437" font-size="17" fill="#1e293b">Completed duplicate confirmation</text>
+<rect x="174.25" y="1468" width="291.5" height="31" fill="white"/>
+<text x="320.0" y="1488" text-anchor="middle" font-size="16" fill="#0f172a">Click same confirmation again</text>
+<path d="M130.0 1506 H510.0" fill="none" stroke="#334155" stroke-width="2" marker-end="url(#arrow)"/>
+<rect x="136.25" y="1539" width="367.5" height="55" fill="white"/>
+<text x="320.0" y="1559" text-anchor="middle" font-size="16" fill="#0f172a">Cached success; no model, MCP or HTTP</text>
+<text x="320.0" y="1583" text-anchor="middle" font-size="16" fill="#0f172a">call</text>
+<path d="M510.0 1601 H130.0" fill="none" stroke="#334155" stroke-width="2" stroke-dasharray="7 5" marker-end="url(#arrow)"/>
+<rect x="35" y="1639" width="1330" height="49" rx="5" fill="#e0e7ff" stroke="#cbd5e1"/>
+<text x="55" y="1664" font-size="17" fill="#1e293b">Other writes without safe replay</text>
+<rect x="35" y="1700" width="1330" height="49" rx="5" fill="#fef3c7" stroke="#cbd5e1"/>
+<text x="55" y="1725" font-size="17" fill="#1e293b">After an attempted write loses its result, disable retry and reject repeated execution. Check status first.</text>
+<rect x="35" y="1761" width="1330" height="49" rx="5" fill="#fef3c7" stroke="#cbd5e1"/>
+<text x="55" y="1786" font-size="17" fill="#1e293b">Same key + different body returns 409. Chat state is memory-only; a new key is a new operation.</text>
+<text x="40" y="1884" class="heading" font-size="20" fill="#0f172a">Traceable code references</text>
+<a href="../../src/card_chat/catalogue.py"><text x="40" y="1909" font-size="16" fill="#1d4ed8">src/card_chat/catalogue.py:129</text></a>
+<a href="../../src/card_chat/main.py"><text x="40" y="1934" font-size="16" fill="#1d4ed8">src/card_chat/main.py:87</text></a>
+<a href="../../src/card_servicing/idempotency.py"><text x="40" y="1959" font-size="16" fill="#1d4ed8">src/card_servicing/idempotency.py:12</text></a>
+<a href="../../src/card_servicing/persistence.py"><text x="40" y="1984" font-size="16" fill="#1d4ed8">src/card_servicing/persistence.py:87</text></a>
+<a href="../../src/card_servicing/persistence.py"><text x="40" y="2009" font-size="16" fill="#1d4ed8">src/card_servicing/persistence.py:94</text></a>
+<text x="40" y="2077" font-size="15" fill="#475569">Source: card-chat-flows.json | Regenerate: python scripts/render_chat_diagrams.py</text>
 </svg>

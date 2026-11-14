@@ -12,15 +12,16 @@ import uvicorn
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'tests'))
 from test_chat import StubModel, running_api
 from card_chat.main import create_app
+from card_chat.turns import CustomerReply, ProposedToolCall
 import os
 
 if __name__ == '__main__':
     model = StubModel()
     model.outputs = [
-        {'intent': 'unsupported', 'fields': {}},
-        {'intent': 'create', 'fields': {}},
-        {'intent': 'create', 'fields': {'given_name': 'Alex', 'user_name': 'alex.synthetic'}},
-        {'intent': 'create', 'fields': {'account_number': '0012345678'}},
+        CustomerReply('This demo supports creating a new card, not freezing it.'),
+        CustomerReply('What is your given name?'),
+        CustomerReply('What is your existing account number?'),
+        ProposedToolCall('create_card', {'given_name': 'Alex', 'user_name': 'alex.synthetic', 'account_number': '0012345678'}),
     ]
     with running_api() as url:
         os.environ['CARD_API_BASE_URL'] = url

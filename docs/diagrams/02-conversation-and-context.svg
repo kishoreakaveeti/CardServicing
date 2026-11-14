@@ -1,22 +1,22 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="1400" height="2402" viewBox="0 0 1400 2402" role="img" aria-labelledby="title description">
+<svg xmlns="http://www.w3.org/2000/svg" width="1400" height="2128" viewBox="0 0 1400 2128" role="img" aria-labelledby="title description">
 <title id="title">02 / Each message and the question loop - sequence diagram</title>
-<desc id="description">Claude extracts intent and values. Python chooses the question and validates completeness. Read interactions from top to bottom. Dashed arrows are replies.</desc>
+<desc id="description">Model-driven questions and action proposals; workflow validates before showing a generic review. Read interactions from top to bottom. Dashed arrows are replies.</desc>
 <defs><marker id="arrow" markerWidth="9" markerHeight="9" refX="8" refY="4.5" orient="auto"><path d="M0 0 L9 4.5 L0 9" fill="#334155"/></marker></defs>
 <style>text{font-family:Consolas,"Liberation Mono",monospace}.heading{font-family:Arial,sans-serif;font-weight:700}</style>
-<rect width="1400" height="2402" fill="#fff"/>
+<rect width="1400" height="2128" fill="#fff"/>
 <text x="40" y="55" class="heading" font-size="32" fill="#0f172a">02 / Each message and the question loop</text>
-<text x="40" y="90" font-size="18" fill="#475569">Claude extracts intent and values. Python chooses the question and validates completeness.</text>
+<text x="40" y="90" font-size="18" fill="#475569">Model-driven questions and action proposals; workflow validates before showing a generic review.</text>
 <text x="40" y="120" font-size="16" fill="#475569">Time flows downward | Solid arrow: call | Dashed arrow: reply | Yellow: explanation</text>
-<path d="M130.0 207 V1892" stroke="#94a3b8" stroke-width="2" stroke-dasharray="6 6"/>
+<path d="M130.0 207 V1818" stroke="#94a3b8" stroke-width="2" stroke-dasharray="6 6"/>
 <rect x="19.0" y="155" width="222" height="52" rx="7" fill="#155e75"/>
 <text x="130.0" y="187" text-anchor="middle" class="heading" font-size="19" fill="white">Browser</text>
-<path d="M510.0 207 V1892" stroke="#94a3b8" stroke-width="2" stroke-dasharray="6 6"/>
+<path d="M510.0 207 V1818" stroke="#94a3b8" stroke-width="2" stroke-dasharray="6 6"/>
 <rect x="399.0" y="155" width="222" height="52" rx="7" fill="#1d4ed8"/>
 <text x="510.0" y="187" text-anchor="middle" class="heading" font-size="19" fill="white">Chat workflow</text>
-<path d="M890.0 207 V1892" stroke="#94a3b8" stroke-width="2" stroke-dasharray="6 6"/>
+<path d="M890.0 207 V1818" stroke="#94a3b8" stroke-width="2" stroke-dasharray="6 6"/>
 <rect x="779.0" y="155" width="222" height="52" rx="7" fill="#6d28d9"/>
-<text x="890.0" y="187" text-anchor="middle" class="heading" font-size="19" fill="white">CardServicingAgent</text>
-<path d="M1270.0 207 V1892" stroke="#94a3b8" stroke-width="2" stroke-dasharray="6 6"/>
+<text x="890.0" y="187" text-anchor="middle" class="heading" font-size="19" fill="white">Agent / adapter</text>
+<path d="M1270.0 207 V1818" stroke="#94a3b8" stroke-width="2" stroke-dasharray="6 6"/>
 <rect x="1159.0" y="155" width="222" height="52" rx="7" fill="#9a3412"/>
 <text x="1270.0" y="187" text-anchor="middle" class="heading" font-size="19" fill="white">Hosted Claude</text>
 <rect x="221.75" y="240" width="196.5" height="31" fill="white"/>
@@ -26,75 +26,66 @@
 <text x="320.0" y="331" text-anchor="middle" font-size="16" fill="#0f172a">cid + fixed greeting</text>
 <path d="M510.0 349 H130.0" fill="none" stroke="#334155" stroke-width="2" stroke-dasharray="7 5" marker-end="url(#arrow)"/>
 <rect x="35" y="387" width="1330" height="49" rx="5" fill="#e0e7ff" stroke="#cbd5e1"/>
-<text x="55" y="412" font-size="17" fill="#1e293b">Repeat for each customer answer</text>
+<text x="55" y="412" font-size="17" fill="#1e293b">For each customer message</text>
 <rect x="150.5" y="443" width="339.0" height="55" fill="white"/>
 <text x="320.0" y="463" text-anchor="middle" font-size="16" fill="#0f172a">POST /conversations/{cid}/messages</text>
 <text x="320.0" y="487" text-anchor="middle" font-size="16" fill="#0f172a">{text}</text>
 <path d="M130.0 505 H510.0" fill="none" stroke="#334155" stroke-width="2" marker-end="url(#arrow)"/>
-<rect x="505.75" y="538" width="348.5" height="55" fill="white"/>
-<text x="680.0" y="558" text-anchor="middle" font-size="16" fill="#0f172a">Get Conversation; lock; append user</text>
-<text x="680.0" y="582" text-anchor="middle" font-size="16" fill="#0f172a">text to history</text>
+<rect x="520.0" y="538" width="320.0" height="55" fill="white"/>
+<text x="680.0" y="558" text-anchor="middle" font-size="16" fill="#0f172a">Lock; append history; invalidate</text>
+<text x="680.0" y="582" text-anchor="middle" font-size="16" fill="#0f172a">previous review</text>
 <path d="M510.0 600 H575.0 V622 H510.0" fill="none" stroke="#334155" stroke-width="2" marker-end="url(#arrow)"/>
-<rect x="549.5" y="658" width="301.0" height="55" fill="white"/>
-<text x="700.0" y="678" text-anchor="middle" font-size="16" fill="#0f172a">interpret_turn(history, draft,</text>
-<text x="700.0" y="702" text-anchor="middle" font-size="16" fill="#0f172a">allowed_tools={})</text>
+<rect x="535.25" y="658" width="329.5" height="55" fill="white"/>
+<text x="700.0" y="678" text-anchor="middle" font-size="16" fill="#0f172a">interpret_turn(history, collected</text>
+<text x="700.0" y="702" text-anchor="middle" font-size="16" fill="#0f172a">details, discovered tools)</text>
 <path d="M510.0 720 H890.0" fill="none" stroke="#334155" stroke-width="2" marker-end="url(#arrow)"/>
-<rect x="901.0" y="753" width="358.0" height="55" fill="white"/>
-<text x="1080.0" y="773" text-anchor="middle" font-size="16" fill="#0f172a">extract(): instructions + serialized</text>
-<text x="1080.0" y="797" text-anchor="middle" font-size="16" fill="#0f172a">history and draft</text>
-<path d="M890.0 815 H1270.0" fill="none" stroke="#334155" stroke-width="2" marker-end="url(#arrow)"/>
-<rect x="905.75" y="848" width="348.5" height="31" fill="white"/>
-<text x="1080.0" y="868" text-anchor="middle" font-size="16" fill="#0f172a">JSON intent + supplied field values</text>
-<path d="M1270.0 886 H890.0" fill="none" stroke="#334155" stroke-width="2" stroke-dasharray="7 5" marker-end="url(#arrow)"/>
-<rect x="914.25" y="919" width="291.5" height="55" fill="white"/>
-<text x="1060.0" y="939" text-anchor="middle" font-size="16" fill="#0f172a">Merge candidate; select first</text>
-<text x="1060.0" y="963" text-anchor="middle" font-size="16" fill="#0f172a">missing key in QUESTIONS</text>
-<path d="M890.0 981 H955.0 V1003 H890.0" fill="none" stroke="#334155" stroke-width="2" marker-end="url(#arrow)"/>
-<rect x="521.0" y="1039" width="358.0" height="55" fill="white"/>
-<text x="700.0" y="1059" text-anchor="middle" font-size="16" fill="#0f172a">CustomerReply: predefined question +</text>
-<text x="700.0" y="1083" text-anchor="middle" font-size="16" fill="#0f172a">field updates</text>
-<path d="M890.0 1101 H510.0" fill="none" stroke="#334155" stroke-width="2" stroke-dasharray="7 5" marker-end="url(#arrow)"/>
-<rect x="515.25" y="1134" width="329.5" height="55" fill="white"/>
-<text x="680.0" y="1154" text-anchor="middle" font-size="16" fill="#0f172a">Validate updates with CardCreate;</text>
-<text x="680.0" y="1178" text-anchor="middle" font-size="16" fill="#0f172a">save actual fields</text>
-<path d="M510.0 1196 H575.0 V1218 H510.0" fill="none" stroke="#334155" stroke-width="2" marker-end="url(#arrow)"/>
-<rect x="35" y="1259" width="1330" height="49" rx="5" fill="#fef3c7" stroke="#cbd5e1"/>
-<text x="55" y="1284" font-size="17" fill="#1e293b">Invalid extraction or values: return feedback, do not save invalid updates or execute a tool.</text>
-<rect x="35" y="1320" width="1330" height="49" rx="5" fill="#e0e7ff" stroke="#cbd5e1"/>
-<text x="55" y="1345" font-size="17" fill="#1e293b">If required fields are still missing</text>
-<rect x="539.0" y="1376" width="282.0" height="55" fill="white"/>
-<text x="680.0" y="1396" text-anchor="middle" font-size="16" fill="#0f172a">Append assistant question to</text>
-<text x="680.0" y="1420" text-anchor="middle" font-size="16" fill="#0f172a">history</text>
-<path d="M510.0 1438 H575.0 V1460 H510.0" fill="none" stroke="#334155" stroke-width="2" marker-end="url(#arrow)"/>
-<rect x="141.0" y="1496" width="358.0" height="55" fill="white"/>
-<text x="320.0" y="1516" text-anchor="middle" font-size="16" fill="#0f172a">Next question; next answer uses same</text>
-<text x="320.0" y="1540" text-anchor="middle" font-size="16" fill="#0f172a">cid</text>
-<path d="M510.0 1558 H130.0" fill="none" stroke="#334155" stroke-width="2" stroke-dasharray="7 5" marker-end="url(#arrow)"/>
-<rect x="35" y="1596" width="1330" height="49" rx="5" fill="#e0e7ff" stroke="#cbd5e1"/>
-<text x="55" y="1621" font-size="17" fill="#1e293b">Otherwise: all required fields present and valid</text>
-<rect x="510.5" y="1652" width="339.0" height="55" fill="white"/>
-<text x="680.0" y="1672" text-anchor="middle" font-size="16" fill="#0f172a">Validate full draft; mask account;</text>
-<text x="680.0" y="1696" text-anchor="middle" font-size="16" fill="#0f172a">generate review token</text>
-<path d="M510.0 1714 H575.0 V1736 H510.0" fill="none" stroke="#334155" stroke-width="2" marker-end="url(#arrow)"/>
-<rect x="141.0" y="1772" width="358.0" height="55" fill="white"/>
-<text x="320.0" y="1792" text-anchor="middle" font-size="16" fill="#0f172a">Review + Create card button; no card</text>
-<text x="320.0" y="1816" text-anchor="middle" font-size="16" fill="#0f172a">write yet</text>
-<path d="M510.0 1834 H130.0" fill="none" stroke="#334155" stroke-width="2" stroke-dasharray="7 5" marker-end="url(#arrow)"/>
-<text x="40" y="1934" class="heading" font-size="20" fill="#0f172a">Traceable code references</text>
-<a href="../../src/card_chat/index.html"><text x="40" y="1959" font-size="16" fill="#1d4ed8">src/card_chat/index.html:19</text></a>
-<a href="../../src/card_chat/index.html"><text x="40" y="1984" font-size="16" fill="#1d4ed8">src/card_chat/index.html:20</text></a>
-<a href="../../src/card_chat/main.py"><text x="40" y="2009" font-size="16" fill="#1d4ed8">src/card_chat/main.py:19</text></a>
-<a href="../../src/card_chat/main.py"><text x="40" y="2034" font-size="16" fill="#1d4ed8">src/card_chat/main.py:98</text></a>
-<a href="../../src/card_chat/provider.py"><text x="40" y="2059" font-size="16" fill="#1d4ed8">src/card_chat/provider.py:29</text></a>
-<a href="../../src/card_chat/provider.py"><text x="40" y="2084" font-size="16" fill="#1d4ed8">src/card_chat/provider.py:9</text></a>
-<a href="../../src/card_chat/agent.py"><text x="40" y="2109" font-size="16" fill="#1d4ed8">src/card_chat/agent.py:7</text></a>
-<a href="../../src/card_chat/agent.py"><text x="40" y="2134" font-size="16" fill="#1d4ed8">src/card_chat/agent.py:53</text></a>
-<a href="../../src/card_chat/main.py"><text x="40" y="2159" font-size="16" fill="#1d4ed8">src/card_chat/main.py:109</text></a>
-<a href="../../src/card_chat/main.py"><text x="40" y="2184" font-size="16" fill="#1d4ed8">src/card_chat/main.py:116</text></a>
-<a href="../../src/card_servicing/models.py"><text x="40" y="2209" font-size="16" fill="#1d4ed8">src/card_servicing/models.py:13</text></a>
-<a href="../../src/card_chat/main.py"><text x="40" y="2234" font-size="16" fill="#1d4ed8">src/card_chat/main.py:118</text></a>
-<a href="../../src/card_chat/main.py"><text x="40" y="2259" font-size="16" fill="#1d4ed8">src/card_chat/main.py:68</text></a>
-<a href="../../src/card_chat/main.py"><text x="40" y="2284" font-size="16" fill="#1d4ed8">src/card_chat/main.py:72</text></a>
-<a href="../../src/card_chat/index.html"><text x="40" y="2309" font-size="16" fill="#1d4ed8">src/card_chat/index.html:16</text></a>
-<text x="40" y="2377" font-size="15" fill="#475569">Source: card-chat-flows.json | Regenerate: python scripts/render_chat_diagrams.py</text>
+<rect x="924.75" y="753" width="310.5" height="79" fill="white"/>
+<text x="1080.0" y="773" text-anchor="middle" font-size="16" fill="#0f172a">Messages with tool</text>
+<text x="1080.0" y="797" text-anchor="middle" font-size="16" fill="#0f172a">descriptions/schemas; automatic</text>
+<text x="1080.0" y="821" text-anchor="middle" font-size="16" fill="#0f172a">selection</text>
+<path d="M890.0 839 H1270.0" fill="none" stroke="#334155" stroke-width="2" marker-end="url(#arrow)"/>
+<rect x="35" y="877" width="1330" height="49" rx="5" fill="#e0e7ff" stroke="#cbd5e1"/>
+<text x="55" y="902" font-size="17" fill="#1e293b">Missing information, ambiguous request or unsupported action</text>
+<rect x="915.25" y="933" width="329.5" height="55" fill="white"/>
+<text x="1080.0" y="953" text-anchor="middle" font-size="16" fill="#0f172a">One clarifying question or normal</text>
+<text x="1080.0" y="977" text-anchor="middle" font-size="16" fill="#0f172a">reply</text>
+<path d="M1270.0 995 H890.0" fill="none" stroke="#334155" stroke-width="2" stroke-dasharray="7 5" marker-end="url(#arrow)"/>
+<rect x="630.25" y="1028" width="139.5" height="31" fill="white"/>
+<text x="700.0" y="1048" text-anchor="middle" font-size="16" fill="#0f172a">CustomerReply</text>
+<path d="M890.0 1066 H510.0" fill="none" stroke="#334155" stroke-width="2" stroke-dasharray="7 5" marker-end="url(#arrow)"/>
+<rect x="150.5" y="1099" width="339.0" height="55" fill="white"/>
+<text x="320.0" y="1119" text-anchor="middle" font-size="16" fill="#0f172a">Display reply; next answer retains</text>
+<text x="320.0" y="1143" text-anchor="middle" font-size="16" fill="#0f172a">same cid/context</text>
+<path d="M510.0 1161 H130.0" fill="none" stroke="#334155" stroke-width="2" stroke-dasharray="7 5" marker-end="url(#arrow)"/>
+<rect x="35" y="1199" width="1330" height="49" rx="5" fill="#e0e7ff" stroke="#cbd5e1"/>
+<text x="55" y="1224" font-size="17" fill="#1e293b">Claude proposes one action</text>
+<rect x="953.25" y="1255" width="253.5" height="31" fill="white"/>
+<text x="1080.0" y="1275" text-anchor="middle" font-size="16" fill="#0f172a">tool_use(name, arguments)</text>
+<path d="M1270.0 1293 H890.0" fill="none" stroke="#334155" stroke-width="2" stroke-dasharray="7 5" marker-end="url(#arrow)"/>
+<rect x="616.0" y="1326" width="168.0" height="31" fill="white"/>
+<text x="700.0" y="1346" text-anchor="middle" font-size="16" fill="#0f172a">ProposedToolCall</text>
+<path d="M890.0 1364 H510.0" fill="none" stroke="#334155" stroke-width="2" stroke-dasharray="7 5" marker-end="url(#arrow)"/>
+<rect x="529.5" y="1397" width="301.0" height="55" fill="white"/>
+<text x="680.0" y="1417" text-anchor="middle" font-size="16" fill="#0f172a">Reject unknown tool; validate</text>
+<text x="680.0" y="1441" text-anchor="middle" font-size="16" fill="#0f172a">arguments with compiled schema</text>
+<path d="M510.0 1459 H575.0 V1481 H510.0" fill="none" stroke="#334155" stroke-width="2" marker-end="url(#arrow)"/>
+<rect x="35" y="1522" width="1330" height="49" rx="5" fill="#fef3c7" stroke="#cbd5e1"/>
+<text x="55" y="1547" font-size="17" fill="#1e293b">Incomplete proposal: save valid partial details and ask for missing field. Invalid values: no review/write.</text>
+<rect x="534.25" y="1578" width="291.5" height="55" fill="white"/>
+<text x="680.0" y="1598" text-anchor="middle" font-size="16" fill="#0f172a">Store complete snapshot; mask</text>
+<text x="680.0" y="1622" text-anchor="middle" font-size="16" fill="#0f172a">account; new review token</text>
+<path d="M510.0 1640 H575.0 V1662 H510.0" fill="none" stroke="#334155" stroke-width="2" marker-end="url(#arrow)"/>
+<rect x="141.0" y="1698" width="358.0" height="55" fill="white"/>
+<text x="320.0" y="1718" text-anchor="middle" font-size="16" fill="#0f172a">Generic action review and catalogue-</text>
+<text x="320.0" y="1742" text-anchor="middle" font-size="16" fill="#0f172a">labelled confirmation button</text>
+<path d="M510.0 1760 H130.0" fill="none" stroke="#334155" stroke-width="2" stroke-dasharray="7 5" marker-end="url(#arrow)"/>
+<text x="40" y="1860" class="heading" font-size="20" fill="#0f172a">Traceable code references</text>
+<a href="../../src/card_chat/main.py"><text x="40" y="1885" font-size="16" fill="#1d4ed8">src/card_chat/main.py:118</text></a>
+<a href="../../src/card_chat/main.py"><text x="40" y="1910" font-size="16" fill="#1d4ed8">src/card_chat/main.py:19</text></a>
+<a href="../../src/card_chat/provider.py"><text x="40" y="1935" font-size="16" fill="#1d4ed8">src/card_chat/provider.py:11</text></a>
+<a href="../../src/card_chat/agent.py"><text x="40" y="1960" font-size="16" fill="#1d4ed8">src/card_chat/agent.py:12</text></a>
+<a href="../../src/card_chat/catalogue.py"><text x="40" y="1985" font-size="16" fill="#1d4ed8">src/card_chat/catalogue.py:98</text></a>
+<a href="../../src/card_chat/main.py"><text x="40" y="2010" font-size="16" fill="#1d4ed8">src/card_chat/main.py:134</text></a>
+<a href="../../src/card_chat/main.py"><text x="40" y="2035" font-size="16" fill="#1d4ed8">src/card_chat/main.py:151</text></a>
+<text x="40" y="2103" font-size="15" fill="#475569">Source: card-chat-flows.json | Regenerate: python scripts/render_chat_diagrams.py</text>
 </svg>

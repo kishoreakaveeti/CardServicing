@@ -15,6 +15,7 @@ from card_chat.config import settings
 from card_chat.gateway import Gateway
 from card_chat.main import create_app
 from card_chat.provider import make_model
+from card_chat.turns import ProposedToolCall
 
 
 def main():
@@ -30,19 +31,19 @@ def main():
         sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'tests'))
         from test_chat import StubModel, BODY
         model = StubModel()
-        model.outputs = [{'intent': 'create', 'fields': BODY}]
-    original = Gateway.create
+        model.outputs = [ProposedToolCall('create_card', BODY)]
+    original = Gateway.execute
     calls, results = [], []
 
-    async def capture(gateway, body, key):
-        result = await original(gateway, body, key)
-        calls.append((body.copy(), key))
+    async def capture(gateway, name, body, key=None):
+        result = await original(gateway, name, body, key)
+        calls.append((name, body.copy(), key))
         results.append(result)
         if args.lose_first_response and len(calls) == 1 and result.get('ok'):
             raise TimeoutError('Synthetic response loss after creation')
         return result
 
-    Gateway.create = capture
+    Gateway.execute = capture
     try:
         with TestClient(create_app(model=model)) as client:
             start = client.post('/conversations').json()
@@ -60,16 +61,16 @@ def main():
                 first = client.post(path + '/confirm', json=confirmation).json()
                 assert len(calls) == 2 and calls[0] == calls[1]
                 assert results[0] == results[1]
-            assert first['message'].startswith('Created simulated card SIM-'), first['message']
+            assert 'SIM-' in first['message'], first['message']
             count = len(calls)
             duplicate = client.post(path + '/confirm', json=confirmation).json()
             assert duplicate['message'] == first['message']
             assert len(calls) == count, 'Completed duplicate must use the saved result'
             print('PASS: review -> confirmed chat -> MCP -> HTTP creation -> identical retry/duplicate result')
             print('Model:', 'live Anthropic' if args.live else 'stub')
-            print('Reference:', results[-1]['id'])
+            print('Reference:', results[-1]['result']['id'])
     finally:
-        Gateway.create = original
+        Gateway.execute = original
 
 
 if __name__ == '__main__':

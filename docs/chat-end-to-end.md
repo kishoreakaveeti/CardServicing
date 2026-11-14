@@ -1,274 +1,145 @@
-# Card servicing chat: a traceable end-to-end walkthrough
+# Card servicing chat: end-to-end flow
 
-This describes the implemented demo, including its deliberately controlled question
-wording. Claude interprets natural language and proposes a tool call. Python owns
-the conversation state, questions, validation, confirmation and execution. The
-Cards API owns durable card creation and idempotency.
+This is the current catalogue-driven implementation. Claude proposes an action
+before confirmation. The workflow validates and reviews it, then executes the
+stored snapshot without another model call. The previous fixed intent enum and
+question mapping have been removed. For catalogue authoring, supported schemas,
+policies and VS Code instructions, see [the tool catalogue guide](tool-catalogue.md).
 
-## Open, zoom and download the diagrams
+## Open and zoom the sequence diagrams
 
-Open [the offline diagram viewer](diagrams/index.html) in a browser. It needs no
-server or internet connection. Use the size controls, or open an individual SVG
-and use browser zoom. SVG is vector graphics: text and lines stay sharp as you
-zoom. These are SVG sequence diagrams with participant lifelines, solid call arrows, dashed reply arrows and clearly marked conditional sections. Read time from top to bottom. They are real files in the repository, not chat-only Mermaid previews.
+Open [the offline viewer](diagrams/index.html) in a browser; no application or
+internet connection is needed. The SVG files stay sharp when zoomed and can be
+saved individually. Read participants across the top and time down the page.
+Solid arrows are calls, dashed arrows are replies, shaded sections explain branches.
 
-| Diagram | Open the standalone SVG |
+| Diagram | SVG |
 | --- | --- |
-| Startup: who creates MCP and discovers tools | [01 Startup and discovery](diagrams/01-startup-and-discovery.svg) |
-| Every message: natural language, state and next question | [02 Conversation and context](diagrams/02-conversation-and-context.svg) |
-| Confirmation: Claude proposal through MCP to REST | [03 Confirmation to Cards API](diagrams/03-confirmation-to-card-api.svg) |
-| Duplicate clicks, response loss and durable replay | [04 Idempotency and retries](diagrams/04-idempotency-and-retries.svg) |
-| Startup-selected store and telemetry contracts | [05 API adapters](diagrams/05-startup-adapter-selection.svg) |
+| Catalogue loading, MCP registration and runtime discovery | [01 Startup and discovery](diagrams/01-startup-and-discovery.svg) |
+| Model-generated questions, context and validated action review | [02 Conversation and context](diagrams/02-conversation-and-context.svg) |
+| Confirmed snapshot through MCP/shared HTTP to Cards API | [03 Confirmation to API](diagrams/03-confirmation-to-card-api.svg) |
+| Contract-aware retries and durable SQLite replay | [04 Idempotency](diagrams/04-idempotency-and-retries.svg) |
+| API store/telemetry startup configuration | [05 Infrastructure adapters](diagrams/05-startup-adapter-selection.svg) |
 
-On GitHub, open an SVG file and use its raw/download control to save it locally.
-For Markdown, use VS Code **Open Preview** (`Ctrl+Shift+V`). The SVGs are embedded
-below as well as linked, so reading this document does not require Mermaid support.
+## 1. Boundaries and processes
 
-## 1. Which component knows what?
-
-| Component | Responsibility | Implementation |
+| Component | Owns | Code |
 | --- | --- | --- |
-| Browser page | Display messages, keep conversation ID and latest review token, send text/button requests | [index.html](../src/card_chat/index.html) |
-| Chat workflow | Own state, validate fields, check completeness, enforce confirmation, manage retry key, execute MCP | [main.py](../src/card_chat/main.py) |
-| Single concrete agent | Interpret a turn through the model adapter; return `CustomerReply` or `ProposedToolCall` | [agent.py](../src/card_chat/agent.py) |
-| Anthropic adapter | Build hosted Messages API requests and parse text/tool-use blocks | [provider.py](../src/card_chat/provider.py) |
-| MCP gateway/client | Launch child, initialize, discover tool schema, dispatch tool calls | [gateway.py](../src/card_chat/gateway.py) |
-| MCP server | Register one tool and translate its execution into the existing REST client call | [mcp_server.py](../src/card_chat/mcp_server.py) |
-| REST client | Map `create_card` to HTTP POST `/cards` and `Idempotency-Key` header | [client.py](../src/api_client/client.py) |
-| Cards route and store | Validate HTTP contract, create simulated card, save/replay durable result | [cards.py](../src/card_servicing/cards.py), [persistence.py](../src/card_servicing/persistence.py) |
+| Browser | Message display, conversation ID, review token, generic confirmation button | [index.html](../src/card_chat/index.html) |
+| Chat workflow | History, collected details, proposal validation, review, confirmation and retry submission | [main.py](../src/card_chat/main.py) |
+| CardServicingAgent | One stateless model-driven turn; checks returned tool is allowed | [agent.py](../src/card_chat/agent.py) |
+| Anthropic adapter | Hosted Messages request and parsing of text/tool-use outcomes | [provider.py](../src/card_chat/provider.py) |
+| Catalogue compiler | Trusted operation definitions and policies derived from OpenAPI | [catalogue.py](../src/card_chat/catalogue.py), [tools.json](../src/card_chat/tools.json) |
+| MCP gateway | Child lifecycle, discovery, schema verification and execution metadata | [gateway.py](../src/card_chat/gateway.py) |
+| MCP server | List configured tools and execute them through one handler | [mcp_server.py](../src/card_chat/mcp_server.py) |
+| Shared HTTP client | Encoded path parameters, JSON request, configured destination and application headers | [client.py](../src/api_client/client.py) |
+| Cards API | Request validation, business boundary, durable create/replay | [cards.py](../src/card_servicing/cards.py), [persistence.py](../src/card_servicing/persistence.py) |
 
-There are separate processes for browser, chat backend, MCP child, and Cards API.
-Claude runs remotely. Chat is served on `127.0.0.1:8020`; the API is on host port
-8010, or 8011 when exposed by this repository's Docker configuration. MCP uses
-stdio pipes, not a separate HTTP port. Claude never connects directly to localhost.
+The browser, chat backend, MCP child and Cards API are separate processes. Claude
+is hosted remotely. Chat serves 8020. The Cards API uses 8010 locally, or Docker
+host port 8011. MCP communicates over stdin/stdout pipes, not another HTTP port.
+Only API telemetry may use structured stdout; MCP stdout is protocol-only.
 
-## 2. Startup: MCP construction and discovery
+## 2. Startup and discovery
 
-![Startup and discovery](diagrams/01-startup-and-discovery.svg)
+![Catalogue and discovery](diagrams/01-startup-and-discovery.svg)
 
-1. Uvicorn imports `card_chat.main:app`. FastAPI's `lifespan` creates the configured
-   model adapter and one `CardServicingAgent`.
-2. `gateway.connect()` constructs `StdioServerParameters` using the current Python
-   executable and `['-m', 'card_chat.mcp_server']`. `stdio_client` launches and
-   manages that child process.
-3. Inside the child, `mcp = FastMCP('Card servicing', ...)` creates the server.
-   `@mcp.tool()` registers the `create_card` function. The SDK derives its input
-   schema from that function's typed arguments.
-4. `mcp.run(transport='stdio')` runs the server's protocol loop. stdout is reserved
-   for protocol messages; logging goes to stderr.
-5. The backend opens `ClientSession`, calls `initialize()`, then `list_tools()`.
-   It verifies that exactly one tool, `create_card`, was returned.
-6. `Gateway.__init__` copies the discovered `inputSchema` and removes
-   `idempotency_key` from both `properties` and `required`. That projected schema
-   is the only tool schema later offered to Claude.
+FastAPI chat lifespan creates the adapter and agent, then enters `gateway.connect`.
+The gateway compiles the selected local catalogue, starts the current Python
+executable with `-m card_chat.mcp_server`, initializes `ClientSession`, and calls
+`list_tools()`.
 
-**Who discovers the tool? The local chat backend, not Anthropic.** The backend
-later includes that schema in an Anthropic request. Discovery does not write a
-card or require the REST API to be called. A failed MCP handshake prevents the
-chat app from completing startup.
+The child calls `create_server(settings())`. This constructs the official MCP SDK
+`Server`, compiles the same catalogue and registers one `list_tools` handler and
+one shared `call_tool` handler. `stdio_server` and `server.run` run the protocol.
+There is no decorated Python function per REST operation. Adding an entry expands
+what `list_tools` returns, not the Python routing logic.
 
-The discovered tool schema describes typed function arguments. It is not an
-automatic import of the entire REST OpenAPI specification. In particular, this
-tool signature does not expose every `CardCreate` length constraint. Python
-validation still enforces them at execution time.
+The catalogue refers to stable OpenAPI operation IDs. The compiler resolves local
+schema references and derives the HTTP method, path, JSON/body and path input
+properties, required values and success response schema. It separately retains
+confirmation/display/replay policies. Header parameters never become model inputs.
+The gateway compares the discovered tool names, descriptions and schemas with its
+local compiled catalogue, failing startup if they differ.
 
-## 3. Opening the page and creating context
+**The backend discovers the tools; Claude does not discover the API itself.**
+Claude receives the discovered definitions in the subsequent Messages request.
+The OpenAPI `servers` address is not used for execution: `CARD_API_BASE_URL` is.
 
-The browser loads `/`, which returns `index.html`. JavaScript's `start()` calls
-`POST /conversations`. The workflow generates `cid`, creates a `Conversation`,
-stores it in its local `conversations` dictionary, and returns:
-
-```json
-{
-  "id": "synthetic-conversation-id",
-  "message": "Hi! What would you like help with?",
-  "review": null
-}
-```
-
-The greeting is application text; no Claude call is needed. The browser keeps
-`cid` in a JavaScript variable. Every subsequent answer uses the same URL ID.
-
-| State | Location | Survives chat restart? |
-| --- | --- | --- |
-| Visible messages, `cid`, review token | Browser memory/DOM | No; refresh starts a new conversation |
-| `history`, validated `draft`, review token, submission, lock | Chat Python `Conversation` object | No |
-| Agent/model adapter instance | Chat application state | Recreated on restart |
-| Committed cards and idempotency outcomes | SQLite, normally `data/cards.db` | Yes |
-| API diagnostic events and request timing | Selected sink: MongoDB `card_servicing`, stdout, or none | Independent of chat context |
-
-A browser refresh does not recover the prior conversation even if its server-side
-object still exists. MongoDB is not the chat history store. The agent itself is
-stateless across turns; the workflow supplies the current context each time.
-
-## 4. One message: how natural language becomes fields
+## 3. Browser message and context
 
 ![Conversation and context](diagrams/02-conversation-and-context.svg)
 
-Suppose the user enters:
+Loading `/` returns the plain page. JavaScript calls `POST /conversations`, which
+creates `conversations[cid] = Conversation()` and returns the fixed greeting:
+"Hi! What would you like help with?" No model call is needed for that greeting.
+
+The browser stores `cid` and sends each answer to
+`POST /conversations/{cid}/messages` with `{"text":"..."}`. `main.message` gets the
+same `Conversation`, acquires its lock, appends the user text, and invalidates the
+previous review before interpreting the turn. It passes history, collected details
+and all discovered tool definitions to the agent. Copies protect workflow state
+from accidental mutation by the adapter.
+
+| State | Stored where | Recovery |
+| --- | --- | --- |
+| Visible messages, cid and review token | Browser JavaScript/DOM | Refresh starts a new conversation |
+| History, draft/collected proposal details, proposal, review, submission and lock | Chat process memory | Lost on chat restart |
+| Agent and adapter | Chat application state | Recreated on startup |
+| Cards and committed idempotency snapshots | SQLite | Durable across API restart |
+| Diagnostic events | Selected Mongo/stdout/none sink | Not conversation context |
+
+A clarifying text turn preserves supplied information in history. If Claude emits
+an incomplete call, validated partial arguments are also retained in `c.draft` as
+`{"tool":"...","arguments":{...}}`. A complete proposal replaces that with its
+validated full snapshot. There is no separate fixed-field extraction pass.
+
+## 4. What Claude receives and returns
+
+`AnthropicModel.turn` sends one hosted Messages request per customer turn. A system
+instruction defines general behavior: choose only supplied tools, ask for missing
+or ambiguous values, never invent values, preserve string identifiers, handle one
+action at a time and never claim an unexecuted action succeeded.
+
+The user-message content serializes the accumulated `conversation` (including
+this latest answer) and `collected_details`. The request's `tools` contains every
+eligible discovered name, description and public input schema. Tool choice is
+`auto`, with parallel tool use disabled. There is no forced create-card tool.
+
+For example, create_card's schema comes from the CardCreate OpenAPI request body:
+required `given_name`, `user_name`, `account_number`, string constraints, titles,
+descriptions and examples. The account description explicitly preserves leading
+zeros. Another catalogue entry would supply its own schema and use description.
+
+The outcomes are:
+
+| Model output | Application interpretation |
+| --- | --- |
+| Text asking for a missing value | `CustomerReply`; display the clarifying question |
+| Text explaining an unsupported request or asking which action | `CustomerReply`; no review or execution |
+| One `tool_use` name/arguments block | `ProposedToolCall`; validate before review |
+| Multiple tool blocks | Ask the customer to choose one action |
+| Invalid/truncated response | Retry feedback; no review or execution |
+
+The agent checks the name against allowed tools. It has no intent-to-operation
+mapping, fixed field list, `QUESTIONS` mapping, MCP client or execution authority.
+Questions can vary in wording; schema validation and explicit review are the
+organization-controlled enforcement boundaries.
+
+## 5. Proposal validation and generic review
+
+Suppose the customer supplies:
 
 ```text
-I want a new card. My given name is Alex and my user name is alex.synthetic.
+Create a new card for my existing account. My given name is Alex,
+my user name is alex.synthetic, and my account number is 0012345678.
 ```
 
-The browser's submit handler posts:
-
-```http
-POST /conversations/synthetic-conversation-id/messages
-Content-Type: application/json
-
-{"text":"I want a new card. My given name is Alex and my user name is alex.synthetic."}
-```
-
-`main.message()` retrieves `c = get(cid)` and acquires `c.lock`, serializing work
-for that conversation. It appends the raw text to `c.history`, then calls:
-
-```python
-turn = await app.state.agent.interpret_turn(
-    c.history, c.draft, allowed_tools={}
-)
-```
-
-The empty tool mapping means this turn can only collect information. The agent
-passes copies of history and draft to `AnthropicModel.extract()`.
-
-The adapter's system prompt explicitly tells Claude:
-
-* Classify intent as `create`, `servicing`, `unsupported`, or `other`.
-* Extract only supplied updates for `given_name`, `user_name`, `account_number`.
-* Return JSON with string values; preserve leading zeros and never invent values.
-* Treat freeze/replacement as unsupported; use history to interpret contextual replies.
-
-The actual Messages request contains this system instruction and one user message
-whose text is a JSON serialization of `{"conversation": history, "draft": draft}`.
-The stored history is not currently sent as separate Anthropic role messages.
-
-Claude uses its language understanding to map different phrasings onto that
-requested structure. A representative response is:
-
-```json
-{
-  "intent": "create",
-  "fields": {
-    "given_name": "Alex",
-    "user_name": "alex.synthetic"
-  }
-}
-```
-
-`Extraction.model_validate_json()` checks the intent enum and string-valued field
-mapping. Malformed model responses produce a retry message. This is interpretation,
-not a business write; the model has not been offered an execution tool.
-
-## 5. How the next question is chosen
-
-The application does not ask Claude to invent the next customer-facing question.
-`agent.py` defines this ordered mapping:
-
-```python
-QUESTIONS = {
-    'given_name': 'What is your given name?',
-    'user_name': 'What is your user name?',
-    'account_number': 'What is your existing account number? Please include any leading zeros.',
-}
-```
-
-The agent combines its draft snapshot with the extracted fields and selects the
-first missing key. Given the example above, `account_number` is missing, so it
-returns a `CustomerReply` containing the predefined account question and the two
-supplied field updates. It also indicates whether all question keys are present
-with `requests_review`; that flag is advisory, not authorization to execute.
-
-Generic `servicing` intent yields the fixed question about creating a new card for
-an existing account. `unsupported` intent yields the fixed supported-action reply.
-A payment-topic phrase does not automatically select an arbitrary payments API:
-this increment has one supported operation and a small intent vocabulary.
-
-The workflow merges candidate fields into the existing draft and validates with
-`CardCreate`. Names have length 1-100; account strings length 1-64. Values are
-trimmed, control characters rejected, and extra fields forbidden. Account numbers
-are never converted to integers. Invalid candidates are not saved.
-
-For partial updates, the workflow supplies temporary `'pending'` values for absent
-fields so it can run the existing complete-request model. It then saves **only
-the keys actually present in the candidate**. These placeholders never become
-collected data or REST parameters.
-
-After saving, it independently checks:
-
-```python
-set(c.draft) == set(CardCreate.model_fields)
-```
-
-If incomplete, it returns the selected question. `reply()` appends that assistant
-text to history. On the next user turn, the previous question, previous answer and
-validated draft are all sent back as context. That is how an answer such as
-`0012345678` can be interpreted as the requested account rather than an isolated
-number.
-
-### A sample draft across turns
-
-| User turn | Saved draft after successful extraction/validation | Next application response |
-| --- | --- | --- |
-| "I want a new card" | `{}` | Given-name question |
-| "My given name is Alex" | `{"given_name":"Alex"}` | User-name question |
-| "alex.synthetic" | Previous fields plus `user_name` | Account-number question |
-| "0012345678" | All three fields, account still a string | Masked review and button |
-
-Several fields in one answer skip questions whose keys are already present.
-Claude extraction can still make mistakes; validation checks structure and
-constraints, while the user's review checks whether the intended values were
-understood correctly.
-
-## 6. Review and explicit confirmation
-
-`review()` fully validates the draft, masks the account as `******5678` for this
-example, and creates a fresh review token. The browser shows **Create card** when
-the response has that token. A valid edit before submission invalidates the old
-review and produces a new one; a stale token is rejected with HTTP 409.
-
-Typing "yes" is still a `/messages` request. Only the explicit button uses
-`POST /conversations/{cid}/confirm` with `{"review": "..."}`.
-
-Under the conversation lock, the first valid confirmation freezes:
-
-```python
-c.submission = {
-    'key': uuid4().hex,
-    'body': CardCreate.model_validate(c.draft).model_dump(),
-    'result': None,
-}
-```
-
-The body comes from saved server-side values, not fields submitted by the button.
-After submission, the conversation is fixed for safe retry; start a new
-conversation for a different request.
-
-## 7. How Claude learns about create_card
-
-![Confirmation through MCP to REST](diagrams/03-confirmation-to-card-api.svg)
-
-The workflow calls the same agent with the confirmed body and:
-
-```python
-allowed_tools = {'create_card': app.state.gateway.schema}
-```
-
-The agent takes its proposal branch and calls `AnthropicModel.propose()`.
-The adapter sends:
-
-* The confirmed body, with an instruction that the customer clicked Create card.
-* One tool definition: `name`, an application-configured description, and the
-  MCP-discovered/projected `input_schema`.
-* `tool_choice` forcing that one named tool, with parallel tool use disabled.
-
-The model-facing schema requires the three string fields; it does not contain
-the idempotency key. Claude returns a `tool_use` content block, conceptually:
+A representative model block is:
 
 ```json
 {
   "type": "tool_use",
-  "id": "synthetic-tool-use-id",
   "name": "create_card",
   "input": {
     "given_name": "Alex",
@@ -278,31 +149,50 @@ the idempotency key. Claude returns a `tool_use` content block, conceptually:
 }
 ```
 
-**There is no autonomous API discovery by Claude.** `docs/cards.openapi.json` is
-not loaded by this chat path. The REST path, HTTP method and header mapping are
-implemented by `ApiClient.create_card()`. The adapter instructs a tool proposal
-for an already confirmed operation; Claude does not decide whether a write is
-authorized. During collection, it knows the field names from the extraction
-prompt, not from tool discovery or OpenAPI.
+The workflow looks up the discovered compiled tool and validates with its JSON
+schema. Strings are trimmed, controls rejected, extra properties forbidden, and
+identifiers remain strings. It does not coerce numeric account IDs into strings.
+API validation still runs later; custom business validators are not replaced by
+JSON schema validation.
 
-## 8. Workflow approval, MCP execution and Cards API
+Missing required properties cannot create an executable review. The workflow can
+retain valid partial values and ask for the next missing value using metadata.
+Invalid values or unknown tools produce feedback without a write. A complete
+proposal becomes a server-owned `ProposedToolCall` and a fresh review token.
 
-The adapter requires exactly one tool call. The agent returns `ProposedToolCall`.
-The workflow then requires its name to equal `create_card`, validates the proposed
-arguments through `CardCreate`, and compares their normalized values to the
-frozen submission body. A mismatch never reaches MCP.
+`ToolSpec.masked` formats labels from the catalogue/schema and masks sensitive or
+account-named values (for the example: `******5678`). The server sends the action
+label and confirmation label. The browser uses generic `textContent` rendering
+and the supplied button label; it contains no create-versus-block branch.
 
-Even for a matching proposal, execution uses:
+A new message invalidates the review even if it leads to a normal reply or error.
+An accepted correction produces a new token. Old confirmations return 409.
+Only GET entries explicitly configured with `confirmation:none` execute without
+review; all writes require an explicit button click.
+
+## 6. Confirmation executes the snapshot, not another model decision
+
+![Confirmation and execution](diagrams/03-confirmation-to-card-api.svg)
+
+The button sends `POST /conversations/{cid}/confirm` with only its review token.
+Under the same lock, the workflow checks that the token and stored proposal exist.
+The first click creates a submission containing the reviewed tool, validated
+arguments, optional generated replay key, attempted flag and result cache.
+
+No Claude call occurs at confirmation or retry. The workflow executes:
 
 ```python
-await app.state.gateway.create(submission['body'], submission['key'])
+await app.state.gateway.execute(
+    submission['tool'], submission['arguments'], submission['key']
+)
 ```
 
-The gateway injects the private key into the MCP arguments and calls
-`ClientSession.call_tool('create_card', ...)` over stdio. MCP dispatches to the
-registered Python function, which validates again and calls the existing client.
+The key is outside the model schema and public arguments. `Gateway.execute` sends
+it in MCP request metadata (`_meta.idempotency_key`) while the arguments contain
+customer values only. The server looks up the compiled operation by name, validates
+arguments, splits path/body values and injects the declared execution header.
 
-The client performs this HTTP request against `CARD_API_BASE_URL`:
+For create_card, `ApiClient.execute_operation` sends the unchanged request:
 
 ```http
 POST /cards
@@ -312,132 +202,74 @@ Content-Type: application/json
 {"given_name":"Alex","user_name":"alex.synthetic","account_number":"0012345678"}
 ```
 
-FastAPI validates the request model and required idempotency header before route
-execution. `cards.create_card()` delegates to `store.create_idempotent()`.
-The normal API entry point selects `SQLiteCardStore` through validated startup
-settings. HTTP code consumes `CardStorePort` and maps provider-neutral
-`StorageUnavailable` to 503. See [adapter switching](infrastructure-adapters.md). Isolated test factories can
-use the in-memory store. The supplied account is assumed to exist: there is no
-account service lookup, card network integration or physical fulfilment.
+Other supported operations use this same handler. A path value is URL-encoded,
+so it cannot replace the configured host/path template. Gateway base path prefixes
+are preserved. There is no per-tool Python HTTP mapping or UI routing branch.
+The existing `ApiClient.create_card` method is retained for existing callers.
 
-## 9. Idempotency: two layers protect the operation
+## 7. Cards API, durable idempotency and retries
 
-![Idempotency and retries](diagrams/04-idempotency-and-retries.svg)
+![Idempotency](diagrams/04-idempotency-and-retries.svg)
 
-### Chat layer: one confirmed submission
+FastAPI validates CardCreate and the Idempotency-Key header. The route calls
+`CardStorePort.create_idempotent`. The normal app selects SQLite through startup
+settings; expected storage errors are translated to `StorageUnavailable` and
+mapped to sanitized 503. Idempotency conflicts remain 409. Account existence is
+assumed; there is no account lookup or payment-network integration.
 
-The lock serializes duplicate clicks. The workflow generates a key once and
-retains body/key after errors. A completed duplicate click uses `submission.result`
-and makes no additional model, MCP or REST call. A failed attempt can ask the
-model to propose again, but execution must still match the same frozen body/key.
-Retries are explicit customer clicks, not an automatic loop.
+SQLite's unchanged replay algorithm is:
 
-### API layer: durable replay in SQLite
+1. Normalize the model; serialize sorted compact JSON and compute SHA-256.
+2. Begin `BEGIN IMMEDIATE` before looking up the submission key.
+3. New key: generate the UUID and SIM identifier; atomically insert the card and
+   original response snapshot in `card_idempotency`; commit and return 201.
+4. Existing key, matching fingerprint: return the saved original card with 201
+   and `Idempotency-Replayed:true`, without another insert.
+5. Existing key, changed body: return 409 without creating another card.
 
-1. `CardCreate` produces normalized validated values.
-2. `fingerprint()` serializes fields as sorted, compact JSON and hashes it with
-   SHA-256. This fingerprint detects a changed request body; it is not encryption.
-3. `SQLiteCardStore.create_idempotent()` begins `BEGIN IMMEDIATE` before looking
-   up the key, serializing SQLite writers across threads/processes.
-4. If the key is new, generate the card UUID and `SIM-...` identifier. Insert a
-   `cards` row and a `card_idempotency` row with the key, fingerprint, card ID,
-   response status and original response JSON in the same transaction.
-5. Commit both rows atomically. A failure rolls back; a successful request returns
-   HTTP 201 and `Idempotency-Replayed: false`.
-6. For an existing key and matching fingerprint, reconstruct the original card
-   from saved JSON and return 201 with `Idempotency-Replayed: true`; no insert.
-7. For an existing key and different fingerprint, raise `IdempotencyConflict`;
-   the route returns 409. Storage failures return a sanitized 503.
+Chat serializes duplicate clicks and retains its frozen submission after an
+uncertain result. For create_card, retries use the same arguments and key. A
+completed duplicate returns the cached success without model/MCP/HTTP work.
 
-| Situation | Outcome |
-| --- | --- |
-| Double click after success | Chat returns its saved result |
-| API committed but response timed out | Retry same body/key; API returns the original card |
-| Concurrent HTTP requests with same key/body | SQLite transaction serialization permits one create, then replay |
-| Same key, changed body | 409 conflict, no second card |
-| Same body, new key | A separate operation; may create a second card |
-| API restarts, chat remains running | Durable API replay still works |
-| Chat restarts after uncertain submission | Chat loses key/context; automatic recovery is not implemented |
+For other writes, the catalogue must declare an actual safe-replay contract before
+retries are allowed. A non-idempotent write gets at most one attempt; lost results
+or failures disable its button and repeated confirmations cannot execute again.
+New conversation/new key is a new operation, not a way to safely recover an
+uncertain write. Chat restart loses its submission key; recovery is not implemented.
 
-Do not start a new conversation to retry an uncertain creation: that would generate
-a new key. API persistence protects only requests carrying the original key.
+## 8. The real result comes back
 
-## 10. How success gets back to the chat window
+The shared handler checks the actual success status and validates response JSON
+against the compiled OpenAPI schema. It returns structured `{ok,result}` on success
+or a sanitized error. It never reports success merely because Claude proposed a
+call. Tool logs contain only name, duration and outcome on stderr.
 
-The API returns the `Card` object only after successful creation or replay.
-`ApiClient` raises for unsuccessful HTTP statuses. The MCP tool validates the API
-response as `Card` and returns only `ok`, `id`, and `card_number`. HTTP errors,
-timeouts and validation failures produce sanitized errors instead of success.
+The workflow formats catalogue-selected scalar result properties. Create-card
+shows the real `SIM-...` identifier and UUID. It caches that text for duplicate
+confirmation. There is no extra Claude call to generate a success summary. The
+browser renders the server reply safely as text.
 
-The gateway returns MCP structured content. The workflow checks for a successful
-result with identifiers, saves it in the submission, and formats the final reply.
-JavaScript appends it using `textContent`. The final result is not sent back to
-Claude for another narrative response in this implementation. API diagnostics
-go to the configured sink: MongoDB asynchronously (default), structured stdout,
-or none. Tool timing/outcome goes to stderr. Neither is the
-authoritative card store or conversation memory.
+## 9. Trace and maintain
 
-## 11. Breakpoint trail
+For exact startup and breakpoint steps, use [the catalogue guide](tool-catalogue.md).
+Trace in order: `main.message` -> `agent.interpret_turn` -> `provider.turn` ->
+`spec.validate` -> review token -> `main.confirm/execute` -> `gateway.execute` ->
+`mcp_server.execute` -> `ApiClient.execute_operation` -> `cards.create_card` ->
+`SQLiteCardStore.create_idempotent`.
 
-Start **Debug Chat + API** from `.vscode/launch.json`; use one chat process. Both
-debuggers must finish startup before opening the page. `Debug Chat` currently
-sets `subProcess: false`, so MCP auto-attachment is disabled. The gateway and API
-breakpoints let you see both sides of that boundary. F5 continues across process
-boundaries; F11 does not carry the Python stack across an HTTP request.
+`Debug Chat + API` starts both debuggers. MCP auto-attachment remains disabled;
+inspect its gateway arguments/results or attach separately. A pause longer than
+the HTTP timeout can cause an uncertain result; retry only when supported.
 
-| Order | Code location / executable statement | Inspect |
-| --- | --- | --- |
-| Startup | `gateway.connect`: `session.list_tools()` | Tool name, input schema |
-| 1 | `main.message`: `c = get(cid)` | `cid`, `body.text` |
-| 2 | `main.message`: append user message / `interpret_turn(...)` | `c.history`, `c.draft` |
-| 3 | `agent.interpret_turn`: `self.model.extract(...)` | `allowed_tools == {}`, copies of context |
-| 4 | `provider.extract`: `self.client.messages.create(...)` | System instruction and serialized context |
-| 5 | `provider.extract`: `Extraction.model_validate_json(...)` | `response.content`, `usage`, `stop_reason` |
-| 6 | `agent.interpret_turn`: `question = next(...)` | `extraction`, candidate and next missing field |
-| 7 | `main.message`: draft assignment, then next statement | `validated`, updated `c.draft` |
-| 8 | `main.review`: full validation and token generation | Complete fields, new review token |
-| 9 | `main.confirm`: submission creation | Frozen body, generated key |
-| 10 | `provider.propose`: `return calls[0].name, calls[0].input` | Claude's proposed tool call |
-| 11 | `main.confirm`: `gateway.create(...)` | Checked proposal, server-owned submission |
-| 12 | `gateway.create`: `session.call_tool(...)` | Injected MCP execution arguments and returned content |
-| 13 | `cards.create_card`: `store.create_idempotent(...)` | Validated instruction and header key |
-| 14 | `persistence.create_idempotent`: lookup and insert/replay | Fingerprint, stored response, transaction |
-| 15 | `main.confirm`: `submission['result'] = result` | Actual API/MCP success result |
+Update [diagram source](diagrams/card-chat-flows.json) with code changes, then run:
 
-Watch sensitive values locally only; do not add chat text, credentials or account
-identifiers to logs. Long pauses in REST can exceed the client's ten-second
-timeout. Resume the API and retry with the same chat submission if necessary.
+```powershell
+python scripts/export_cards_openapi.py --check
+python scripts/render_chat_diagrams.py
+python scripts/render_chat_diagrams.py --check
+python -m pytest
+```
 
-## 12. Keeping architecture diagrams synchronized
-
-The editable architecture source is
-[`diagrams/card-chat-flows.json`](diagrams/card-chat-flows.json). The renderer is
-[`scripts/render_chat_diagrams.py`](../scripts/render_chat_diagrams.py), using only
-the Python standard library. The source defines participants and ordered messages (calls, replies, notes and
-conditional sections). Detailed steps retain explanatory text and source-code anchors. The renderer resolves current line numbers and emits SVGs.
-
-When architecture changes:
-
-1. Change the implementation and its meaningful tests.
-2. Update this walkthrough and the affected JSON diagram steps in the same PR.
-3. Regenerate and verify:
-
-   ```powershell
-   python scripts/render_chat_diagrams.py
-   python scripts/render_chat_diagrams.py --check
-   ```
-
-4. Open the offline viewer and inspect readability and flow.
-5. Commit the JSON source, generated SVGs and Markdown together.
-
-CI runs `--check` to reject stale output and references to missing code anchors.
-It cannot prove that a paragraph accurately describes changed business behavior;
-that remains part of code/documentation review. Source-line movements can require
-regeneration even if the architecture has not changed. See the generator's output
-for the files to update.
-
-This increment intentionally keeps questions and field expectations controlled by
-the application. Changes to required API input can require coordinated changes
-to `CardCreate`, `QUESTIONS`, the extraction prompt and the MCP/client signature.
-The documentation does not describe automatic schema-driven question generation
-or autonomous discovery of new API capabilities.
+CI checks the contract export, generated SVG freshness and code anchors. It does
+not automatically update Markdown or judge architectural prose. Commit the
+catalogue, contract, code, tests, diagram definitions and generated SVGs together.
