@@ -5,6 +5,7 @@ import socket
 import subprocess
 import sys
 import time
+import os
 
 import httpx
 import pytest
@@ -36,14 +37,16 @@ class StubModel:
 
 
 @contextmanager
-def running_api():
+def running_api(*, runtime_env=None, stdout=None):
     with socket.socket() as sock:
         sock.bind(('127.0.0.1', 0))
         port = sock.getsockname()[1]
-    # Factory mode uses isolated in-memory storage, with real HTTP in a separate process.
-    process = subprocess.Popen([sys.executable, '-m', 'uvicorn', 'card_servicing.main:create_app',
-                                '--factory', '--port', str(port)],
-                               stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    # Optional runtime mode exercises the actual entry point with isolated SQLite.
+    target = ['card_servicing.main:app'] if runtime_env is not None else ['card_servicing.main:create_app', '--factory']
+    process = subprocess.Popen([sys.executable, '-m', 'uvicorn', *target, '--port', str(port)],
+                               env={**os.environ, **(runtime_env or {})},
+                               stdout=stdout if stdout is not None else subprocess.DEVNULL,
+                               stderr=subprocess.DEVNULL)
     url = f'http://127.0.0.1:{port}'
     try:
         for _ in range(100):
@@ -76,7 +79,8 @@ def test_mcp_discovery_and_real_rest_replay(monkeypatch):
         asyncio.run(scenario())
 
 
-def test_full_chat_real_mcp_retry_after_commit(monkeypatch):
+@pytest.mark.parametrize('runtime_sink', [None, 'stdout', 'none'])
+def test_full_chat_real_mcp_retry_after_commit(monkeypatch, tmp_path, runtime_sink):
     from card_chat.gateway import Gateway as RealGateway
 
     original = RealGateway.create
@@ -91,7 +95,12 @@ def test_full_chat_real_mcp_retry_after_commit(monkeypatch):
         return result
 
     monkeypatch.setattr(RealGateway, 'create', lose_first_response)
-    with running_api() as url:
+    runtime = None if runtime_sink is None else {
+        'TELEMETRY_SINK': runtime_sink, 'CARD_STORE': 'sqlite',
+        'SQLITE_PATH': str(tmp_path / 'cards.db'),
+        'MONGO_USER': '', 'MONGO_PASSWORD': '', 'MONGODB_PORT': 'invalid',
+    }
+    with running_api(runtime_env=runtime) as url:
         monkeypatch.setenv('CARD_API_BASE_URL', url)
         model = StubModel()
         model.outputs = [{'intent': 'create', 'fields': BODY}]
@@ -107,6 +116,12 @@ def test_full_chat_real_mcp_retry_after_commit(monkeypatch):
             assert len(calls) == 2
             assert calls[0] == calls[1]
             assert results[0] == results[1] and results[0]['ok'] is True
+    if runtime is not None:
+        import sqlite3
+        from contextlib import closing
+        with closing(sqlite3.connect(runtime['SQLITE_PATH'])) as database:
+            assert database.execute('SELECT count(*) FROM cards').fetchone()[0] == 1
+            assert database.execute('SELECT count(*) FROM card_idempotency').fetchone()[0] == 1
 
 
 class Gateway:

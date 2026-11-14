@@ -1,10 +1,23 @@
 """Authoritative SQLite cards and atomic, durable retry outcomes."""
 import sqlite3
 from contextlib import closing
+from functools import wraps
 from pathlib import Path
 from uuid import uuid4
 from card_servicing.idempotency import IdempotencyConflict, fingerprint
 from card_servicing.models import Card, CardCreate
+from card_servicing.ports import StorageUnavailable
+
+
+def storage_operation(operation):
+    """Translate expected provider failures at the adapter boundary only."""
+    @wraps(operation)
+    def wrapped(*args, **kwargs):
+        try:
+            return operation(*args, **kwargs)
+        except (sqlite3.Error, OSError, ValueError):
+            raise StorageUnavailable('Card storage unavailable') from None
+    return wrapped
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS card_statuses (code TEXT PRIMARY KEY, description TEXT NOT NULL);
@@ -29,6 +42,8 @@ CREATE TABLE IF NOT EXISTS card_idempotency (
 """
 
 class SQLiteCardStore:
+    dependency_name = 'sqlite'
+
     def __init__(self, path: str):
         self.path = Path(path)
         self.ready = False
@@ -42,6 +57,7 @@ class SQLiteCardStore:
             raise
         return db
 
+    @storage_operation
     def initialize(self):
         self.path.parent.mkdir(parents=True, exist_ok=True)
         with closing(self.connect()) as db, db:
@@ -53,6 +69,7 @@ class SQLiteCardStore:
             db.execute('PRAGMA user_version = 1')
         self.ready = True
 
+    @storage_operation
     def check_readiness(self):
         if not self.ready:
             return False
@@ -66,6 +83,7 @@ class SQLiteCardStore:
     def create(self, instruction: CardCreate) -> Card:
         return self.create_idempotent(instruction, str(uuid4()))[0]
 
+    @storage_operation
     def create_idempotent(self, instruction: CardCreate, key: str) -> tuple[Card, bool]:
         if not self.ready:
             self.initialize()

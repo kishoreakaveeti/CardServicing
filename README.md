@@ -4,6 +4,11 @@ API-first card origination learning project built with Python/FastAPI, HTTPX,
 SQLite, MongoDB, Redis, RabbitMQ, Docker and VS Code debugging.
 Local configuration includes project-specific data, credentials, volumes and ports.
 
+Startup configuration selects `CARD_STORE=sqlite` and
+`TELEMETRY_SINK=mongo|stdout|none` (default `mongo`). See
+[infrastructure adapters](docs/infrastructure-adapters.md) to run the same build
+with Mongo, then stdout with Mongo stopped, and to verify safe retries.
+
 ## Setup and run
 
 ```powershell

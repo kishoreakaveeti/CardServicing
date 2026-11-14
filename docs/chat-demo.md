@@ -73,7 +73,10 @@ MCP startup is needed. Use a single chat worker without reload for this demo.
 ## Live Anthropic smoke steps
 
 A live hosted-model smoke test was not run during implementation; no cloud
-credential was supplied for this task. After the commands above:
+credential was supplied for the initial chat implementation. During the later
+[adapter refactor](infrastructure-adapters.md), live Anthropic -> MCP -> HTTP
+smoke flows passed for Mongo and stdout, including a lost-response retry. To
+perform the visual browser smoke after the commands above:
 
 1. Confirm the exact greeting: “Hi! What would you like help with?”
 2. Enter “Freeze my card”. Expect an explanation that creation is supported.

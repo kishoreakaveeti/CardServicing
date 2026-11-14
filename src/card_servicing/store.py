@@ -37,6 +37,11 @@ class ItemStore:
 class CardStore:
     """Isolated memory adapter for simulated card origination."""
 
+    dependency_name = 'card_store'
+
+    def initialize(self) -> None:
+        pass
+
     def __init__(self) -> None:
         self._cards: dict[UUID, Card] = {}
         self._idempotency: dict[str, tuple[str, Card]] = {}

@@ -1,52 +1,60 @@
 from typing import Annotated
 from contextlib import asynccontextmanager
-from pathlib import Path
-import os
-import sqlite3
 from time import perf_counter
 from uuid import uuid4
-
-from dotenv import dotenv_values
 
 from fastapi import Depends, FastAPI, HTTPException, Request, Response, status
 from fastapi.responses import JSONResponse
 
 from card_servicing.models import Item, ItemCreate
 from card_servicing.store import ItemStore
-from card_servicing.config import CardSettings
+from card_servicing.config import CardSettings, InfrastructureSettings, load_config
 from card_servicing.cards import router as cards_router
 from card_servicing.store import CardStore
 from card_servicing.persistence import SQLiteCardStore
-from card_servicing.telemetry import MongoTelemetry, NullTelemetry
+from card_servicing.telemetry import MongoTelemetry, NullTelemetry, StdoutTelemetry
+from card_servicing.ports import CardStorePort, StorageUnavailable, TelemetryPort
 
 
 def get_item_store(request: Request) -> ItemStore:
     return request.app.state.item_store
 
 
+def configured_adapters(card_store, telemetry):
+    settings = InfrastructureSettings.from_mapping(load_config(),
+                select_store=card_store is None, select_telemetry=telemetry is None)
+    if card_store is None:
+        card_store = SQLiteCardStore(str(settings.sqlite_path))
+    if telemetry is None:
+        sinks = {'mongo': MongoTelemetry, 'stdout': StdoutTelemetry}
+        telemetry = (NullTelemetry() if settings.telemetry_sink == 'none'
+                     else sinks[settings.telemetry_sink](settings.telemetry_config))
+    return card_store, telemetry
+
+
 def create_app(card_settings: CardSettings | None = None, *,
-               card_store=None, telemetry=None, local_infrastructure: bool = False) -> FastAPI:
-    if local_infrastructure:
-        root = Path(__file__).resolve().parents[2]
-        config = {**dotenv_values(root / '.env'), **os.environ}
-        path = Path(config.get('SQLITE_PATH', 'data/cards.db'))
-        if not path.is_absolute():
-            path = root / path
-        card_store = SQLiteCardStore(str(path))
-        telemetry = MongoTelemetry(config)
-    card_store = card_store if card_store is not None else CardStore()
-    telemetry = telemetry if telemetry is not None else NullTelemetry()
+               card_store: CardStorePort | None = None, telemetry: TelemetryPort | None = None,
+               local_infrastructure: bool = False) -> FastAPI:
+    injected_adapters = card_store, telemetry
+    if not local_infrastructure:
+        card_store = card_store if card_store is not None else CardStore()
+        telemetry = telemetry if telemetry is not None else NullTelemetry()
 
     @asynccontextmanager
     async def lifespan(application):
+        nonlocal card_store, telemetry
+        if local_infrastructure:
+            card_store, telemetry = configured_adapters(*injected_adapters)
+        application.state.card_store = card_store
+        application.state.telemetry = telemetry
         telemetry.start()
         try:
-            if isinstance(card_store, SQLiteCardStore):
-                try:
-                    card_store.initialize()
-                except Exception as exc:
-                    telemetry.emit('log', 'sqlite_initialization_failed',
-                                   level='ERROR', error_type=type(exc).__name__)
+            try:
+                card_store.initialize()
+            except StorageUnavailable as exc:
+                telemetry.emit('log', 'card_storage_initialization_failed',
+                               level='ERROR', dependency=card_store.dependency_name,
+                               error_type=type(exc).__name__)
             application.state.started = True
             yield
         finally:
@@ -89,12 +97,12 @@ def create_app(card_settings: CardSettings | None = None, *,
     @application.get('/health/ready', summary='Readiness to accept card requests',
                      responses={503: {'description': 'Application or card storage not ready'}})
     def readiness(request: Request) -> JSONResponse:
-        dependency = 'sqlite' if isinstance(card_store, SQLiteCardStore) else 'card_store'
+        dependency = getattr(card_store, 'dependency_name', 'card_store')
         available = False
         if application.state.started:
             try:
                 available = card_store.check_readiness()
-            except (sqlite3.Error, OSError, ValueError) as exc:
+            except StorageUnavailable as exc:
                 # Report only exception type; filesystem paths and SQL details
                 # belong neither in probe responses nor in diagnostic payloads.
                 telemetry.emit('log', 'card_readiness_failed', level='WARNING',

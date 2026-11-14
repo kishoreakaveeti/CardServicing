@@ -1,5 +1,11 @@
 # Local infrastructure
 
+The API now selects its telemetry sink at startup. The existing Mongo setup is
+the default. For stdout/none with Mongo stopped, use the
+[adapter-switching guide](infrastructure-adapters.md) and `compose.api.yaml`
+(`scripts/start-docker-api.ps1 -Standalone`). Redis and RabbitMQ remain outside
+the creation path.
+
 Verified on 14 November 2026: all three infrastructure containers healthy;
 SQLite temporary SQL round trip, authenticated MongoDB write/read/delete,
 Redis expiry round trip, and RabbitMQ confirmed publish/consume/ack passed.

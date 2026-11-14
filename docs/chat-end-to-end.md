@@ -18,6 +18,7 @@ zoom. These are SVG sequence diagrams with participant lifelines, solid call arr
 | Every message: natural language, state and next question | [02 Conversation and context](diagrams/02-conversation-and-context.svg) |
 | Confirmation: Claude proposal through MCP to REST | [03 Confirmation to Cards API](diagrams/03-confirmation-to-card-api.svg) |
 | Duplicate clicks, response loss and durable replay | [04 Idempotency and retries](diagrams/04-idempotency-and-retries.svg) |
+| Startup-selected store and telemetry contracts | [05 API adapters](diagrams/05-startup-adapter-selection.svg) |
 
 On GitHub, open an SVG file and use its raw/download control to save it locally.
 For Markdown, use VS Code **Open Preview** (`Ctrl+Shift+V`). The SVGs are embedded
@@ -94,7 +95,7 @@ The greeting is application text; no Claude call is needed. The browser keeps
 | `history`, validated `draft`, review token, submission, lock | Chat Python `Conversation` object | No |
 | Agent/model adapter instance | Chat application state | Recreated on restart |
 | Committed cards and idempotency outcomes | SQLite, normally `data/cards.db` | Yes |
-| API diagnostic events and request timing | MongoDB `card_servicing` | Independent of chat context |
+| API diagnostic events and request timing | Selected sink: MongoDB `card_servicing`, stdout, or none | Independent of chat context |
 
 A browser refresh does not recover the prior conversation even if its server-side
 object still exists. MongoDB is not the chat history store. The agent itself is
@@ -313,7 +314,9 @@ Content-Type: application/json
 
 FastAPI validates the request model and required idempotency header before route
 execution. `cards.create_card()` delegates to `store.create_idempotent()`.
-The normal API entry point uses `SQLiteCardStore`. Isolated test factories can
+The normal API entry point selects `SQLiteCardStore` through validated startup
+settings. HTTP code consumes `CardStorePort` and maps provider-neutral
+`StorageUnavailable` to 503. See [adapter switching](infrastructure-adapters.md). Isolated test factories can
 use the in-memory store. The supplied account is assumed to exist: there is no
 account service lookup, card network integration or physical fulfilment.
 
@@ -370,7 +373,8 @@ The gateway returns MCP structured content. The workflow checks for a successful
 result with identifiers, saves it in the submission, and formats the final reply.
 JavaScript appends it using `textContent`. The final result is not sent back to
 Claude for another narrative response in this implementation. API diagnostics
-go to MongoDB asynchronously; tool timing/outcome goes to stderr. Neither is the
+go to the configured sink: MongoDB asynchronously (default), structured stdout,
+or none. Tool timing/outcome goes to stderr. Neither is the
 authoritative card store or conversation memory.
 
 ## 11. Breakpoint trail

@@ -1,0 +1,25 @@
+# Standalone API: same image/data contract, no Mongo/Redis/RabbitMQ services or credentials.
+# Set TELEMETRY_SINK=stdout (or none) in the shell when switching from a mongo .env.
+name: card-servicing
+services:
+  api:
+    image: card-servicing:${API_IMAGE_TAG:-local}
+    build:
+      context: .
+    environment:
+      CARD_STORE: ${CARD_STORE:-sqlite}
+      TELEMETRY_SINK: ${TELEMETRY_SINK:-stdout}
+      SQLITE_PATH: /data/cards.db
+      ACCOUNT_HASH_KEY: ${ACCOUNT_HASH_KEY:-}
+      ACCOUNT_HASH_KEY_VERSION: ${ACCOUNT_HASH_KEY_VERSION:-v1}
+    ports:
+      - "127.0.0.1:${API_PORT:-8011}:8000"
+    volumes:
+      - ./data:/data
+    healthcheck:
+      test: [CMD, python, -c, "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health/ready', timeout=3)"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 15s
+    stop_grace_period: 10s

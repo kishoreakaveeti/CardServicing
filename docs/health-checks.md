@@ -37,6 +37,11 @@ lock timeout. The memory-store test configuration reports `card_store` instead
 of claiming to check SQLite.
 
 MongoDB is optional operational telemetry and does not determine readiness.
+The same is true for `TELEMETRY_SINK=stdout|none`. The API reads readiness through
+`CardStorePort`; each adapter names its dependency and translates expected failures
+to `StorageUnavailable`. Invalid selected-adapter configuration fails startup;
+a valid configuration with unavailable storage remains live but unready. See
+[startup configuration](infrastructure-adapters.md).
 Redis and RabbitMQ are also excluded until card processing actually depends
 on them. The MongoDB Compose dependency requires its container to start, not to
 pass its health check before the API starts. Readiness can recover from transient

@@ -1,0 +1,23 @@
+"""Infrastructure contracts consumed by application/HTTP code."""
+from typing import Protocol
+
+from card_servicing.models import Card, CardCreate
+
+
+class StorageUnavailable(Exception):
+    """Expected storage failure; adapter details must not reach HTTP responses."""
+
+
+class CardStorePort(Protocol):
+    dependency_name: str
+
+    def initialize(self) -> None: ...
+    def check_readiness(self) -> bool: ...
+    def create_idempotent(self, instruction: CardCreate, key: str) -> tuple[Card, bool]: ...
+
+
+class TelemetryPort(Protocol):
+    def start(self) -> None: ...
+    def account_fields(self, instruction: CardCreate) -> dict: ...
+    def emit(self, kind: str, event: str, **fields) -> None: ...
+    def close(self) -> None: ...

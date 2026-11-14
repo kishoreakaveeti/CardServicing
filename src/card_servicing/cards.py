@@ -1,18 +1,17 @@
 from typing import Annotated
-import sqlite3
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Request, Response, status
 
 from card_servicing.config import CardSettings
 from card_servicing.models import Card, CardCreate
-from card_servicing.store import CardStore
+from card_servicing.ports import CardStorePort, StorageUnavailable
 from card_servicing.idempotency import IdempotencyConflict
 
 
 router = APIRouter(prefix="/cards", tags=["cards"])
 
 
-def get_card_store(request: Request) -> CardStore:
+def get_card_store(request: Request) -> CardStorePort:
     return request.app.state.card_store
 
 
@@ -37,7 +36,7 @@ def create_card(
         pattern=r'^[A-Za-z0-9._:-]+$',
         description='Client-generated key, e.g. a UUID. Reuse only for retries of the same card.',
     )],
-    store: Annotated[CardStore, Depends(get_card_store)],
+    store: Annotated[CardStorePort, Depends(get_card_store)],
     settings: Annotated[CardSettings, Depends(get_card_settings)],
 ) -> Card:
     trace_id = request.state.trace_id
@@ -49,9 +48,9 @@ def create_card(
         telemetry.emit('log', 'card_idempotency_conflict', trace_id=trace_id,
                        level='WARNING', **account_fields)
         raise HTTPException(status_code=409, detail='Idempotency key already used for a different instruction') from None
-    except (sqlite3.Error, OSError, ValueError) as exc:
+    except StorageUnavailable as exc:
         telemetry.emit('log', 'card_storage_failed', trace_id=trace_id,
-                       level='ERROR', dependency='sqlite', error_type=type(exc).__name__, **account_fields)
+                       level='ERROR', dependency=store.dependency_name, error_type=type(exc).__name__, **account_fields)
         raise HTTPException(status_code=503, detail='Card storage unavailable') from None
     response.headers['Cache-Control'] = 'no-store'
     response.headers['Idempotency-Replayed'] = str(replayed).lower()

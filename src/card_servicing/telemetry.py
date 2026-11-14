@@ -3,6 +3,7 @@ import json
 import logging
 import hashlib
 import hmac
+import sys
 from datetime import datetime, timezone
 from queue import Empty, Full, Queue
 from threading import Event, Thread
@@ -31,12 +32,24 @@ class NullTelemetry:
         pass
 
 
-class MongoTelemetry:
-    def __init__(self, config: dict, queue_size: int = 1000) -> None:
+EVENT_FIELDS = frozenset({
+    'trace_id', 'span_id', 'method', 'route', 'status_code', 'duration_ms',
+    'level', 'error_type', 'dependency', 'card_id', 'status',
+    'account_number_hash', 'account_hash_key_version',
+})
+
+
+def event_record(kind, event, fields):
+    # Keep the call-site allowlist enforced at both sink boundaries as well.
+    safe = {key: value for key, value in fields.items()
+            if key in EVENT_FIELDS and isinstance(value, (str, int, float, bool, type(None)))}
+    return {'_id': uuid4().hex, 'timestamp': datetime.now(timezone.utc),
+            'kind': kind, 'event': event, **safe}
+
+
+class AccountDiagnostics:
+    def __init__(self, config: dict) -> None:
         self.config = config
-        self.queue: Queue = Queue(maxsize=queue_size)
-        self.stopping = Event()
-        self.thread: Thread | None = None
 
     def account_fields(self, instruction) -> dict:
         key = self.config.get('ACCOUNT_HASH_KEY') or ''
@@ -47,6 +60,30 @@ class MongoTelemetry:
             'account_hash_key_version': self.config.get('ACCOUNT_HASH_KEY_VERSION', 'v1'),
         }
 
+
+class StdoutTelemetry(AccountDiagnostics):
+    """Structured API events; never use this sink for MCP protocol stdout."""
+    def start(self) -> None:
+        pass
+
+    def emit(self, kind: str, event: str, **fields) -> None:
+        try:
+            print(json.dumps(event_record(kind, event, fields), default=str), file=sys.stdout, flush=True)
+        except (OSError, ValueError):
+            # Diagnostics remain best effort, including a closed output stream.
+            logger.warning('stdout_telemetry_failed')
+
+    def close(self) -> None:
+        pass
+
+
+class MongoTelemetry(AccountDiagnostics):
+    def __init__(self, config: dict, queue_size: int = 1000) -> None:
+        super().__init__(config)
+        self.queue: Queue = Queue(maxsize=queue_size)
+        self.stopping = Event()
+        self.thread: Thread | None = None
+
     def start(self) -> None:
         if self.thread and self.thread.is_alive():
             raise RuntimeError('Telemetry worker already running')
@@ -55,9 +92,7 @@ class MongoTelemetry:
         self.thread.start()
 
     def emit(self, kind: str, event: str, **fields) -> None:
-        # Call sites use an allowlist: no payloads, accounts, headers, URLs, or exception text.
-        record = {'_id': uuid4().hex, 'timestamp': datetime.now(timezone.utc),
-                  'kind': kind, 'event': event, **fields}
+        record = event_record(kind, event, fields)
         try:
             self.queue.put_nowait(record)
         except Full:

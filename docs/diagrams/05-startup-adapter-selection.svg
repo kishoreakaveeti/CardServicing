@@ -1,0 +1,90 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1440" height="2024" viewBox="0 0 1440 2024" role="img" aria-labelledby="title description">
+<title id="title">05 / API startup selects infrastructure adapters - sequence diagram</title>
+<desc id="description">Same API build: validated settings choose SQLite and mongo, stdout or none telemetry. Read interactions from top to bottom. Dashed arrows are replies.</desc>
+<defs><marker id="arrow" markerWidth="9" markerHeight="9" refX="8" refY="4.5" orient="auto"><path d="M0 0 L9 4.5 L0 9" fill="#334155"/></marker></defs>
+<style>text{font-family:Consolas,"Liberation Mono",monospace}.heading{font-family:Arial,sans-serif;font-weight:700}</style>
+<rect width="1440" height="2024" fill="#fff"/>
+<text x="40" y="55" class="heading" font-size="32" fill="#0f172a">05 / API startup selects infrastructure adapters</text>
+<text x="40" y="90" font-size="18" fill="#475569">Same API build: validated settings choose SQLite and mongo, stdout or none telemetry.</text>
+<text x="40" y="120" font-size="16" fill="#475569">Time flows downward | Solid arrow: call | Dashed arrow: reply | Yellow: explanation</text>
+<path d="M130.0 207 V1689" stroke="#94a3b8" stroke-width="2" stroke-dasharray="6 6"/>
+<rect x="19.0" y="155" width="222" height="52" rx="7" fill="#0f766e"/>
+<text x="130.0" y="187" text-anchor="middle" class="heading" font-size="19" fill="white">API lifespan</text>
+<path d="M425.0 207 V1689" stroke="#94a3b8" stroke-width="2" stroke-dasharray="6 6"/>
+<rect x="314.0" y="155" width="222" height="52" rx="7" fill="#6d28d9"/>
+<text x="425.0" y="187" text-anchor="middle" class="heading" font-size="19" fill="white">Startup settings</text>
+<path d="M720.0 207 V1689" stroke="#94a3b8" stroke-width="2" stroke-dasharray="6 6"/>
+<rect x="609.0" y="155" width="222" height="52" rx="7" fill="#334155"/>
+<text x="720.0" y="187" text-anchor="middle" class="heading" font-size="19" fill="white">Card store port</text>
+<path d="M1015.0 207 V1689" stroke="#94a3b8" stroke-width="2" stroke-dasharray="6 6"/>
+<rect x="904.0" y="155" width="222" height="52" rx="7" fill="#047857"/>
+<text x="1015.0" y="187" text-anchor="middle" class="heading" font-size="19" fill="white">Selected telemetry</text>
+<path d="M1310.0 207 V1689" stroke="#94a3b8" stroke-width="2" stroke-dasharray="6 6"/>
+<rect x="1199.0" y="155" width="222" height="52" rx="7" fill="#1d4ed8"/>
+<text x="1310.0" y="187" text-anchor="middle" class="heading" font-size="19" fill="white">HTTP route / health</text>
+<rect x="146.0" y="240" width="263.0" height="55" fill="white"/>
+<text x="277.5" y="260" text-anchor="middle" font-size="16" fill="#0f172a">load_config(): environment</text>
+<text x="277.5" y="284" text-anchor="middle" font-size="16" fill="#0f172a">overrides root .env</text>
+<path d="M130.0 302 H425.0" fill="none" stroke="#334155" stroke-width="2" marker-end="url(#arrow)"/>
+<rect x="440.0" y="335" width="225.0" height="79" fill="white"/>
+<text x="552.5" y="355" text-anchor="middle" font-size="16" fill="#0f172a">Validate only settings</text>
+<text x="552.5" y="379" text-anchor="middle" font-size="16" fill="#0f172a">for adapters not</text>
+<text x="552.5" y="403" text-anchor="middle" font-size="16" fill="#0f172a">explicitly injected</text>
+<path d="M425.0 421 H490.0 V443 H425.0" fill="none" stroke="#334155" stroke-width="2" marker-end="url(#arrow)"/>
+<rect x="136.5" y="479" width="282.0" height="55" fill="white"/>
+<text x="277.5" y="499" text-anchor="middle" font-size="16" fill="#0f172a">Validated settings; invalid</text>
+<text x="277.5" y="523" text-anchor="middle" font-size="16" fill="#0f172a">config instead fails startup</text>
+<path d="M425.0 541 H130.0" fill="none" stroke="#334155" stroke-width="2" stroke-dasharray="7 5" marker-end="url(#arrow)"/>
+<rect x="179.5" y="574" width="491.0" height="31" fill="white"/>
+<text x="425.0" y="594" text-anchor="middle" font-size="16" fill="#0f172a">Construct SQLiteCardStore or retain injected store</text>
+<path d="M130.0 612 H720.0" fill="none" stroke="#334155" stroke-width="2" marker-end="url(#arrow)"/>
+<rect x="35" y="650" width="1370" height="49" rx="5" fill="#e0e7ff" stroke="#cbd5e1"/>
+<text x="55" y="675" font-size="17" fill="#1e293b">Choose exactly one telemetry adapter</text>
+<rect x="289.0" y="706" width="567.0" height="31" fill="white"/>
+<text x="572.5" y="726" text-anchor="middle" font-size="16" fill="#0f172a">Construct MongoTelemetry, StdoutTelemetry or NullTelemetry</text>
+<path d="M130.0 744 H1015.0" fill="none" stroke="#334155" stroke-width="2" marker-end="url(#arrow)"/>
+<rect x="35" y="782" width="1370" height="49" rx="5" fill="#fef3c7" stroke="#cbd5e1"/>
+<text x="55" y="807" font-size="17" fill="#1e293b">stdout / none: Mongo host, port and credentials are irrelevant; no Mongo client is constructed.</text>
+<rect x="531.25" y="838" width="82.5" height="31" fill="white"/>
+<text x="572.5" y="858" text-anchor="middle" font-size="16" fill="#0f172a">start()</text>
+<path d="M130.0 876 H1015.0" fill="none" stroke="#334155" stroke-width="2" marker-end="url(#arrow)"/>
+<rect x="360.0" y="909" width="130.0" height="31" fill="white"/>
+<text x="425.0" y="929" text-anchor="middle" font-size="16" fill="#0f172a">initialize()</text>
+<path d="M130.0 947 H720.0" fill="none" stroke="#334155" stroke-width="2" marker-end="url(#arrow)"/>
+<rect x="35" y="985" width="1370" height="49" rx="5" fill="#fef3c7" stroke="#cbd5e1"/>
+<text x="55" y="1010" font-size="17" fill="#1e293b">A valid config with unavailable storage emits a sanitized event; app stays live but unready.</text>
+<rect x="35" y="1046" width="1370" height="49" rx="5" fill="#e0e7ff" stroke="#cbd5e1"/>
+<text x="55" y="1071" font-size="17" fill="#1e293b">For each card creation or replay</text>
+<rect x="760.0" y="1102" width="510.0" height="31" fill="white"/>
+<text x="1015.0" y="1122" text-anchor="middle" font-size="16" fill="#0f172a">CardStorePort.create_idempotent(validated body, key)</text>
+<path d="M1310.0 1140 H720.0" fill="none" stroke="#334155" stroke-width="2" marker-end="url(#arrow)"/>
+<rect x="717.25" y="1173" width="595.5" height="31" fill="white"/>
+<text x="1015.0" y="1193" text-anchor="middle" font-size="16" fill="#0f172a">Card + replay flag, IdempotencyConflict or StorageUnavailable</text>
+<path d="M720.0 1211 H1310.0" fill="none" stroke="#334155" stroke-width="2" stroke-dasharray="7 5" marker-end="url(#arrow)"/>
+<rect x="1026.25" y="1244" width="272.5" height="55" fill="white"/>
+<text x="1162.5" y="1264" text-anchor="middle" font-size="16" fill="#0f172a">emit allowlisted card event</text>
+<text x="1162.5" y="1288" text-anchor="middle" font-size="16" fill="#0f172a">and HTTP timing</text>
+<path d="M1310.0 1306 H1015.0" fill="none" stroke="#334155" stroke-width="2" marker-end="url(#arrow)"/>
+<rect x="35" y="1344" width="1370" height="49" rx="5" fill="#fef3c7" stroke="#cbd5e1"/>
+<text x="55" y="1369" font-size="17" fill="#1e293b">Mongo queues to its database (fallback on outage); stdout prints JSON; none emits nothing.</text>
+<rect x="35" y="1405" width="1370" height="49" rx="5" fill="#e0e7ff" stroke="#cbd5e1"/>
+<text x="55" y="1430" font-size="17" fill="#1e293b">Readiness uses the store contract only</text>
+<rect x="926.25" y="1461" width="177.5" height="31" fill="white"/>
+<text x="1015.0" y="1481" text-anchor="middle" font-size="16" fill="#0f172a">check_readiness()</text>
+<path d="M1310.0 1499 H720.0" fill="none" stroke="#334155" stroke-width="2" marker-end="url(#arrow)"/>
+<rect x="764.75" y="1532" width="500.5" height="31" fill="white"/>
+<text x="1015.0" y="1552" text-anchor="middle" font-size="16" fill="#0f172a">True / False or provider-neutral StorageUnavailable</text>
+<path d="M720.0 1570 H1310.0" fill="none" stroke="#334155" stroke-width="2" stroke-dasharray="7 5" marker-end="url(#arrow)"/>
+<rect x="35" y="1608" width="1370" height="49" rx="5" fill="#fef3c7" stroke="#cbd5e1"/>
+<text x="55" y="1633" font-size="17" fill="#1e293b">Default response retains checks.sqlite. Liveness does not query storage. Telemetry, Redis and RabbitMQ are excluded.</text>
+<text x="40" y="1731" class="heading" font-size="20" fill="#0f172a">Traceable code references</text>
+<a href="../../src/card_servicing/config.py"><text x="40" y="1756" font-size="16" fill="#1d4ed8">src/card_servicing/config.py:34</text></a>
+<a href="../../src/card_servicing/main.py"><text x="40" y="1781" font-size="16" fill="#1d4ed8">src/card_servicing/main.py:23</text></a>
+<a href="../../src/card_servicing/ports.py"><text x="40" y="1806" font-size="16" fill="#1d4ed8">src/card_servicing/ports.py:11</text></a>
+<a href="../../src/card_servicing/persistence.py"><text x="40" y="1831" font-size="16" fill="#1d4ed8">src/card_servicing/persistence.py:12</text></a>
+<a href="../../src/card_servicing/main.py"><text x="40" y="1856" font-size="16" fill="#1d4ed8">src/card_servicing/main.py:53</text></a>
+<a href="../../src/card_servicing/telemetry.py"><text x="40" y="1881" font-size="16" fill="#1d4ed8">src/card_servicing/telemetry.py:64</text></a>
+<a href="../../src/card_servicing/telemetry.py"><text x="40" y="1906" font-size="16" fill="#1d4ed8">src/card_servicing/telemetry.py:80</text></a>
+<a href="../../src/card_servicing/cards.py"><text x="40" y="1931" font-size="16" fill="#1d4ed8">src/card_servicing/cards.py:51</text></a>
+<text x="40" y="1999" font-size="15" fill="#475569">Source: card-chat-flows.json | Regenerate: python scripts/render_chat_diagrams.py</text>
+</svg>

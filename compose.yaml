@@ -7,6 +7,8 @@ services:
       context: .
     env_file: .env
     environment:
+      CARD_STORE: ${CARD_STORE:-sqlite}
+      TELEMETRY_SINK: ${TELEMETRY_SINK:-mongo}
       SQLITE_PATH: /data/cards.db
       MONGODB_HOST: mongodb
       MONGODB_PORT: "27017"

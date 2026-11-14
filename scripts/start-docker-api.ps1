@@ -1,4 +1,4 @@
-param([switch]$DebugApi, [switch]$Build)
+param([switch]$DebugApi, [switch]$Build, [switch]$Standalone)
 $ErrorActionPreference = 'Stop'
 Set-Location (Split-Path $PSScriptRoot -Parent)
 $dockerCommand = Get-Command docker -ErrorAction SilentlyContinue
@@ -11,9 +11,10 @@ if ($dockerCommand) {
     }
 }
 if (-not (Test-Path -LiteralPath $dockerPath)) { throw 'Docker CLI not found.' }
-if (-not (Test-Path -LiteralPath '.env')) { throw 'Run scripts/setup-infra.ps1 first to create .env.' }
+if (-not $Standalone -and -not (Test-Path -LiteralPath '.env')) { throw 'Run scripts/setup-infra.ps1 first to create .env.' }
 $env:PATH = (Split-Path $dockerPath -Parent) + [IO.Path]::PathSeparator + $env:PATH
-$composeArgs = @('compose', '-f', 'compose.yaml')
+$composeFile = if ($Standalone) { 'compose.api.yaml' } else { 'compose.yaml' }
+$composeArgs = @('compose', '-f', $composeFile)
 if ($DebugApi) { $composeArgs += @('-f', 'compose.debug.yaml') }
 $composeArgs += @('up', '-d', '--wait', '--wait-timeout', '180')
 if ($Build) { $composeArgs += '--build' }

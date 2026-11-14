@@ -1,5 +1,11 @@
 # Architecture and technology stack
 
+API startup validates configuration and selects its adapters. `CARD_STORE=sqlite`
+and `TELEMETRY_SINK=mongo` preserve defaults; stdout/none telemetry need no Mongo.
+HTTP code consumes `CardStorePort` and `StorageUnavailable`, while SQLite owns
+provider exception translation. Explicit injected instances take precedence.
+See [adapter configuration and same-build reproduction](infrastructure-adapters.md).
+
 The chat workflow has a [detailed end-to-end trace](chat-end-to-end.md),
 [standalone SVG diagrams](diagrams/index.html), and version-controlled
 [diagram definitions](diagrams/card-chat-flows.json). Regenerate with

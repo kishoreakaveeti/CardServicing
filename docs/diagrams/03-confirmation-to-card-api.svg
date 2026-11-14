@@ -105,7 +105,7 @@
 <a href="../../src/card_chat/gateway.py"><text x="40" y="2188" font-size="16" fill="#1d4ed8">src/card_chat/gateway.py:21</text></a>
 <a href="../../src/card_chat/mcp_server.py"><text x="40" y="2213" font-size="16" fill="#1d4ed8">src/card_chat/mcp_server.py:25</text></a>
 <a href="../../src/api_client/client.py"><text x="40" y="2238" font-size="16" fill="#1d4ed8">src/api_client/client.py:31</text></a>
-<a href="../../src/card_servicing/cards.py"><text x="40" y="2263" font-size="16" fill="#1d4ed8">src/card_servicing/cards.py:47</text></a>
+<a href="../../src/card_servicing/cards.py"><text x="40" y="2263" font-size="16" fill="#1d4ed8">src/card_servicing/cards.py:46</text></a>
 <a href="../../src/card_chat/mcp_server.py"><text x="40" y="2288" font-size="16" fill="#1d4ed8">src/card_chat/mcp_server.py:29</text></a>
 <a href="../../src/card_chat/main.py"><text x="40" y="2313" font-size="16" fill="#1d4ed8">src/card_chat/main.py:142</text></a>
 <text x="40" y="2381" font-size="15" fill="#475569">Source: card-chat-flows.json | Regenerate: python scripts/render_chat_diagrams.py</text>

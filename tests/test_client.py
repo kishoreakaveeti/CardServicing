@@ -17,6 +17,21 @@ def test_card_client_contract_and_error():
             client.create_card('alex', 'Alex', '001', idempotency_key='key')
 
 
+@pytest.mark.parametrize('base', ['https://gateway.example/demo/card-service', 'https://gateway.example/demo/card-service/'])
+def test_gateway_prefix_preserves_card_contract(base):
+    requests = []
+    def handler(request):
+        requests.append(request)
+        return httpx.Response(201, json={'card_number': 'SIM-synthetic'})
+    with ApiClient(base_url=base, transport=httpx.MockTransport(handler)) as client:
+        assert client.create_card('alex.synthetic', 'Alex', '0012345678', idempotency_key='gateway-key')['card_number'] == 'SIM-synthetic'
+    request = requests[0]
+    assert request.method == 'POST'
+    assert str(request.url) == 'https://gateway.example/demo/card-service/cards'
+    assert request.headers['Idempotency-Key'] == 'gateway-key'
+    assert json.loads(request.content)['account_number'] == '0012345678'
+
+
 def make_client(
     requests: list[httpx.Request], response_body: object, status_code: int = 200
 ) -> ApiClient:

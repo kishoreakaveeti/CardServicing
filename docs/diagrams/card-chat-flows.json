@@ -982,6 +982,210 @@
           "label": "API returns 409 on conflict. API keys are durable; chat state is memory-only. New key = new operation."
         }
       ]
+    },
+    {
+      "file": "05-startup-adapter-selection.svg",
+      "title": "05 / API startup selects infrastructure adapters",
+      "subtitle": "Same API build: validated settings choose SQLite and mongo, stdout or none telemetry.",
+      "participants": [
+        {
+          "id": "api",
+          "label": "API lifespan"
+        },
+        {
+          "id": "agent",
+          "label": "Startup settings"
+        },
+        {
+          "id": "storage",
+          "label": "Card store port"
+        },
+        {
+          "id": "mcp",
+          "label": "Selected telemetry"
+        },
+        {
+          "id": "workflow",
+          "label": "HTTP route / health"
+        }
+      ],
+      "messages": [
+        {
+          "kind": "call",
+          "from": "api",
+          "to": "agent",
+          "label": "load_config(): environment overrides root .env"
+        },
+        {
+          "kind": "call",
+          "from": "agent",
+          "to": "agent",
+          "label": "Validate only settings for adapters not explicitly injected"
+        },
+        {
+          "kind": "return",
+          "from": "agent",
+          "to": "api",
+          "label": "Validated settings; invalid config instead fails startup"
+        },
+        {
+          "kind": "call",
+          "from": "api",
+          "to": "storage",
+          "label": "Construct SQLiteCardStore or retain injected store"
+        },
+        {
+          "kind": "section",
+          "from": "",
+          "to": "",
+          "label": "Choose exactly one telemetry adapter"
+        },
+        {
+          "kind": "call",
+          "from": "api",
+          "to": "mcp",
+          "label": "Construct MongoTelemetry, StdoutTelemetry or NullTelemetry"
+        },
+        {
+          "kind": "note",
+          "from": "",
+          "to": "",
+          "label": "stdout / none: Mongo host, port and credentials are irrelevant; no Mongo client is constructed."
+        },
+        {
+          "kind": "call",
+          "from": "api",
+          "to": "mcp",
+          "label": "start()"
+        },
+        {
+          "kind": "call",
+          "from": "api",
+          "to": "storage",
+          "label": "initialize()"
+        },
+        {
+          "kind": "note",
+          "from": "",
+          "to": "",
+          "label": "A valid config with unavailable storage emits a sanitized event; app stays live but unready."
+        },
+        {
+          "kind": "section",
+          "from": "",
+          "to": "",
+          "label": "For each card creation or replay"
+        },
+        {
+          "kind": "call",
+          "from": "workflow",
+          "to": "storage",
+          "label": "CardStorePort.create_idempotent(validated body, key)"
+        },
+        {
+          "kind": "return",
+          "from": "storage",
+          "to": "workflow",
+          "label": "Card + replay flag, IdempotencyConflict or StorageUnavailable"
+        },
+        {
+          "kind": "call",
+          "from": "workflow",
+          "to": "mcp",
+          "label": "emit allowlisted card event and HTTP timing"
+        },
+        {
+          "kind": "note",
+          "from": "",
+          "to": "",
+          "label": "Mongo queues to its database (fallback on outage); stdout prints JSON; none emits nothing."
+        },
+        {
+          "kind": "section",
+          "from": "",
+          "to": "",
+          "label": "Readiness uses the store contract only"
+        },
+        {
+          "kind": "call",
+          "from": "workflow",
+          "to": "storage",
+          "label": "check_readiness()"
+        },
+        {
+          "kind": "return",
+          "from": "storage",
+          "to": "workflow",
+          "label": "True / False or provider-neutral StorageUnavailable"
+        },
+        {
+          "kind": "note",
+          "from": "",
+          "to": "",
+          "label": "Default response retains checks.sqlite. Liveness does not query storage. Telemetry, Redis and RabbitMQ are excluded."
+        }
+      ],
+      "steps": [
+        {
+          "owner": "api",
+          "title": "Validate and select only uninjected adapters",
+          "body": [
+            "Environment overrides .env. Only sqlite is a runtime store. Unknown names or missing selected Mongo credentials fail startup without printing values. Explicit injection takes precedence."
+          ],
+          "references": [
+            {
+              "path": "src/card_servicing/config.py",
+              "anchor": "class InfrastructureSettings"
+            },
+            {
+              "path": "src/card_servicing/main.py",
+              "anchor": "def configured_adapters"
+            }
+          ]
+        },
+        {
+          "owner": "storage",
+          "title": "Provider-neutral initialization and failures",
+          "body": [
+            "Initialize and readiness belong to CardStorePort. SQLite translates expected failures to StorageUnavailable; HTTP preserves liveness, sanitized 503 and distinct 409."
+          ],
+          "references": [
+            {
+              "path": "src/card_servicing/ports.py",
+              "anchor": "class CardStorePort"
+            },
+            {
+              "path": "src/card_servicing/persistence.py",
+              "anchor": "def storage_operation"
+            },
+            {
+              "path": "src/card_servicing/main.py",
+              "anchor": "card_store.initialize()"
+            }
+          ]
+        },
+        {
+          "owner": "mcp",
+          "title": "Only selected sink receives events",
+          "body": [
+            "Mongo keeps its async queue and fallback. Stdout writes allowlisted JSON to API stdout; none drops events. Telemetry never determines readiness."
+          ],
+          "references": [
+            {
+              "path": "src/card_servicing/telemetry.py",
+              "anchor": "class StdoutTelemetry"
+            },
+            {
+              "path": "src/card_servicing/telemetry.py",
+              "anchor": "class MongoTelemetry"
+            },
+            {
+              "path": "src/card_servicing/cards.py",
+              "anchor": "except StorageUnavailable as exc:"
+            }
+          ]
+        }
+      ]
     }
   ]
 }

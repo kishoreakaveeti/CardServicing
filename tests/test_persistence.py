@@ -6,6 +6,7 @@ from card_servicing.main import create_app
 from card_servicing.models import CardCreate
 from card_servicing.persistence import SQLiteCardStore
 from card_servicing.telemetry import MongoTelemetry
+from card_servicing.ports import StorageUnavailable
 
 BODY={'user_name':'alex', 'given_name':'Alex', 'account_number':'001'}
 
@@ -26,7 +27,7 @@ def test_atomic_rollback(tmp_path):
     store=SQLiteCardStore(str(tmp_path/'cards.db')); store.initialize()
     with closing(store.connect()) as db, db:
         db.execute("CREATE TRIGGER fail_snapshot BEFORE INSERT ON card_idempotency BEGIN SELECT RAISE(ABORT, 'test'); END")
-    with pytest.raises(sqlite3.IntegrityError):
+    with pytest.raises(StorageUnavailable):
         store.create_idempotent(CardCreate(**BODY), 'rollback')
     with closing(store.connect()) as db:
         assert db.execute('SELECT count(*) FROM cards').fetchone()[0] == 0
@@ -35,7 +36,7 @@ def test_sanitized_storage_failure(tmp_path, monkeypatch):
     store=SQLiteCardStore(str(tmp_path/'cards.db'))
     with TestClient(create_app(card_store=store)) as client:
         def failed(*args): raise sqlite3.OperationalError('sensitive details')
-        monkeypatch.setattr(store, 'create_idempotent', failed)
+        monkeypatch.setattr(store, 'connect', failed)
         response=client.post('/cards', json=BODY, headers={'Idempotency-Key':'fail'})
         assert response.status_code == 503
         assert 'sensitive' not in response.text
