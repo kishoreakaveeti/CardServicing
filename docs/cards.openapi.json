@@ -1,0 +1,238 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Card Origination API",
+    "version": "0.1.0"
+  },
+  "servers": [
+    {
+      "url": "http://127.0.0.1:8010",
+      "description": "Local development"
+    }
+  ],
+  "paths": {
+    "/cards": {
+      "post": {
+        "tags": [
+          "cards"
+        ],
+        "summary": "Originate a simulated card for an existing account",
+        "description": "Creates a simulation-only card number. Account existence is assumed. The same Idempotency-Key and normalized body replay the original response.",
+        "operationId": "create_card_cards_post",
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128,
+              "pattern": "^[A-Za-z0-9._:-]+$",
+              "description": "Client-generated key, e.g. a UUID. Reuse only for retries of the same card.",
+              "title": "Idempotency-Key"
+            },
+            "description": "Client-generated key, e.g. a UUID. Reuse only for retries of the same card."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CardCreate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Card"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Key reused with a different request"
+          },
+          "503": {
+            "description": "Storage unavailable; retry with the same key"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "Card": {
+        "properties": {
+          "user_name": {
+            "type": "string",
+            "maxLength": 100,
+            "minLength": 1,
+            "title": "User Name",
+            "examples": [
+              "alex.smith"
+            ]
+          },
+          "given_name": {
+            "type": "string",
+            "maxLength": 100,
+            "minLength": 1,
+            "title": "Given Name",
+            "examples": [
+              "Alex"
+            ]
+          },
+          "account_number": {
+            "type": "string",
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Account Number",
+            "examples": [
+              "0012345678"
+            ]
+          },
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "card_number": {
+            "type": "string",
+            "pattern": "^SIM-[0-9a-f]{32}$",
+            "title": "Card Number",
+            "description": "Simulation identifier; not a payment network PAN."
+          },
+          "status": {
+            "type": "string",
+            "const": "created",
+            "title": "Status",
+            "default": "created"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "user_name",
+          "given_name",
+          "account_number",
+          "id",
+          "card_number"
+        ],
+        "title": "Card"
+      },
+      "CardCreate": {
+        "properties": {
+          "user_name": {
+            "type": "string",
+            "maxLength": 100,
+            "minLength": 1,
+            "title": "User Name",
+            "examples": [
+              "alex.smith"
+            ]
+          },
+          "given_name": {
+            "type": "string",
+            "maxLength": 100,
+            "minLength": 1,
+            "title": "Given Name",
+            "examples": [
+              "Alex"
+            ]
+          },
+          "account_number": {
+            "type": "string",
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Account Number",
+            "examples": [
+              "0012345678"
+            ]
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "user_name",
+          "given_name",
+          "account_number"
+        ],
+        "title": "CardCreate"
+      },
+      "HTTPValidationError": {
+        "properties": {
+          "detail": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            },
+            "type": "array",
+            "title": "Detail"
+          }
+        },
+        "type": "object",
+        "title": "HTTPValidationError"
+      },
+      "ValidationError": {
+        "properties": {
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "type": "array",
+            "title": "Location"
+          },
+          "msg": {
+            "type": "string",
+            "title": "Message"
+          },
+          "type": {
+            "type": "string",
+            "title": "Error Type"
+          },
+          "input": {
+            "title": "Input"
+          },
+          "ctx": {
+            "type": "object",
+            "title": "Context"
+          }
+        },
+        "type": "object",
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
+        "title": "ValidationError"
+      }
+    }
+  }
+}

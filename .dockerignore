@@ -1,0 +1,10 @@
+# Allowlist: never send .env, SQLite data, Git, or the Windows venv to the builder.
+**
+!Dockerfile
+!pyproject.toml
+!README.md
+!src/
+!src/**
+**/__pycache__/**
+**/*.pyc
+**/*.egg-info/**

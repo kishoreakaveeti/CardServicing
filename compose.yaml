@@ -1,0 +1,72 @@
+name: card-servicing
+services:
+  api:
+    profiles: [api]
+    image: card-servicing:${API_IMAGE_TAG:-local}
+    build:
+      context: .
+    env_file: .env
+    environment:
+      SQLITE_PATH: /data/cards.db
+      MONGODB_HOST: mongodb
+      MONGODB_PORT: "27017"
+      REDIS_URL: redis://redis:6379/0
+    ports:
+      - "127.0.0.1:${API_PORT:-8011}:8000"
+    volumes:
+      - ./data:/data
+    depends_on:
+      mongodb:
+        condition: service_started
+    healthcheck:
+      test: [CMD, python, -c, "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health/ready', timeout=3)"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 15s
+    stop_grace_period: 10s
+  mongodb:
+    image: mongo:8.0
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: ${MONGO_USER:?Run setup-infra.ps1 first}
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_PASSWORD:?Run setup-infra.ps1 first}
+    ports:
+      - "127.0.0.1:27018:27017"
+    volumes:
+      - mongodb_data:/data/db
+    healthcheck:
+      test: [CMD, mongosh, --quiet, --eval, "quit(db.adminCommand('ping').ok ? 0 : 1)"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+  redis:
+    image: redis:8-alpine
+    command: [redis-server, --save, "", --appendonly, "no", --maxmemory, 128mb, --maxmemory-policy, allkeys-lru]
+    ports:
+      - "127.0.0.1:6380:6379"
+    healthcheck:
+      test: [CMD, redis-cli, ping]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+  rabbitmq:
+    image: rabbitmq:4-management
+    hostname: card-servicing-rabbitmq
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER:?Run setup-infra.ps1 first}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD:?Run setup-infra.ps1 first}
+    ports:
+      - "127.0.0.1:5673:5672"
+      - "127.0.0.1:15673:15672"
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+    healthcheck:
+      test: [CMD, rabbitmq-diagnostics, -q, check_running]
+      interval: 10s
+      timeout: 10s
+      retries: 12
+      start_period: 30s
+volumes:
+  mongodb_data:
+  rabbitmq_data:

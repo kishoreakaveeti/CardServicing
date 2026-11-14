@@ -1,0 +1,86 @@
+"""Authoritative SQLite cards and atomic, durable retry outcomes."""
+import sqlite3
+from contextlib import closing
+from pathlib import Path
+from uuid import uuid4
+from card_servicing.idempotency import IdempotencyConflict, fingerprint
+from card_servicing.models import Card, CardCreate
+
+SCHEMA = """
+CREATE TABLE IF NOT EXISTS card_statuses (code TEXT PRIMARY KEY, description TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS cards (
+    id TEXT PRIMARY KEY NOT NULL CHECK(length(id) = 36),
+    created_at TEXT NOT NULL,
+    user_name TEXT NOT NULL CHECK(length(trim(user_name)) > 0),
+    given_name TEXT NOT NULL CHECK(length(trim(given_name)) > 0),
+    account_number TEXT NOT NULL CHECK(length(trim(account_number)) > 0),
+    card_number TEXT NOT NULL UNIQUE CHECK(length(card_number) = 36 AND substr(card_number,1,4) = 'SIM-'),
+    status TEXT NOT NULL REFERENCES card_statuses(code)
+);
+CREATE INDEX IF NOT EXISTS ix_card_created_at ON cards(created_at);
+CREATE TABLE IF NOT EXISTS card_idempotency (
+    idempotency_key TEXT PRIMARY KEY NOT NULL,
+    request_fingerprint TEXT NOT NULL,
+    card_id TEXT NOT NULL UNIQUE REFERENCES cards(id),
+    response_status_code INTEGER NOT NULL CHECK(response_status_code = 201),
+    response_json TEXT NOT NULL,
+    created_at TEXT NOT NULL
+);
+"""
+
+class SQLiteCardStore:
+    def __init__(self, path: str):
+        self.path = Path(path)
+        self.ready = False
+
+    def connect(self):
+        db = sqlite3.connect(self.path, timeout=2)
+        try:
+            db.execute('PRAGMA foreign_keys = ON')
+        except Exception:
+            db.close()
+            raise
+        return db
+
+    def initialize(self):
+        self.path.parent.mkdir(parents=True, exist_ok=True)
+        with closing(self.connect()) as db, db:
+            db.execute('BEGIN IMMEDIATE')
+            for statement in SCHEMA.split(';'):
+                if statement.strip():
+                    db.execute(statement)
+            db.execute("INSERT OR IGNORE INTO card_statuses VALUES ('created', 'Simulated card created; no issuer integration')")
+            db.execute('PRAGMA user_version = 1')
+        self.ready = True
+
+    def check_readiness(self):
+        if not self.ready:
+            return False
+        uri = self.path.resolve().as_uri() + '?mode=ro'
+        with closing(sqlite3.connect(uri, uri=True, timeout=0.25)) as db, db:
+            db.execute('BEGIN')
+            db.execute('SELECT id, created_at, user_name, given_name, account_number, card_number, status FROM cards LIMIT 1').fetchone()
+            db.execute('SELECT idempotency_key, request_fingerprint, card_id, response_status_code, response_json, created_at FROM card_idempotency LIMIT 1').fetchone()
+            return db.execute("SELECT code FROM card_statuses WHERE code = 'created'").fetchone() is not None
+
+    def create(self, instruction: CardCreate) -> Card:
+        return self.create_idempotent(instruction, str(uuid4()))[0]
+
+    def create_idempotent(self, instruction: CardCreate, key: str) -> tuple[Card, bool]:
+        if not self.ready:
+            self.initialize()
+        identity = fingerprint(instruction)
+        with closing(self.connect()) as db, db:
+            # Serialize key lookup and both inserts across processes as well as threads.
+            db.execute('BEGIN IMMEDIATE')
+            existing = db.execute('SELECT request_fingerprint, response_json FROM card_idempotency WHERE idempotency_key = ?', (key,)).fetchone()
+            if existing:
+                if existing[0] != identity:
+                    raise IdempotencyConflict()
+                return Card.model_validate_json(existing[1]), True
+            card = Card(id=uuid4(), card_number='SIM-' + uuid4().hex, **instruction.model_dump())
+            db.execute('INSERT INTO cards (id, created_at, user_name, given_name, account_number, card_number, status) VALUES (?, ?, ?, ?, ?, ?, ?)',
+                       (str(card.id), card.created_at.isoformat(), card.user_name, card.given_name, card.account_number, card.card_number, card.status))
+            db.execute('INSERT INTO card_idempotency VALUES (?, ?, ?, ?, ?, ?)',
+                       (key, identity, str(card.id), 201, card.model_dump_json(), card.created_at.isoformat()))
+        return card, False

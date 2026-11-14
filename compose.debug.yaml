@@ -1,0 +1,18 @@
+# Explicit opt-in only: normal image startup has no debugger listener.
+services:
+  api:
+    command:
+      - python
+      - -m
+      - debugpy
+      - --listen
+      - 0.0.0.0:5678
+      - -m
+      - uvicorn
+      - card_servicing.main:app
+      - --host
+      - 0.0.0.0
+      - --port
+      - "8000"
+    ports:
+      - "127.0.0.1:5679:5678"
