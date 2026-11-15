@@ -1,184 +1,270 @@
 # Card Servicing
 
-Ordinary card requests now return an existing card instead of creating another. Additional cards require an explicit choice and confirmation. See [card issuance and retry policy](docs/card-issuance.md).
+A chat-first banking simulation with registration/login, customer-owned accounts and synthetic cards. Action buttons and natural-language chat share the same backend capabilities. Banking writes require review and confirmation. Ordinary issuance returns an existing card; an additional card requires an explicit choice.
 
-MongoDB now starts with the full Docker stack and receives service diagnostics by default. See [MongoDB logging and duplicate-card policy](docs/mongodb-logging.md).
+React → Experience API → Agent API → remote HTTP MCP → Cards API → SQLite. MongoDB stores operational diagnostics. Keycloak authenticates service-to-service calls, including when customers use the application's simple registration/login form. All card identifiers begin with `SIM-` and cannot be used for payments.
 
-The chat-first interface now supports customer registration/login, owned accounts, optional and additional simulated cards, and direct action buttons. See [Customer banking: complete journey and API](docs/customer-banking.md). Existing OIDC service authentication, Agent/MCP orchestration and SQLite persistence remain in place.
+These instructions target **Windows and PowerShell**, matching the checked-in VS Code profiles. Containers use Linux images. Native `.venv/Scripts/python.exe` paths require adjustment on other operating systems.
 
-React ? Experience API ? Agent API ? Streamable HTTP MCP ? Cards API.
-Claude interprets ordinary text; private details use a masked picker and a secure
-form. Every write requires a review and confirmation. All cards are simulations.
+- [Shared first-time setup](#shared-first-time-setup)
+- [1. Run and debug using local Docker containers](#1-run-and-debug-using-local-docker-containers)
+- [2. Run and debug natively on your computer](#2-run-and-debug-natively-on-your-computer)
+- [Switch between modes](#switch-between-modes)
+- [Customer journey and verification](#customer-journey-and-verification)
+- [Troubleshooting](#troubleshooting)
 
-## Current VS Code profiles
+## Shared first-time setup
 
-| Profile | Runs where | What F5 does |
+### Installation prerequisites
+
+| Software | Docker application mode | Native application mode |
 | --- | --- | --- |
-| **Debug Full Stack** | Docker | Compatibility name for the Docker compound below |
-| **Debug Full Stack (Docker)** | Docker | One shared task builds/starts the stack, then attaches four Python debuggers and launches Chrome |
-| **Debug Frontend** | Browser, Docker-served frontend | Launches Chrome at localhost:8080; start the Docker stack first |
-| **Attach to Experience API** | Docker | Attaches to loopback port 5681 |
-| **Attach to Agent API** | Docker | Attaches to loopback port 5682 |
-| **Attach to MCP Server** | Docker | Attaches to loopback port 5683 |
-| **Attach to Cards API** | Docker | Attaches to loopback port 5684 |
-| **Debug Full Stack (Local)** | Native Windows | Checks prerequisites, starts local Vite, launches four local Python processes and Chrome |
-| **Debug Local Experience API** | Native Windows | Launches Experience on 8020 |
-| **Debug Local Agent API** | Native Windows | Launches Agent on 8021 |
-| **Debug Local MCP Server** | Native Windows | Launches MCP on 8030 |
-| **Debug Local Cards API** | Native Windows | Launches Cards on 8010 |
-| **Debug Local Frontend** | Browser, local Vite | Launches Chrome; run local Vite first |
+| Git | Clone the repository, or download its ZIP instead | Same |
+| Python with `venv`, `pip`, `sqlite3` | Host Python is required by this repository's setup scripts; Python 3.13 matches its container image | Required for the four Python services; use Python 3.13 for alignment. The package declares Python 3.10+ |
+| PowerShell | Required by the supplied Windows setup/debug scripts | Same |
+| Docker Desktop with Linux containers and Compose | Required and running | Recommended for Identity/Mongo dependencies only; optional when dependencies run natively/externally |
+| Node.js 22 with npm | **Not required on the host**; the frontend image provides it | **Required on Windows** for Vite; restart VS Code after installation to refresh PATH |
+| VS Code, Microsoft Python and Python Debugger extensions | Required for the documented attach workflow; JavaScript debugging is built in | Required for the documented launch workflow; not required for terminal-only execution |
+| Google Chrome | Required by shipped browser debug profiles; normal runs can use another browser | Same |
+| Separate SQLite server/CLI/viewer | **Not required** | **Not required** |
+| MongoDB Community Server on Windows | **Not required**; Compose runs `mongo:8.0` | Only needed if you choose native MongoDB logging; Docker Mongo or console logging need no host Mongo installation |
+| MongoDB Compass | Optional viewer, not the database server | Same |
+| Native Keycloak and OpenJDK | **Not required**; supplied by the Identity container | Only needed if you choose to run Identity without Docker |
+| Anthropic API key | Optional; start with the credential-free stub | Same |
 
-Docker Python profiles **attach** to existing processes with `/app/src` source
-mappings. Local Python profiles **launch** `.venv/Scripts/python.exe` directly;
-there are no remote source mappings, published debugger ports or application
-images in local mode. Both modes use one process per service without reload.
+**SQLite does not need a separate installation.** The application uses Python's `sqlite3` module and automatically creates/migrates its database files. SQLite requires no server process. Standard Python installers normally include the module; verify it below. If your Python distribution omits it, install a distribution that provides it. Installing a database viewer alone does not add Python SQLite support. See [Python's SQLite documentation](https://docs.python.org/3/library/sqlite3.html).
 
-The former **Debug Chat + API**, **Debug Chat**, **Debug API**, and **Attach to
-Docker API** profiles are superseded. Their old walkthrough is archived in
-[legacy-host-setup.md](docs/legacy-host-setup.md), not the current runbook.
+Official installation references: [Python for Windows](https://www.python.org/downloads/windows/), [Docker Desktop](https://docs.docker.com/desktop/setup/install/windows-install/), [Node.js](https://nodejs.org/en/download), and [VS Code Python debugging](https://code.visualstudio.com/docs/python/debugging). Enable Python/Node PATH options when installing, then fully restart VS Code.
 
-## One-time setup
+### Clone, install dependencies and generate credentials
 
-Open this repository root in VS Code. Install the Python Debugger extension;
-Chrome debugging uses VS Code's built-in JavaScript debugger. From PowerShell:
+Run in PowerShell. If you downloaded a ZIP, open its extracted repository folder and skip the clone command.
 
 ```powershell
+git clone https://github.com/kishoreakaveeti/CardServicing.git
+Set-Location CardServicing
+python --version
 python -m venv .venv
 .\.venv\Scripts\python.exe -m pip install -e '.[dev,chat,infra]' debugpy
+.\.venv\Scripts\python.exe -c "import sqlite3; print('SQLite:', sqlite3.sqlite_version)"
+if (-not (Test-Path -LiteralPath '.env')) {
+    '# Optional settings; see .env.example.' | Set-Content -LiteralPath '.env' -Encoding ascii
+}
 .\scripts\setup-stack.ps1
 ```
 
-Setup preserves existing `.env.stack` credentials and signing keys. Never commit
-`.env`, `.env.stack` or `data/identity`. For natural-language intent, configure:
+If PowerShell blocks `setup-stack.ps1`, run `.\.venv\Scripts\python.exe scripts/setup_stack.py` instead; the result is the same and no execution-policy change is required.
 
-```text
+If only the Windows `py` launcher is available, create the environment with `py -3.13 -m venv .venv`, then use the explicit `.venv` interpreter above. No environment activation is required. Open the **repository root** in VS Code; use **Python: Select Interpreter** to select `.venv/Scripts/python.exe`.
+
+Setup generates ignored `.env.stack` with credentials, plus `data/identity/` with the imported realm and signing keys. It preserves existing credentials and keys. Do not commit these files, private keys, `.env`, or local databases to the public repo. Keep the generated credentials consistent with existing Identity/Mongo volumes. `.env.example` is a reference: its `GENERATE_ME` values are not ready-to-use credentials.
+
+### Configuration shared by both modes
+
+| Setting | Default / location | Purpose |
+| --- | --- | --- |
+| `STACK_MODEL_PROVIDER` | `stub`; optionally set in `.env.stack` | Stub supports direct actions and a small deterministic set of common intents; `anthropic` enables hosted LLM interpretation |
+| `MODEL_ID`, `ANTHROPIC_API_KEY` | Set in ignored `.env` when using Anthropic | Use a model available to your account. Only Agent calls the provider; Docker forwards the key only to Agent |
+| `TELEMETRY_SINK` | `mongo`; optionally set in `.env.stack` | `mongo`, `stdout` for console diagnostics, or `none` |
+| `MONGO_USER`, `MONGO_PASSWORD`, `ACCOUNT_HASH_KEY` | Generated in `.env.stack` | Mongo authentication and optional account hashing; setup preserves original `.env` credentials when available |
+| `MONGODB_DATABASE` | `card_servicing` | Diagnostics database; business data remains in SQLite |
+| `MONGODB_HOST_PORT` | `27018`; optional `.env.stack` override | Published Docker Mongo port and native application's Mongo destination port |
+| `LOCAL_MONGODB_HOST` | `127.0.0.1`; native mode only | Native/external Mongo host |
+| `LOCAL_OIDC_ISSUER` | `http://localhost:8081/realms/cards`; native mode only | Override only for a compatible external Identity deployment |
+| `ANTHROPIC_PROMPT_CACHE` | `false`; optional `.env` setting | Optional static-prefix caching |
+
+A first run needs no model key: leave `stub` selected. It is not a general conversational model. To enable Claude, edit these files and replace the placeholders:
+
+```dotenv
 # .env.stack
 STACK_MODEL_PROVIDER=anthropic
+```
+
+```dotenv
 # .env
 MODEL_ID=your-supported-Claude-model
 ANTHROPIC_API_KEY=your-key
 ```
 
-`STACK_MODEL_PROVIDER=stub` provides a credential-free test adapter, with manual
-selection; it does not understand natural language. Prompt caching defaults off.
+For the supplied launchers, shell environment variables override file settings, and `.env.stack` overrides the same keys in `.env`. Remove stale shell overrides when diagnosing configuration. Compose already sets Docker DNS names, internal URLs, key mounts and SQLite paths. `local_service.py` sets native equivalents; do not copy Docker hostnames such as `cards` or `mongodb` into native destinations.
 
-## Docker: build, deploy, then attach
+## 1. Run and debug using local Docker containers
 
-Install/start Docker Desktop with Linux containers. Host Node.js is unnecessary
-for this mode: Docker builds the React app and Python images.
+### Prerequisites and configuration
 
-### 1. Build and start without debuggers
+Complete the shared setup. Install/start Docker Desktop with Linux containers. Verify `docker version` and `docker compose version` in a new terminal. `stack.ps1` also checks standard Docker Desktop paths if the CLI is not on PATH.
+
+**No Windows MongoDB Community Server, SQLite server, Node/npm, native Keycloak or JDK installation is required for this mode.** Docker supplies the runtimes and database/Identity services. Host Python is still used for the shared setup scripts. VS Code debugging requires the extensions and Chrome listed above.
+
+Before switching from native debugging: press **Shift+F5**, then stop the **Start Local Frontend** task using its Terminal trash-can button or **Tasks: Terminate Task**. This Vite task can outlive the debug sessions and occupy 8080. Resolve any other process using 8080, 8081 or the selected Mongo host port.
+
+### Run without debugging
+
+From the repository root:
 
 ```powershell
 .\scripts\stack.ps1 -Build
 ```
 
-This builds the runtime image stages, creates the containers and persistent
-volumes, and waits for health. It publishes only frontend 8080 and Keycloak 8081
-on loopback. The four backend APIs use Compose DNS names inside the network.
-Open http://localhost:8080. Use `localhost` consistently for OIDC sign-in.
+Wait for success, then open **http://localhost:8080**. Use `localhost` consistently for browser access and sign-in. Compose starts frontend, Experience, Agent, MCP, Cards, Identity and MongoDB, with persistent volumes. Runtime images do not enable debugger listeners.
 
-### 2. Start debug images and listeners
+**8080 is the UI port.** Port 8000 is internal to the API containers. Backend HTTP ports are not published in normal mode; services communicate through Compose DNS. Identity uses host 8081 and Mongo uses loopback 27018 by default.
 
-Stop any existing VS Code debug session, then:
+### Debug the full stack and attach VS Code
+
+1. Stop conflicting native processes and the native Vite task as described above.
+2. Ensure Docker Desktop is running; open the repository root in VS Code.
+3. Open **Run and Debug** (**Ctrl+Shift+D**), select **Debug Full Stack (Docker)** and press **F5**.
+4. Wait for **Start Full Debug Stack** to build/start debug images and check health/listeners. The first build can take several minutes. Do not bypass a failed task with **Debug Anyway**.
+5. VS Code attaches to four containerized Python processes and opens Chrome at `http://localhost:8080`.
+6. Set breakpoints in your existing local source files and trigger a browser action. Local `src` maps to `/app/src` inside the containers.
+
+**You do not need to start the stack separately before F5.** That profile's shared pre-launch task runs the equivalent of:
 
 ```powershell
 .\scripts\stack.ps1 -DebugComponent All -Build
 ```
 
-The override selects debugpy image stages, runs Vite with source maps, and maps
-Experience/Agent/MCP/Cards listeners to 5681/5682/5683/5684 respectively. The
-script waits for HTTP health and listener readiness. It does not wait for
-attachment before starting HTTP, so the shared pre-launch task cannot deadlock.
+`Debug Full Stack` is a compatibility alias for the Docker profile. Debug images include `debugpy` and a Vite frontend with source maps. HTTP starts without waiting for debugger attachment.
 
-### 3. Attach
+| Attach profile | Host debugger port | Container listener |
+| --- | --- | --- |
+| Attach to Experience API | 5681 | 5678 |
+| Attach to Agent API | 5682 | 5678 |
+| Attach to MCP Server | 5683 | 5678 |
+| Attach to Cards API | 5684 | 5678 |
 
-In **Run and Debug**, select **Debug Full Stack (Docker)** and press **F5**.
-Its shared task brings up or reuses the debug stack once, then all four attach
-profiles connect and Chrome opens. If you already ran step 2, the task reuses
-healthy services/listeners. **Debug Full Stack** remains an alias for this mode.
-Set a breakpoint and perform a browser request; startup alone does not execute
-message or card-write handlers.
+### Attach to one container
 
-For only one component:
+For example:
 
 ```powershell
 .\scripts\stack.ps1 -DebugComponent Agent -Build
-# Select Attach to Agent API, then F5.
 ```
 
-Substitute `Experience`, `MCP`, or `Cards` and select its corresponding attach
-profile. `-DebugComponent Frontend` starts Vite with Python listeners disabled;
-select **Debug Frontend**. Other application services continue running normally.
+Select **Attach to Agent API**, then F5. Substitute `Experience`, `MCP` or `Cards` and choose the matching attach profile. Individual attach profiles connect to an existing listener; they do not start containers. **Debug Frontend** only opens Chrome against an already running stack.
 
-### 4. Rebuild after edits and stop
-
-Images contain source snapshots. After changing Python or frontend source,
-disconnect, rerun the relevant startup command with `-Build`, then attach again.
-Debugger disconnect leaves containers running. The startup script reopens a
-listener by restarting its service when a previous detach closed that listener.
-
-```powershell
-.\scripts\stack.ps1 -Build   # Return to normal runtime images, no debug listeners.
-.\scripts\stack.ps1 -Stop    # Remove containers/network; preserve named volumes.
-```
-
-VS Code also provides **Tasks: Run Task ? Stop Debug Stack**. To inspect logs
-when Docker is on PATH:
-
-```powershell
-docker compose --env-file .env --env-file .env.stack ps
-docker compose --env-file .env --env-file .env.stack logs --tail 50 agent mcp
-```
-
-For catalogue/discovery startup breakpoints, start a healthy stack first, then:
+For Agent/MCP startup/discovery breakpoints, first start a healthy debug stack, then:
 
 ```powershell
 .\scripts\stack.ps1 -DebugComponent MCP -Build -WaitForDebugger
-# Attach to MCP Server; continue to start HTTP.
 ```
 
-Use `Agent` similarly for discovery. This special mode starts only the selected
-service with `--no-deps` and waits for its listener, not HTTP readiness.
+Select **Attach to MCP Server**, press F5 and continue. This special command restarts only that service with `--no-deps` and waits for its debugger rather than HTTP. Use `Agent` similarly.
 
-## Local: launch the application without building Docker images
+### If MongoDB is not installed on Windows
 
-Install **Node.js 22 LTS with npm on Windows**, then restart VS Code so PATH is
-updated. Local mode needs the Python environment above and frontend packages:
+Normal Docker startup already handles this: it downloads `mongo:8.0`, starts it and preserves diagnostics in the stack's `mongodb_data` volume. Compass is optional. If another Mongo server occupies 27018, stop that server or change `MONGODB_HOST_PORT` in `.env.stack`.
+
+To send diagnostics to the console, set this in `.env.stack`, then restart/recreate application services:
+
+```dotenv
+TELEMETRY_SINK=stdout
+```
+
+Use `none` to discard telemetry. **The full Compose configuration still starts Mongo with either override**, because Mongo remains a configured service and Cards has a startup dependency on it. The override changes the logging destination, not the container list. To run with no Mongo server/container at all, use native application mode with `stdout`/`none` below.
+
+Default collections: `card_servicing.application_logs` and `card_servicing.request_traces`. Optional Compass connection: `127.0.0.1:27018`, authentication database `admin`, credentials from `.env.stack`. See [Mongo logging](docs/mongodb-logging.md).
+
+### Stop, rebuild and inspect
+
+**Shift+F5** disconnects debuggers but leaves containers running. Images contain source snapshots: after code changes, disconnect and launch **Debug Full Stack (Docker)** again to rebuild, or run the debug command with `-Build` and reattach. Restarting an unchanged image does not include edited code.
 
 ```powershell
+# Return to runtime images without debugger listeners.
+.\scripts\stack.ps1 -Build
+# Remove containers/network; preserve named volumes.
+.\scripts\stack.ps1 -Stop
+# Status/logs; direct docker commands require Docker on PATH.
+docker compose --env-file .env --env-file .env.stack -f compose.yaml ps
+docker compose --env-file .env --env-file .env.stack -f compose.yaml logs --tail 50 agent mcp cards
+```
+
+Docker SQLite files live in named volumes, separate from native `data/local/` files. Customers registered natively do not automatically appear in Docker: register again in the chosen environment. Do not use `down -v` unless you intend to erase persistent data.
+
+## 2. Run and debug natively on your computer
+
+### Prerequisites and configuration
+
+Complete shared setup. Install **Node.js 22 with npm on Windows**, fully restart VS Code, then verify/install:
+
+```powershell
+node --version
+npm.cmd --version
+.\.venv\Scripts\python.exe -c "import sqlite3; print(sqlite3.sqlite_version)"
 Push-Location frontend
-npm ci
+npm.cmd ci
 Pop-Location
 ```
 
-### 1. Stop conflicting application processes
+Use `npm.cmd` if PowerShell blocks `npm.ps1`; no execution-policy change is needed for npm. **No separate SQLite installation is required.** Vite and the four Python services run natively, with no application image builds or remote Python attach ports.
 
-Docker and local modes share browser/identity ports 8080/8081. Stop existing
-VS Code debug sessions before switching. To keep Docker-hosted Keycloak and MongoDB:
+Choose an infrastructure option:
+
+| Option | Identity | Logging | Host installations |
+| --- | --- | --- | --- |
+| Recommended native development | Docker Keycloak | Docker MongoDB | Python, Node/npm, Docker Desktop; no native Mongo/JDK needed |
+| No MongoDB at all | Docker or native Keycloak | `TELEMETRY_SINK=stdout` or `none` | No MongoDB Community Server/Compass needed |
+| No Docker at all | Native Keycloak 26.4.7 | Native Mongo or console/disabled logging | OpenJDK 21 and native Keycloak; MongoDB Community Server only if logging to native Mongo |
+
+**Identity remains required with simple customer registration/login** because it secures the existing service-to-service architecture. Disabling Mongo logging does not remove authentication.
+
+### Prepare Identity and MongoDB
+
+With Docker Desktop running, the local F5 preparation task starts only missing local Identity/Mongo dependencies and reuses healthy ones. It does not start Docker application services. For terminal-only execution, prepare dependencies explicitly:
 
 ```powershell
-docker compose --env-file .env --env-file .env.stack stop frontend experience agent mcp cards
-docker compose --env-file .env --env-file .env.stack up -d --wait identity mongodb
+.\.venv\Scripts\python.exe scripts/local_infrastructure.py
 ```
 
-This is a convenient hybrid: **all five application components run natively**;
-the identity provider and MongoDB remain in Docker. No application image is built or
-deployed. Docker Desktop's CLI may need adding to PATH; the startup script's
-Docker detection paths are documented in `scripts/stack.ps1`.
-
-### 2. Identity option with no Docker at all
-
-Authentication remains enabled locally. To avoid Docker entirely, run a native
-Keycloak installation rather than the identity container. Use the repository's
-Keycloak 26.4.7 version and its supported JDK (OpenJDK 21), following the vendor
-[Windows ZIP setup](https://www.keycloak.org/getting-started/getting-started-zip)
-and [realm import instructions](https://www.keycloak.org/server/importExport).
-Stop the Docker identity first if it is running; both cannot bind port 8081.
-
-In a separate PowerShell terminal, with the paths adjusted to your installation:
+Or use Compose directly:
 
 ```powershell
+docker compose --env-file .env --env-file .env.stack -f compose.yaml up -d --wait identity mongodb
+```
+
+If switching from Docker application mode, disconnect its debuggers and stop only its application containers, retaining dependencies:
+
+```powershell
+docker compose --env-file .env --env-file .env.stack -f compose.yaml stop frontend experience agent mcp cards
+```
+
+#### If you do not install or run MongoDB
+
+Before starting local F5 or terminals, set this in `.env.stack`:
+
+```dotenv
+TELEMETRY_SINK=stdout
+```
+
+The local infrastructure task then prepares Identity only and does not start/require Mongo. `stdout` keeps diagnostics in terminals; `none` discards them. An already running Mongo container is not automatically stopped by this setting. SQLite still stores all business data.
+
+#### If you choose native MongoDB Community Server
+
+1. Install MongoDB Community Server **8.0** to match Compose, following [MongoDB Community Server for Windows](https://www.mongodb.com/docs/manual/tutorial/install-mongodb-on-windows/). Compass alone is a viewer, not the server; administrative commands may also require `mongosh`.
+2. Start its Windows service/server with loopback binding. The repository defaults to port **27018**; a native installation commonly uses **27017**, so configure the actual port below.
+3. Follow MongoDB's [access-control instructions](https://www.mongodb.com/docs/manual/tutorial/enable-authentication/). Create an `admin`-authenticated application user with read/write and index-creation permissions for `card_servicing`. The application's Mongo client uses `authSource=admin`. Generated Docker credentials do not automatically create a native Mongo user.
+4. Configure `.env.stack` to match that server/user:
+
+```dotenv
+TELEMETRY_SINK=mongo
+LOCAL_MONGODB_HOST=127.0.0.1
+MONGODB_HOST_PORT=27017
+MONGODB_DATABASE=card_servicing
+MONGO_USER=your-existing-Mongo-user
+MONGO_PASSWORD=your-existing-Mongo-password
+```
+
+Start native Mongo before F5; local preparation reuses the listening service. Do not also publish a Docker Mongo container on the same port. If you do not want native database setup, choose Docker Mongo or console logging.
+
+#### If you want no Docker at all
+
+Use console logging above, or start the configured native Mongo service. Install **OpenJDK 21** and the **Keycloak 26.4.7 ZIP**, matching this repository's pinned container version. Consult version-specific [release notes](https://www.keycloak.org/docs/26.4.7/release_notes/index.html), [ZIP startup](https://www.keycloak.org/getting-started/getting-started-zip) and [realm import](https://www.keycloak.org/server/importExport) instructions. The latest-version quickstart may specify a different JDK; use one supported by the version you install.
+
+After shared setup generated `data/identity/realm.json`, open a separate PowerShell terminal at the repository root and adjust this installation path:
+
+```powershell
+java -version
 $repoRoot = (Get-Location).Path
 $keycloakDir = 'C:\Tools\keycloak-26.4.7'
 New-Item -ItemType Directory -Force "$keycloakDir\data\import" | Out-Null
@@ -186,128 +272,140 @@ Copy-Item -LiteralPath "$repoRoot\data\identity\realm.json" -Destination "$keycl
 & "$keycloakDir\bin\kc.bat" start-dev --http-host=127.0.0.1 --http-port=8081 --hostname=http://localhost:8081 --import-realm
 ```
 
-The imported realm contains the same synthetic users and client credentials as
-`.env.stack`. Imports do not replace an existing realm: use a fresh native
-installation/data directory initially, or deliberately reconcile its clients.
-Keep that terminal running. Native and Docker identity stores are separate;
-existing browser sessions may require signing in again after switching.
+Keep it running. Verify `http://localhost:8081/realms/cards/.well-known/openid-configuration` responds. Use a fresh Keycloak data directory for the first import; importing does not overwrite an existing realm. Imported clients/secrets must match `.env.stack`. Do not also run Docker Identity on 8081.
 
-Local wrappers default to issuer `http://localhost:8081/realms/cards`. For another
-Keycloak realm, set `LOCAL_OIDC_ISSUER` before opening VS Code and register the
-same clients/audiences/permissions plus callback `http://localhost:8080/auth/callback`.
-Do not disable authentication to get local debugging working.
+When Identity and any selected Mongo service are already available, local preparation needs no Docker. An unavailable custom `LOCAL_OIDC_ISSUER` is not silently replaced with a local container. A custom realm must provide the same service clients, audiences/scopes and browser callback (`http://localhost:8080/auth/callback`) as the generated realm.
 
-### 3. Launch the local full stack
+### Run locally without debugging
 
-Select **Debug Full Stack (Local)** and press **F5**. The compound:
-
-1. Checks npm, installed frontend dependencies, identity discovery and free ports.
-2. Starts Vite locally, proxying `/api` and `/auth` to Experience on 8020.
-3. Launches four Python debug sessions from the workspace venv.
-4. Waits inside each service launcher for its downstream dependency before import/startup.
-5. Waits for all six HTTP endpoints (including Identity and Vite) alongside the Python launches, then opens Chrome on localhost:8080.
-
-The frontend browser profile is hidden from the normal launch picker because it
-only opens Chrome; it does not start application services. Use **Debug Full Stack
-(Local)** for F5 startup. The **Wait for Local HTTP** task now reports each missing
-service and signals readiness to VS Code with a background task matcher. If it
-fails, inspect its terminal and the Python terminals. **Debug Anyway** skips the
-readiness check and cannot fix a missing server. The UI uses port **8080**; port
-8000 is the internal Docker service port. A missing `npm` command requires
-installing Node.js with npm and restarting VS Code; an unavailable port 8081
-requires starting the external Identity service described above.
-
-Dependency order is Cards ? MCP ? Agent ? Experience. Launchers wait up to three
-minutes; errors appear in their individual terminals. If a startup breakpoint
-pauses one service, continue it before expecting its upstream services to become
-ready. Unlike Docker attach mode, local startup breakpoints bind before module
-import. Save and restart the affected debug session after code changes; no image
-build is involved.
-
-Local storage uses `data/local/cards.db`, `agent.db` and `sessions.db`, separate
-from Docker volumes. `scripts/local_service.py` translates service DNS names,
-key paths and service identities into native settings without printing secrets.
-Only Agent receives the Anthropic key in its process environment.
-
-For an individual local component, keep its dependencies running and choose
-**Debug Local Agent API**, **Debug Local MCP Server**, etc. These launch profiles
-start a new process; stop an existing process on that port first. They do not
-start dependencies themselves. The same launchers work without VS Code, using
-separate terminals in this order:
+Prepare dependencies above. From the repository root, check prerequisites:
 
 ```powershell
+.\.venv\Scripts\python.exe scripts/check_local.py
+```
+
+Open **four separate PowerShell terminals at the repository root**, one command per terminal, in this order. Keep them running:
+
+```powershell
+# Terminal 1
 .\.venv\Scripts\python.exe scripts/local_service.py cards
+```
+
+```powershell
+# Terminal 2
 .\.venv\Scripts\python.exe scripts/local_service.py mcp
+```
+
+```powershell
+# Terminal 3
 .\.venv\Scripts\python.exe scripts/local_service.py agent
+```
+
+```powershell
+# Terminal 4
 .\.venv\Scripts\python.exe scripts/local_service.py experience
 ```
 
-Start frontend in a fifth terminal:
+In a **fifth terminal**, start Vite:
 
 ```powershell
 $env:EXPERIENCE_PROXY_TARGET = 'http://127.0.0.1:8020'
 Set-Location frontend
-npm run dev:local
+npm.cmd run dev:local
 ```
 
-Select **Debug Local Frontend** to debug that already running local Vite server.
-The local compound owns the frontend background task, not its process lifetime:
-when stopping local mode, stop Python/Chrome sessions with the red Stop button,
-then **Tasks: Terminate Task ? Start Local Frontend** (or Ctrl+C in its terminal).
-Stop native Keycloak with Ctrl+C separately. Docker shutdown commands do not stop
-native Python/Node processes. To return to Docker, release local ports first,
-then run `scripts/stack.ps1 -Build` or choose the Docker compound.
+Wait for startup, then open **http://localhost:8080**. No debugger is attached. Python launchers wait for Identity and their downstream dependencies. Stop these terminal-run services before launching another copy through F5.
 
-## Sign in and follow a request through the stack
+### Debug locally from VS Code
 
-Use username `alex.synthetic` and `DEMO_PASSWORD` from `.env.stack` (not your
-Windows/OpenAI password). Start a conversation and type **I would like a new
-card**. Claude selects the registered action. Complete its private form with
-synthetic given name `Alex` and the masked account ending `5678`, review, confirm.
+1. Stop terminal-run Python/Vite processes and conflicting Docker application containers. Leave the selected dependencies running.
+2. Open the repository root; select `.venv/Scripts/python.exe` with **Python: Select Interpreter**.
+3. Select **Debug Full Stack (Local)** in **Run and Debug** and press **F5**.
+4. Preparation starts missing local infrastructure, validates prerequisites/free ports and starts Vite.
+5. VS Code launches four native Python debuggers; the dependency chain is Cards → MCP → Agent → Experience.
+6. **Wait for Local HTTP** checks readiness alongside those launches. Chrome opens at `http://localhost:8080` when endpoints are ready.
+7. Set breakpoints in local source and trigger an action. For model-provider breakpoints, select Anthropic and send a chat intent; direct buttons/forms intentionally bypass the model.
 
-Useful breakpoints, in request order:
+Individual **Debug Local Experience API**, **Debug Local Agent API**, **Debug Local MCP Server** and **Debug Local Cards API** profiles launch only that process; dependencies must already run. The browser-only **Debug Local Frontend** profile is hidden from the normal picker because it does not start the app. Use local launch profiles, not Docker **Attach to...** profiles, for native execution.
 
-1. React `submit` in `frontend/src/main.tsx`.
-2. Experience `message` / `forward` in `src/card_chat/experience.py`.
-3. Agent `interpret_turn` in `agent.py`, then `message` in `main.py`.
-4. React `supply` and Agent `structured` for private details (no model call).
-5. React `confirm`, then Agent `confirm` / `execute` for stored approval.
-6. MCP `call_tool` / `execute` in `mcp_server.py`.
-7. Cards `create_card` in `src/card_servicing/cards.py` before `create_idempotent`.
+Do not choose **Debug Anyway** after a failed prerequisite: it only skips the check and can open a browser against an unavailable server. Inspect the named task/service terminal. `KeyboardInterrupt` means a wait/process was interrupted; the startup message immediately before it identifies the awaited dependency. Loopback readiness requests bypass HTTP proxies.
 
-Cards writes only after confirmation. Long debugger pauses can trigger the
-10-second downstream or 120-second outer HTTP timeout. Continue the paused
-request and use the supported retry; the saved execution key prevents another
-card. Do not start a new card request to recover an uncertain outcome.
+### Ports, persistence and shutdown
 
-## Checks and troubleshooting
+| Component | Native endpoint | Purpose |
+| --- | --- | --- |
+| Frontend | `http://localhost:8080` | Banking UI; proxies `/api` and `/auth` to Experience |
+| Identity | `http://localhost:8081/realms/cards` | OIDC issuer |
+| Cards | `http://127.0.0.1:8010/health/ready` | Banking API readiness |
+| MCP | `http://127.0.0.1:8030/health` | HTTP tool service |
+| Agent | `http://127.0.0.1:8021/health` | Conversation/orchestration |
+| Experience | `http://127.0.0.1:8020/health` | Session/BFF; not the banking UI |
+| Mongo | `127.0.0.1:27018` by default | Diagnostics; unnecessary with `stdout`/`none` |
+
+Native files `data/local/cards.db`, `agent.db` and `sessions.db` are created automatically. Save and restart the affected Python debug session after edits; no image build is needed. Vite serves frontend edits during development.
+
+**Shift+F5** stops the compound's Python/browser sessions. Then stop **Start Local Frontend** with its Terminal trash-can button or **Tasks: Terminate Task**; that background task may remain running. For terminal execution, press Ctrl+C in each application terminal. Stop native Keycloak separately. Docker shutdown commands do not stop native Python/Node processes.
+
+## Switch between modes
+
+| Direction | Steps |
+| --- | --- |
+| Native → Docker | Stop native debuggers/terminal processes **and Vite**, freeing 8080. Keep existing Docker dependencies. Stop conflicting native Identity/Mongo services or resolve published-port conflicts. Select **Debug Full Stack (Docker)** and F5, or run `stack.ps1 -Build` |
+| Docker → native | Disconnect Docker debuggers; stop `frontend experience agent mcp cards` with the native-section Compose command. Keep Docker dependencies if desired. Select **Debug Full Stack (Local)** and F5, or use the five-terminal instructions |
+
+SQLite state is separate in the two modes. Register/log in again after switching; use the same `localhost` browser URL. A native Keycloak installation also has a separate Identity store from Docker. Preserve the corresponding realm credentials/signing keys.
+
+## Customer journey and verification
+
+1. Open `http://localhost:8080`. Select **Register / Sign up**, or type **I want to register**. Use synthetic details: username starts with a letter, 3-64 letters/numbers/`_`/`.`/`-`; password 10-128 characters.
+2. Select **View my accounts**. An empty list offers **Create account**. Create a `savings` or `transaction` account, optionally request a card, review and confirm.
+3. Select **View my cards**. An ordinary repeat returns the existing card. To intentionally create another, select the additional-card option in a fresh workflow and confirm.
+4. Sign out/in and verify persistence. Register a second synthetic customer and verify isolated lists.
+
+The optional **OIDC sign in** retains original demo identities `alex.synthetic`/`sam.synthetic` with `DEMO_PASSWORD` from `.env.stack`. They are distinct from customers registered in SQLite. Credentials/private identifiers belong in secure forms, not chat.
+
+Useful breakpoints: React `submit`/`supply`/`confirm`; Experience `forward`; Agent `interpret_turn`, `structured`, `confirm`/`execute`; MCP `call_tool`/`execute`; Cards `issue_card`/`create_card`; SQLite `issue_idempotent`. Forms/confirmation bypass the model. Debugger pauses may exceed HTTP timeouts: continue and retry the same submission, retaining its durable operation key.
+
+Automated checks from the repository root need no running Docker stack:
 
 ```powershell
 .\.venv\Scripts\python.exe -m pytest -q
 .\.venv\Scripts\python.exe scripts/export_cards_openapi.py --check
 .\.venv\Scripts\python.exe scripts/render_chat_diagrams.py --check
-# With the chosen stack running on browser port 8080:
-.\.venv\Scripts\python.exe scripts/smoke_stack.py
+Push-Location frontend
+npm.cmd ci
+npm.cmd run build
+Pop-Location
 ```
 
-- **Port in use:** stop the other deployment mode and any old local Vite task.
-- **Local npm not found:** install Node on Windows and restart VS Code. Docker's Node installation does not supply host npm.
-- **Identity unavailable:** start the selected Keycloak instance and verify `/realms/cards/.well-known/openid-configuration` on 8081.
-- **Local Agent waits:** check Cards/MCP terminals and continue startup breakpoints. No MCP child process or stdio is used.
-- **Unbound Docker breakpoint:** rebuild the image; maps are workspace `src` ? `/app/src`.
-- **Unbound local breakpoint:** use the workspace venv and native launch profile, not a Docker attach profile.
-- **No natural-language interpretation:** check `STACK_MODEL_PROVIDER=anthropic` and key/model settings. Stub mode uses the manual fallback.
+Frontend checks need host Node/npm; Docker-only users can build the frontend image instead. With Mongo running, `.\.venv\Scripts\python.exe scripts/check_mongo_logging.py` verifies synthetic log/trace delivery. `scripts/smoke_stack.py` is the original OIDC smoke and needs the chosen stack running at 8080.
 
-Verified: 147 automated tests passed; four native Windows Python services started
-and served health checks, and authenticated native Agent ? remote HTTP MCP ?
-Cards creation succeeded with zero model calls, using the existing Keycloak
-container. Only smoke-test child processes were stopped afterward; the Docker
-application was left unchanged. Interactive VS Code compound/browser checks and a fully native
-Keycloak installation remain manual verification steps; host Node availability
-is checked explicitly before attempting local launch.
+Verification scope: automated tests cover authentication, ownership, direct/conversational workflows, confirmation, concurrent duplicate prevention, replay, persistence and redaction. Native VS Code full-stack launch, a live registration-form render, and Mongo queue-to-container delivery have been verified. Fully native Keycloak/Mongo installation remains an optional path not end-to-end verified here. Verify the full Docker debug launch in your Docker Desktop environment after building. Automated tests do not require live hosted-Claude calls.
 
-Further detail: [HTTP/security architecture](docs/http-stack.md),
-[model privacy/caching/usage](docs/model-privacy.md),
-[verification history](docs/http-stack-verification.md),
-[OpenAPI contract](docs/cards.openapi.json). Redis, RabbitMQ and MongoDB are
-optional legacy infrastructure, not required by the current HTTP application.
+## Troubleshooting
+
+| Symptom | Action |
+| --- | --- |
+| UI cannot be reached | Check the selected full-stack profile, frontend and Identity health. npm alone does not start the app. Use 8080, not internal 8000 or BFF 8020 |
+| Waiting for local HTTP | Inspect **Start Local Infrastructure**, **Check Local Prerequisites**, **Start Local Frontend** and the Python terminals; continue startup breakpoints. Do not skip failures with Debug Anyway |
+| `KeyboardInterrupt` connecting | The process was stopped while waiting. Read the preceding awaited URL and start/check that dependency |
+| npm missing | Install host Node/npm and fully restart VS Code. Verify `node --version`, `npm.cmd --version`; Docker's Node does not supply host npm |
+| PowerShell blocks npm | Use `npm.cmd`. For repository `.ps1` scripts, follow your machine's policy; Python equivalents such as `scripts/setup_stack.py` are available |
+| Port in use | Stop the other mode and leftover Vite tasks. Do not run native/Docker dependencies on the same ports |
+| Docker CLI missing | Install/start Docker Desktop, restart terminal. Repository wrappers check standard paths; direct Compose commands need Docker on PATH |
+| Identity unavailable | Verify discovery on 8081 and imported realm credentials. Imports do not overwrite existing realms; reconcile older demo service scopes with `scripts/sync_identity_scopes.py` when needed |
+| Mongo logs missing | Check sink, credentials, host/port, `authSource=admin` and database/index permissions. Mongo stores diagnostics, not accounts/cards |
+| SQLite import fails | Use a Python distribution with `sqlite3`. Installing a SQLite server/viewer cannot fix the missing Python module |
+| Docker breakpoint unbound | Rebuild the debug image and use attach profiles; mapping is local `src` → `/app/src` |
+| Native breakpoint unbound | Use the workspace interpreter and local launch profile, not a Docker attach profile |
+| Limited chat interpretation | Stub supports a few common intents. Configure Anthropic plus a valid key/model for hosted interpretation |
+
+## Further documentation
+
+- [HTTP/security architecture](docs/http-stack.md), [architecture overview](docs/architecture.md)
+- [Customer banking](docs/customer-banking.md), [card issuance](docs/card-issuance.md)
+- [Mongo logging](docs/mongodb-logging.md), [SQLite persistence](docs/card-persistence.md)
+- [Tool catalogue](docs/tool-catalogue.md), [end-to-end trace](docs/chat-end-to-end.md)
+- [Docker debugging](docs/docker-debugging.md), [diagram viewer](docs/diagrams/index.html)
+
+Use `compose.yaml` plus optional `compose.debug.yaml` for the current application. `compose.infra.yaml`, `compose.api.yaml` and [legacy host setup](docs/legacy-host-setup.md) describe earlier API-only learning configurations. Redis/RabbitMQ from that earlier stack are not required by the current banking flow. Do not infer current VS Code profile names from historical guides.

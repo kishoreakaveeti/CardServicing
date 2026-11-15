@@ -1,14 +1,14 @@
-# Local infrastructure
+# Historical API-only infrastructure reference
 
 The current application uses [the HTTP stack](http-stack.md) in `compose.yaml`.
 The earlier infrastructure configuration described below is preserved in
 `compose.infra.yaml`; include `-f compose.infra.yaml` in its Compose commands.
 The HTTP stack uses its own project name and volumes, preserving legacy data.
 
-For a first full chat/API run, use [the README quick start](../README.md) and the
-VS Code **Debug Chat + API** compound. `TELEMETRY_SINK=stdout` works without these
-Docker services. This guide covers the optional Mongo/Redis/RabbitMQ setup and
-data viewers; it is not a prerequisite for that stdout quick start.
+For current full-stack run/debug steps use [README](../README.md). The examples
+below belong to the earlier API-only infrastructure lab; profile names such as
+Debug Chat + API and Attach to Docker API are no longer shipped. Do not use those
+examples as a current startup runbook. Redis/RabbitMQ and database viewers are optional.
 
 The API now selects its telemetry sink at startup. The existing Mongo setup is
 the default. For stdout/none with Mongo stopped, use the
@@ -144,7 +144,7 @@ against the shared SQLite file at the same time.
 To debug the full host chat flow instead of Swagger alone, stop the manual API,
 select **Debug Chat + API**, and open `http://127.0.0.1:8020` after both sessions
 start. Keep `CARD_API_BASE_URL=http://127.0.0.1:8010` for that mode. See
-[chat debugging](chat-demo.md#vs-code-debugging).
+[chat debugging](../README.md#2-run-and-debug-natively-on-your-computer).
 
 ### RabbitMQ management
 

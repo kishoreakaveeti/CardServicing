@@ -159,7 +159,7 @@ exceed the ten-second client timeout; resume and retry the same confirmed
 create-card submission. Do not restart chat to recover an uncertain write: its
 submission key is in memory.
 
-Debug configurations are custom names in [.vscode/launch.json](.vscode/launch.json):
+Debug configurations are custom names in [.vscode/launch.json](../.vscode/launch.json):
 
 | Configuration | Behavior |
 | --- | --- |
@@ -295,7 +295,7 @@ The `/items` routes remain simple API learning examples.
 
 ## Catalogue, diagrams and CI
 
-The versioned [tool catalogue](src/card_chat/tools.json) references stable OpenAPI
+The versioned [tool catalogue](../src/card_chat/tools.json) references stable OpenAPI
 operation IDs. Claude selects from discovered tools, asks questions, and proposes
 one action. The workflow validates and requires confirmation before a write.
 For supported JSON-body/path-parameter operations, adding an entry and restarting
@@ -315,7 +315,7 @@ python scripts/export_cards_openapi.py
 python scripts/render_chat_diagrams.py
 ```
 
-[GitHub Actions CI](.github/workflows/ci.yml) runs on pushes and pull requests:
+[GitHub Actions CI](../.github/workflows/ci.yml) runs on pushes and pull requests:
 install dependencies, run pytest, check OpenAPI freshness, then check SVG freshness
 and code references. It does not rewrite Markdown/SVGs, deploy, or make live Claude
 calls. Commit updated sources and generated artifacts together.

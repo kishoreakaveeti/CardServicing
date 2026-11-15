@@ -1,176 +1,56 @@
-# Run and debug the API in Docker
+# Debug the full application in Docker
 
-For the current five-component application use [HTTP stack debugging](http-stack.md#debug-one-component-or-all-components).
-`Debug Full Stack` and the individual attach configurations replace the old
-host/chat launches. The older API-only walkthrough below is retained as context;
-its `-DebugApi` switch is superseded by `stack.ps1 -DebugComponent Cards`.
+The authoritative installation and launch instructions are in [README: Docker containers](../README.md#1-run-and-debug-using-local-docker-containers). For native execution use [README: native mode](../README.md#2-run-and-debug-natively-on-your-computer). This guide covers the current full stack, not the archived API-only scripts.
 
-The API has its own image. MongoDB, Redis, and RabbitMQ keep their separate images;
-Compose connects them. SQLite is mounted from `./data` to `/data`, so DB Browser
-still opens `data/cards.db` on Windows. Stop the host **Debug API** session before
-switching to container development to avoid running different code versions against
-the same database. Keep Docker Desktop running.
+## Prerequisites
 
-For the simpler full application setup, use [the README](../README.md): the
-**Debug Chat + API** compound launches both host processes. This Docker guide is
-an alternative API execution mode, not an additional API to start alongside it.
+Complete README shared setup: host Python/venv and generated credentials, Docker Desktop running Linux containers, VS Code Python/Python Debugger extensions, and Chrome for the browser profile. Host Node/npm, MongoDB Community Server, SQLite server/CLI, JDK and native Keycloak installations are unnecessary for Docker mode. Compose provides runtimes, Mongo and Identity; Python includes SQLite support. Compass is optional.
 
-## Start the container and attach VS Code
+## Switch from native mode
 
-From PowerShell at the project root:
+1. Stop local debug sessions with Shift+F5.
+2. Stop the **Start Local Frontend** task with its Terminal trash-can button or Tasks: Terminate Task. It can retain port 8080 after the debug session ends.
+3. Resolve any native Identity/Mongo server using Docker's published ports. Existing Docker dependencies may stay running.
 
-```powershell
-.\scripts\start-docker-api.ps1 -DebugApi -Build
-```
+## Start and attach
 
-The script finds Docker even when it is not on PATH, builds the image, starts the
-API and its MongoDB dependency, and waits for health checks. Run
-`scripts/setup-infra.ps1` first if `.env` does not exist. Existing Redis/RabbitMQ
-containers can stay running; card processing does not use them yet.
+Select **Debug Full Stack (Docker)** in Run and Debug and press F5. Its shared task builds/starts debug containers, waits for health/listeners, attaches four Python debuggers and opens Chrome at `http://localhost:8080`. You do not need a separate start command before this profile. **Debug Full Stack** is an alias.
 
-For stdout telemetry without Mongo dependencies, select
-`scripts/start-docker-api.ps1 -Standalone -DebugApi -Build` and set
-`TELEMETRY_SINK=stdout`; see [adapter configuration](infrastructure-adapters.md).
-If `.env` already exists from the stdout quick start, infrastructure setup preserves
-it: replace `GENERATE_ME` passwords before using the default Mongo mode.
-
-1. Open `src/card_servicing/cards.py` and set a breakpoint on
-   `card, replayed = store.create_idempotent(instruction, idempotency_key)`.
-2. Open **Run and Debug** (**Ctrl+Shift+D**), choose **Attach to Docker API**, and
-   press **F5**. This attaches to the running container; **Debug API** launches
-   the separate Windows-host process.
-3. Open **<http://127.0.0.1:8011/docs>** and refresh it if already open.
-4. Expand **POST /cards**, select **Try it out**, enter a fresh
-   **Idempotency-Key** such as `docker-debug-001`, and execute:
-
-```json
-{
-  "user_name": "alex.smith",
-  "given_name": "Alex",
-  "account_number": "0012345678"
-}
-```
-
-The browser waits while VS Code pauses. Inspect `instruction` and
-`idempotency_key`. **F11** steps into the SQLite store, **F10** steps over a line,
-and **F5** continues so Swagger receives the response. Reusing the same key
-exercises replay. Disconnecting VS Code leaves the container running.
-
-## Debug chat against the container API
-
-1. Install the host chat dependencies from the README and configure the model/key
-   in ignored `.env`.
-2. Set `CARD_API_BASE_URL=http://127.0.0.1:8011` there.
-3. Start the debug container as above, then **Attach to Docker API**.
-4. Start **Debug Chat** as a second debugger session and wait for startup.
-5. Open `http://127.0.0.1:8020`, answer the questions and confirm the action.
-6. Chat breakpoints handle each message; the attached API breakpoint fires after
-   confirmation. Use CALL STACK to select either session.
-
-Do not select **Debug Chat + API** for this container mode: it also starts a host
-API on 8010 using the same SQLite file. That compound is for the host-only path.
-Stop **Debug Chat** with its red Stop button. Disconnect the container debugger,
-then run `docker compose stop api` to stop the API container. Closing the browser
-does not stop either application. Set the destination back to 8010 and stop the
-container before returning to the host compound.
-
-| Connection | Address |
-| --- | --- |
-| Container Swagger UI | <http://127.0.0.1:8011/docs> |
-| Container liveness | <http://127.0.0.1:8011/health/live> (`/health` is an alias) |
-| Card readiness | <http://127.0.0.1:8011/health/ready> |
-| Container OpenAPI | <http://127.0.0.1:8011/openapi.json> |
-| VS Code attach | `127.0.0.1:5679` |
-| Optional Windows-host API | `127.0.0.1:8010` |
-
-The container listens on `0.0.0.0:8000` internally, published to host port 8011.
-Use `API_PORT` to change the published API port if needed. MongoDB connections use
-the Compose hostname `mongodb`, rather than `127.0.0.1`, which inside a container
-would point back to that container.
-
-The debugger starts without waiting for attachment, so Swagger and health checks
-work immediately. It runs one worker without reload for predictable stepping.
-Long breakpoint pauses can cause browser/health-check timeouts; continue and retry
-the same card key if necessary. Compose checks card readiness; see
-[Health checks](health-checks.md) for the distinction and probe limitations.
-
-## Source mappings and rebuilds
-
-VS Code maps `${workspaceFolder}/src` to `/app/src`. The image contains a source
-snapshot, without a live source mount. After editing code, disconnect, run the
-startup command with **-Build**, and attach again. This preserves SQLite data.
-Hollow breakpoints generally mean a stale image or an incorrect source mapping.
-
-Equivalent commands when `docker` is available on PATH:
+For manual preparation, run:
 
 ```powershell
-docker compose -f compose.yaml -f compose.debug.yaml up -d --build --wait api
-docker compose logs --tail 50 api
-docker compose stop api
+.\scripts\stack.ps1 -DebugComponent All -Build
 ```
 
-The API has an opt-in profile so the existing infrastructure setup remains usable
-for host debugging. Explicitly targeting `api` starts it without a profile flag.
+Then select the full Docker profile or individual attach profiles. The full profile reuses prepared services. Individual attach configurations do not start containers.
 
-To stop and start the full existing stack while preserving its configured debug
-or normal startup mode:
+| Profile | Host port | Source mapping |
+| --- | --- | --- |
+| Attach to Experience API | 5681 | workspace `src` to `/app/src` |
+| Attach to Agent API | 5682 | Same |
+| Attach to MCP Server | 5683 | Same |
+| Attach to Cards API | 5684 | Same |
+
+For only Agent, run `stack.ps1 -DebugComponent Agent -Build`, then select **Attach to Agent API**. Use `Experience`, `MCP` or `Cards` similarly. **Debug Frontend** opens a browser against an already running frontend.
+
+## Trigger and inspect a request
+
+Use the customer journey in README. Set a breakpoint in Agent `interpret_turn` for a chat intent; direct selections/private forms intentionally bypass it. For confirmed issuance, use MCP `execute`, Cards `issue_card`/`create_card`, or SQLite `issue_idempotent`. The optional additional-card flag must appear in the review before another card is created. Existing-card requests report that no new card was created.
+
+Normal debug startup does not wait for attachment before HTTP starts. For Agent/MCP startup/discovery breakpoints, first prepare a healthy debug stack, then run:
 
 ```powershell
-docker compose --profile api stop
-docker compose --profile api start
+.\scripts\stack.ps1 -DebugComponent MCP -Build -WaitForDebugger
 ```
 
-`start` does not rebuild or recreate containers. To create/update all four services
-in debug mode, use
-`docker compose -f compose.yaml -f compose.debug.yaml --profile api up -d --build --wait`.
-The profile selects the API in addition to the three default infrastructure
-services; the debug override selects the debugger command. See the full
-[daily command reference](local-infrastructure.md#daily-commands).
+Attach using **Attach to MCP Server** and continue. This special command starts only the chosen service with `--no-deps`, so dependencies must already run. Use `Agent` similarly.
 
-## Use the same image without a debugger
+## Mongo, persistence and stopping
 
-The Dockerfile's normal command runs Uvicorn without a debugger listener.
-`compose.debug.yaml` overrides the command to launch through debugpy and publishes
-5679 on localhost only. debugpy is included in the image but inactive during normal
-startup. Keep that override local: debugger access permits executing code.
+Mongo starts automatically from `mongo:8.0`; no Windows Mongo server installation is needed. Setting `TELEMETRY_SINK=stdout` or `none` changes logging but the current full Compose stack still starts its configured Mongo container. To run with no Mongo instance, use native application mode with console/disabled telemetry. See [Mongo logging](mongodb-logging.md).
 
-To switch the already built image to normal execution:
+Cards, Agent and Experience SQLite databases live in separate Docker named volumes. Native `data/local/` databases are separate; a native customer will not automatically exist in Docker. Do not expect DB Browser to open a Docker database at the native filesystem path.
 
-```powershell
-docker compose -f compose.yaml up -d --no-build --wait api
-```
+After source edits, disconnect and relaunch the Docker profile to rebuild images. Restarting an old image does not include changed code. Shift+F5 disconnects debuggers but leaves containers running. Use `stack.ps1 -Stop` to remove containers/network while retaining volumes. Never remove volumes merely to resolve a debugger problem.
 
-Swagger remains on port 8011; port 5679 is no longer published. For another debug
-session, run `scripts/start-docker-api.ps1 -DebugApi` and attach again.
-
-Build once with a release tag, then promote that existing image rather than
-rebuilding for each environment:
-
-```powershell
-docker build -t card-servicing:release-001 .
-docker image save --output card-servicing-release-001.tar card-servicing:release-001
-```
-
-Transfer and load it elsewhere with
-`docker image load --input card-servicing-release-001.tar`, or use a registry and deploy by
-immutable digest. With this local Compose file, set `API_IMAGE_TAG=release-001` and
-start with `--no-build`. Each environment supplies configuration, secrets, storage,
-networking, and its own deployment definition. The local bind mount and development
-credentials are not production configuration.
-
-`.dockerignore` allowlists inputs and excludes `.env`, databases, Windows `.venv`,
-Git metadata, and generated caches. The API runs as non-root. Base image tags and
-dependency ranges are not a lockfile: promoting the existing image preserves its
-installed versions; rebuilding later can change them. Authentication, production
-encryption, and SQLite scaling limits remain separate learning topics. Basic
-liveness/readiness endpoints are implemented; deployment probe policies still
-need to be selected for each environment.
-
-Verified for this project: image build, healthy debug-mode container, HTTP card
-creation, retry replay, conflicts, persistence across container restart, and live
-MongoDB logs/traces. VS Code attachment and interactive breakpoint stepping remain
-manual checks; the launch configuration and source mappings are provided.
-
-References: [VS Code Python remote debugging](https://code.visualstudio.com/docs/python/debugging),
-[Compose profiles](https://docs.docker.com/compose/how-tos/profiles/), and
-[dependency health checks](https://docs.docker.com/compose/how-tos/startup-order/).
+Older `Debug Chat + API`, `Debug API`, `Debug Chat` and `Attach to Docker API` profile names are no longer shipped. Their historical commands are not a current full-stack launch path.

@@ -16,7 +16,8 @@ ROUTES = (
 
 def responding(url):
     try:
-        with urllib.request.urlopen(url, timeout=0.5) as response:
+        opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+        with opener.open(url, timeout=0.5) as response:
             return response.status == 200
     except (urllib.error.URLError, OSError):
         return False
@@ -39,7 +40,7 @@ def wait_for_routes(routes=ROUTES, timeout=90):
             endpoints = '\n'.join(f'  {name}: {url}' for name, url in missing)
             raise RuntimeError('Local stack is not ready:\n' + endpoints +
                 '\nCheck the corresponding debug terminals for startup errors.' +
-                '\nStart the external Identity service first, then select Debug Full Stack (Local).' +
+                '\nCheck Start Local Infrastructure, then select Debug Full Stack (Local).' +
                 '\nDebug Anyway only opens a browser; it cannot start the missing services.')
         time.sleep(0.3)
 

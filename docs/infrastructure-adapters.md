@@ -1,5 +1,7 @@
 # Startup-selected infrastructure adapters
 
+Current run/debug prerequisites and commands are in [README](../README.md). Adapter-specific API-only experiments below are separate from the full banking stack; use the current full-stack profiles in README. SQLite comes through Python; Mongo is optional when console/disabled telemetry is selected.
+
 The [customer banking extension](customer-banking.md) composes a SQLite BankingService alongside the existing card store; card generation and retry snapshots still use CardStorePort. Banking routes require the SQLite adapter; isolated memory-card factories return 503 for banking. Schema version 3 is additive and preserves version 1 cards and idempotency records.
 
 The same API build can use MongoDB, structured stdout, or no telemetry. SQLite
@@ -187,7 +189,8 @@ docker compose -f compose.api.yaml logs --tail 20 api
 ```
 
 `-Standalone` selects the independent Compose file. `-DebugApi` can also be used
-with it for the existing Attach to Docker API configuration. You can substitute
+with it for a manually configured API-only debugger. That old named attach profile is
+not shipped; use the README full-stack Docker profiles for current application debugging. You can substitute
 `none` for `stdout`. Because the standalone file defaults to stdout but Compose
 reads `.env`, explicitly set the shell variable when `.env` contains mongo.
 

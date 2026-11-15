@@ -1,70 +1,44 @@
 # Independent HTTP stack
 
+Native local F5 startup now prepares missing Identity/MongoDB Docker dependencies before launching Vite and the four Python debuggers. See the local launch section in [README](../README.md).
+
 Card issuance outcomes now distinguish created, already-existing and explicitly additional cards across both HTTP paths. See [card issuance](card-issuance.md).
 
 The stack also supports local customer registration/password login alongside the existing OIDC demo login. See [Customer banking](customer-banking.md) for the complete journey, service-token policy for BFF banking calls, new routes and database ownership checks. Banking direct-selection buttons bypass the LLM and reuse the existing reviewed tool workflow.
 
 The current path is React/TypeScript → Experience FastAPI → Agent FastAPI →
 remote MCP Streamable HTTP → Cards FastAPI. Agent alone calls Anthropic over
-HTTPS. Five application containers and a sixth Keycloak container have separate
-entry points, health checks and Compose service names. Only frontend 8080 and
-Keycloak 8081 are published in normal mode, both on loopback. No MCP child
+HTTPS. Five application containers plus Keycloak and MongoDB have separate
+entry points, health checks and Compose service names. Frontend 8080,
+Keycloak 8081 and Mongo host port 27018 are published on loopback in normal mode. No MCP child
 process or stdio transport exists in the application flow.
 
 The [HTTP identity and jobs diagram](diagrams/06-http-auth-and-jobs.svg) shows
 the complete stack; the other generated diagrams follow individual workflow steps.
 
-## Windows quick start
+## Run and debug
 
-Prerequisites: Docker Desktop using Linux containers, PowerShell, Python 3.10+
-and the VS Code Python Debugger and JavaScript Debugger extensions. Host Node is
-optional; frontend builds and type checks run in Docker with Node 22.
+[README](../README.md) is the authoritative startup guide. Its two complete paths are:
 
-```powershell
-python -m venv .venv
-.\.venv\Scripts\python.exe -m pip install -e '.[dev,chat,infra]'
-.\scripts\setup-stack.ps1
-.\scripts\stack.ps1 -Build
-```
+- [Docker containers](../README.md#1-run-and-debug-using-local-docker-containers): prerequisites,
+  shared configuration, normal run, full-stack debug/individual attach, rebuild and stop.
+- [Native application](../README.md#2-run-and-debug-natively-on-your-computer): Node/npm,
+  dependency preparation, terminal-only execution, native F5, ports and shutdown.
 
-Setup is idempotent: it preserves existing credentials and signing keys. It
-generates ignored `.env.stack` and `data/identity/{realm.json,delegation-*.pem}`.
-The realm imports at first Keycloak startup; subsequent imports do not overwrite
-an existing realm. `scripts/sync_identity_scopes.py` reconciles demo service
-scopes if upgrading an earlier local realm. Keep `.env.stack`, the key pair and
-the Keycloak volume together. Existing root `.env` is preserved and read for
-model configuration. No secret is printed by setup or copied into images.
+Docker provides Mongo and Identity; no host Mongo server, SQLite server, JDK or
+Node is required for that path. Native mode can use Docker dependencies, native
+services, or console logging without Mongo. Identity remains required in both modes.
+See README for native Mongo credentials and a no-Docker Keycloak option.
 
-Open **http://localhost:8080** (use `localhost`, not `127.0.0.1` for OIDC).
-Sign in with `alex.synthetic` or `sam.synthetic` and the `DEMO_PASSWORD` value
-in `.env.stack`. With `STACK_MODEL_PROVIDER=anthropic`, click **Start conversation**
-and type **"I would like a new card"**. Claude identifies the permitted action
-and the UI opens its matching private-details form. Enter the synthetic given
-name `Alex`, choose the masked account ending `5678`, then
-click **Review action** and **Create card**. The username is supplied from verified
-identity; the actual account value stays server-side. Do not paste private values into
-chat. Sam's masked account ends `5432`; a signed-in Sam cannot use Alex's scoped
-reference. Intent interpretation uses a model call; completing the private form,
-review, confirmation and safe retry make no additional model calls. The secondary
-**Choose an action manually** panel retains the complete zero-model path.
-Default `STACK_MODEL_PROVIDER=stub` is an
-explicit test adapter; it does not provide natural-language understanding.
-For Claude, set `STACK_MODEL_PROVIDER=anthropic` in `.env.stack` and set
-`ANTHROPIC_API_KEY` and `MODEL_ID` in ignored `.env`, then rerun startup. Only
-Agent receives the Anthropic key. Model selection remains behind `Model.turn`.
-See [private inputs, model context, caching and usage](model-privacy.md).
+Both modes use `http://localhost:8080` as the UI. Container port 8000 and native
+Experience port 8020 are not the banking UI. The default model stub requires no
+API key and handles only common deterministic intents. For Claude, configure
+`STACK_MODEL_PROVIDER=anthropic` plus a valid key/model as shown in README.
 
-```powershell
-# Stop and remove this stack's containers/network; keep all persistent volumes.
-.\scripts\stack.ps1 -Stop
-# Rebuild/recreate just one component; other components keep running.
-docker compose --env-file .env --env-file .env.stack up -d --build --no-deps agent
-# The script finds Docker Desktop even when docker is absent from PATH.
-```
-
-`compose.infra.yaml` retains the earlier Mongo/Redis/RabbitMQ/API stack under its
-original project name. `compose.api.yaml` retains the standalone learning API.
-Those legacy modes are separate from the authenticated HTTP stack.
+Use `compose.yaml` and optional `compose.debug.yaml` for the full stack. Earlier
+`compose.infra.yaml`/`compose.api.yaml` examples are API-only learning setups with
+separate project names/volumes. Do not mix their ports or removed profile names
+into the current full-stack instructions.
 
 ## Contract and durable workflow
 

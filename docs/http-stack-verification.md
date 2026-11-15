@@ -1,5 +1,7 @@
 # HTTP stack verification — 15 November 2026
 
+This is a historical record of earlier verification runs, not the current setup guide or a statement of current test counts/configuration. Use [README](../README.md) for the supported Docker/native startup paths and current behavior.
+
 ## Chat-first follow-up
 
 The main interaction is now free text. A model proposal can identify a tool with

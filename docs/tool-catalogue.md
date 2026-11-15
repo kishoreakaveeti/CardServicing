@@ -8,8 +8,8 @@ The tool catalogue is [src/card_chat/tools.json](../src/card_chat/tools.json).
 It is versioned JSON, compiled against a local OpenAPI 3.1.0 document at chat/MCP
 startup. Adding a supported REST operation needs a catalogue entry and restart;
 there is no MCP Python function, intent table, agent branch or browser branch per
-operation. The only production entry today is `create_card`. Blocking exists only
-in the integration-test fixture.
+operation. The production catalogue includes the five card/account operations listed above.
+Blocking exists only in the integration-test fixture.
 
 ## Contract and registration
 
@@ -33,10 +33,10 @@ argument object. Path/body names must not collide. Headers are not model inputs.
 
 `mcp_server.create_server()` constructs the official SDK `Server`, registers
 `list_tools` and one shared `call_tool` handler, and lists only compiled catalogue
-entries. The child uses `stdio_server()`; it has no HTTP port. The gateway starts
-the child, initializes `ClientSession`, calls `list_tools()`, and verifies the
-discovered names/descriptions/schemas match the compiled catalogue. It no longer
-requires exactly one tool.
+entries. The server runs independently over Streamable HTTP (native port 8030). Gateway
+connects through HTTP, initializes `ClientSession`, calls `list_tools()` and verifies
+discovered names/descriptions/schemas against the compiled catalogue. It does not
+spawn a child or require exactly one tool.
 
 ## Add an entry
 
@@ -73,7 +73,7 @@ To add a real, already implemented supported endpoint:
 
    ```powershell
    python -m card_chat.catalogue
-   # Stop/restart Debug Chat, or its Uvicorn process.
+   # Restart the native Agent/MCP processes, or rebuild their Docker images.
    ```
 
 The catalogue defaults to `src/card_chat/tools.json`. Override
@@ -140,8 +140,8 @@ API boundary. No gateway-specific authentication has been added.
 
 `CardServicingAgent.interpret_turn(history, collected, allowed_tools)` calls the
 provider-neutral `Model.turn` once for each customer message. The Anthropic
-adapter sends the conversation, latest message (last history entry), previously
-validated collected details, and all discovered tool definitions. It uses
+adapter sends recent sanitized conversation, verified opaque draft references
+and eligible projected tool definitions. Raw private values and tool results are excluded. It uses
 `tool_choice={'type':'auto', 'disable_parallel_tool_use':True}`.
 
 There is no fixed intent enum, intent-to-tool table, `QUESTIONS` mapping, or forced
@@ -153,8 +153,8 @@ claims that a proposal has already executed.
 
 The workflow independently rejects unknown tools and invalid arguments. An
 incomplete proposed call is not executable: valid partial arguments are saved as
-collected context and a missing-field question is generated from schema/catalogue
-labels. A normal clarifying reply keeps context in the accumulated history; it
+private draft state and the matching secure form is opened from schema/catalogue
+metadata. A normal clarifying reply keeps context in the accumulated history; it
 does not run a separate extraction API. Every new message invalidates an earlier
 review, even if the model cannot interpret the correction.
 
@@ -170,43 +170,44 @@ The conversation lock serializes duplicate clicks. A confirmed replayable write
 gets one generated key and frozen argument snapshot. A failed/uncertain attempt
 can only retry those same values/key. A completed duplicate returns the cached
 result and makes no additional model, MCP or HTTP call. `create_card` still uses
-the API's unchanged SQLite transaction/fingerprint/saved-response behavior.
+the API's SQLite transaction/fingerprint/saved-response behavior plus the existing-card
+policy documented in [card issuance](card-issuance.md).
 
 Other writes without a safe-replay contract get at most one attempt per confirmed
 submission. On error or lost result the button is disabled, and further confirm
 requests do not execute again. The customer must check status rather than create
 another request blindly. No operation has an automatic HTTP retry loop.
 
-Conversation history, proposals, review tokens and submission keys remain in
-memory. Do not restart chat to retry an uncertain creation. API durable replay
-survives API restart, but chat recovery after losing its key is not implemented.
+Conversation history, private bindings, reviews, submissions and accepted jobs persist
+in the caller-owned Agent SQLite journal. Supported retries survive process restart.
+API snapshots independently provide durable replay; use the same reviewed request
+for an uncertain outcome rather than inventing another operation.
 
-## Local VS Code steps
+## Run and debug catalogue changes
+
+Use [README: Docker](../README.md#1-run-and-debug-using-local-docker-containers) or
+[README: native](../README.md#2-run-and-debug-natively-on-your-computer) for prerequisites,
+Mongo/console options, exact launch profiles and switching steps. The UI is
+`http://localhost:8080` in either mode. Set model/key in the ignored files described there.
 
 ```powershell
-.\.venv\Scripts\Activate.ps1
-python -m pip install -e ".[dev,infra,chat]"
-python scripts/export_cards_openapi.py --check
-python -m card_chat.catalogue
+.\.venv\Scripts\python.exe scripts/export_cards_openapi.py --check
+.\.venv\Scripts\python.exe -m card_chat.catalogue
 ```
 
-Keep the key/model in ignored `.env`; select Anthropic as before. For host
-debugging set `CARD_API_BASE_URL=http://127.0.0.1:8010`. Start Mongo, or set
-`TELEMETRY_SINK=stdout`. Stop old processes on 8010/8020, select **Debug Chat + API**,
-and wait for both applications to finish startup. Open `http://127.0.0.1:8020`.
-
-Enter "I want a new card", then supply synthetic answers separately or together.
-Expect model-generated questions, then a masked review and Create card button.
-Change a value and observe a fresh review. Click Create card for the actual
-reference; click again for the same cached reference. Unsupported blocking should
-receive an explanation: the production catalogue has no blocking tool.
+For native code, select **Debug Full Stack (Local)**; for containers, select
+**Debug Full Stack (Docker)**. Changing a catalogue requires restarting Agent/MCP
+locally or rebuilding/restarting their images so the schemas remain synchronized.
+Describe an intent, complete the private form, review and confirm. Do not collect
+private fields in chat. Ordinary issuance returns an existing card; explicit
+additional issuance requires the reviewed form choice.
 
 Useful breakpoints (use executable statements inside these functions):
 
 | Where | Inspect |
 | --- | --- |
 | `catalogue.load_catalogue` / `compile_entry` | Entry, OpenAPI operation, flattened schema |
-| `gateway.connect` after `session.list_tools()` | Every discovered definition |
+| `gateway.connect` after `connected.list_tools()` | Every discovered definition |
 | `main.message` at `c = get(cid)` | Latest text, conversation history, collected details |
 | `agent.interpret_turn` | All allowed tool definitions; no fixed action routing |
 | `provider.turn` after Messages returns | Text reply or Claude `tool_use`; `stop_reason` and usage |
@@ -214,11 +215,11 @@ Useful breakpoints (use executable statements inside these functions):
 | `main.message` at review token creation | Exact validated snapshot and masked labels |
 | `main.execute` at `gateway.execute` | Confirmed tool/arguments and execution-owned key; no model call |
 | `gateway.execute` at `session.call_tool` | Public arguments and separate execution metadata |
-| `cards.create_card` / `persistence.create_idempotent` | REST validation and atomic replay |
+| `cards.create_card` / `banking.issue_card` / `persistence.issue_idempotent` | REST validation and atomic replay |
 
-Chat has `subProcess:false` to avoid the previous MCP debugger-startup issue;
-MCP internals need a separate attach. Chat/agent/adapter and API breakpoints work
-in the existing compound debugger. Pausing HTTP longer than ten seconds can
+Native Python profiles use `subProcess:false`; MCP is an independent HTTP service.
+The local compound launches its debugger, while the Docker compound attaches to it.
+Agent/provider, MCP and Cards breakpoints work in their corresponding sessions. Pausing HTTP longer than ten seconds can
 trigger a timeout; resume and retry only when the contract supports it.
 
 ## Verification

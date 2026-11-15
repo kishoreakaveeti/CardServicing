@@ -32,6 +32,22 @@
       "problemMatcher": []
     },
     {
+      "label": "Start Local Infrastructure",
+      "type": "process",
+      "command": "${workspaceFolder}/.venv/Scripts/python.exe",
+      "args": [
+        "${workspaceFolder}/scripts/local_infrastructure.py"
+      ],
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated"
+      }
+    },
+    {
       "label": "Check Local Prerequisites",
       "type": "process",
       "command": "${workspaceFolder}/.venv/Scripts/python.exe",
@@ -79,6 +95,7 @@
       "label": "Prepare Local Stack",
       "dependsOrder": "sequence",
       "dependsOn": [
+        "Start Local Infrastructure",
         "Check Local Prerequisites",
         "Start Local Frontend"
       ],

@@ -4,6 +4,7 @@ import os
 from pathlib import Path
 import time
 import urllib.request
+from urllib.parse import urlsplit
 
 from dotenv import dotenv_values
 
@@ -54,9 +55,11 @@ def configure(component):
 
 def wait_for(url, timeout=180):
     deadline = time.monotonic() + timeout
+    opener = (urllib.request.build_opener(urllib.request.ProxyHandler({}))
+              if urlsplit(url).hostname in ('localhost', '127.0.0.1', '::1') else None)
     while time.monotonic() < deadline:
         try:
-            with urllib.request.urlopen(url, timeout=2) as response:
+            with (opener.open(url, timeout=2) if opener else urllib.request.urlopen(url, timeout=2)) as response:
                 if response.status == 200:
                     return
         except OSError:
@@ -81,4 +84,9 @@ def main():
 
 
 if __name__ == '__main__':
-    main()
+    try:
+        main()
+    except KeyboardInterrupt:
+        raise SystemExit('Local debug service stopped while starting or running.') from None
+    except RuntimeError as exc:
+        raise SystemExit(str(exc)) from None

@@ -12,7 +12,7 @@ For native VS Code application debugging, start the Docker dependencies without 
 docker compose --env-file .env --env-file .env.stack -f compose.yaml up -d --wait identity mongodb
 ```
 
-Then select **Debug Full Stack (Local)**. Native services use `127.0.0.1:27018` and honor `TELEMETRY_SINK`; they no longer force `none`. Set `LOCAL_MONGODB_HOST` or `MONGODB_HOST_PORT` if using different native destinations.
+Alternatively, select **Debug Full Stack (Local)** directly: its preparation task starts missing local Identity/MongoDB dependencies automatically when Docker Desktop is running. Healthy existing dependencies are reused. Native services use `127.0.0.1:27018` and honor `TELEMETRY_SINK`; they no longer force `none`. Set `LOCAL_MONGODB_HOST` or `MONGODB_HOST_PORT` if using different native destinations.
 
 ## What is collected
 
