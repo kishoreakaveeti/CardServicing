@@ -321,3 +321,21 @@ def test_maximum_length_benign_message_is_not_misclassified_as_a_private_paste()
         response = client.post(f'/conversations/{cid}/messages', json={'text': text}).json()
         assert response['message'] == 'Please choose an action.'
         assert model.seen_context[-1][0][-1]['content'] == text
+
+
+@pytest.mark.parametrize('asynchronous', [False, True])
+def test_free_text_intent_selects_form_without_guessing_private_arguments(asynchronous):
+    model, gateway = StubModel(), Gateway()
+    model.outputs = [ProposedToolCall('create_card', {})]
+    with TestClient(create_app(model, gateway)) as client:
+        cid = client.post('/conversations').json()['id']
+        reply = completed(client, f'/conversations/{cid}/messages',
+                          {'text': 'I would like a new card, please.'}, asynchronous)
+        assert reply['input_tool'] == 'create_card' and reply['review'] is None
+        assert gateway.calls == [] and len(model.seen_tools) == 1
+        assert model.seen_tools[0]['create_card']['input_schema']['required'] == []
+        assert gateway.catalogue['create_card'].input_schema['required']  # Execution still requires all actual fields.
+        review = prepare_review(client, cid).json()
+        assert review['can_confirm'] and gateway.calls == []
+        completed(client, f'/conversations/{cid}/confirm', {'review': review['review']}, asynchronous)
+        assert len(model.seen_tools) == 1 and gateway.calls[0][1] == BODY

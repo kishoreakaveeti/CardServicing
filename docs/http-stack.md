@@ -33,12 +33,16 @@ model configuration. No secret is printed by setup or copied into images.
 
 Open **http://localhost:8080** (use `localhost`, not `127.0.0.1` for OIDC).
 Sign in with `alex.synthetic` or `sam.synthetic` and the `DEMO_PASSWORD` value
-in `.env.stack`. Click **New conversation**. In the **Secure action form**, enter
-the synthetic given name `Alex`, choose the masked account ending `5678`, then
+in `.env.stack`. With `STACK_MODEL_PROVIDER=anthropic`, click **Start conversation**
+and type **"I would like a new card"**. Claude identifies the permitted action
+and the UI opens its matching private-details form. Enter the synthetic given
+name `Alex`, choose the masked account ending `5678`, then
 click **Review action** and **Create card**. The username is supplied from verified
 identity; the actual account value stays server-side. Do not paste private values into
 chat. Sam's masked account ends `5432`; a signed-in Sam cannot use Alex's scoped
-reference. This complete structured flow makes **zero model calls**.
+reference. Intent interpretation uses a model call; completing the private form,
+review, confirmation and safe retry make no additional model calls. The secondary
+**Choose an action manually** panel retains the complete zero-model path.
 Default `STACK_MODEL_PROVIDER=stub` is an
 explicit test adapter; it does not provide natural-language understanding.
 For Claude, set `STACK_MODEL_PROVIDER=anthropic` in `.env.stack` and set

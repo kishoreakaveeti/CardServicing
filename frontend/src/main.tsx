@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import './style.css';
 
-type Reply = { id?: string; message: string; review: string | null; can_confirm: boolean; confirmation_label: string | null };
+type Reply = { id?: string; message: string; review: string | null; can_confirm: boolean; confirmation_label: string | null; input_tool?: string | null };
 type Session = { name: string; csrf: string };
 type Job = { status: 'pending' | 'running' | 'succeeded' | 'failed'; status_url: string; result: Reply | null; error: string | null };
 type Pending = { path: string; body: object; key: string };
@@ -22,14 +22,15 @@ function App() {
   const [tools, setTools] = useState<InputTool[]>([]);
   const [tool, setTool] = useState('');
   const [values, setValues] = useState<Record<string,string>>({});
+  const [showInputs, setShowInputs] = useState(false);
   useEffect(() => { fetch('/api/session').then(r => r.ok ? r.json() : null).then(setSession).catch(() => setError('Session unavailable. Refresh to try again.')); }, []);
   useEffect(() => {
     let active = true;
-    setValues({}); setTools([]); setTool('');
+    setValues({}); setTools([]); setTool(''); setShowInputs(false);
     if (cid) fetch(`/api/conversations/${cid}/inputs`).then(r => {
       if (!r.ok) throw new Error('Secure form unavailable. Start a new conversation.');
       return r.json();
-    }).then((data: {tools: InputTool[]}) => { if (active) { setTools(data.tools); setTool(data.tools[0]?.name || ''); } })
+    }).then((data: {tools: InputTool[]}) => { if (active) setTools(data.tools); })
       .catch(() => { if (active) setError('Secure form unavailable. Start a new conversation.'); });
     return () => { active = false; };
   }, [cid]);
@@ -60,6 +61,11 @@ function App() {
       } else value = await response.json();
       if (value.id) { setCid(value.id); setMessages([value.message]); }
       else setMessages(old => [...old, value.message]);
+      if (value.input_tool) {
+        if (tool !== value.input_tool) setValues({});
+        setTool(value.input_tool);
+        setShowInputs(true);
+      } else setShowInputs(false);
       setReply(value); setPending(null);
     } catch (e) { setError(e instanceof Error ? e.message : 'Request interrupted. Retry the same submission.'); }
     finally { setBusy(false); }
@@ -96,16 +102,15 @@ function App() {
   return <main>
     <header><span className="eyebrow">LOCAL SIMULATION</span><h1>Card servicing</h1><p>Talk through a request. Review the details before you confirm.</p></header>
     {!session ? <a className="button" href="/auth/login">Sign in</a> : <>
-      <div className="toolbar"><span>Signed in as {session.name}</span><button disabled={busy} onClick={start}>New conversation</button><button disabled={busy} onClick={async () => {
+      <div className="toolbar"><span>Signed in as {session.name}</span><button disabled={busy} onClick={start}>{cid ? 'New conversation' : 'Start conversation'}</button><button disabled={busy} onClick={async () => {
         const r = await fetch('/auth/logout', {method:'POST', headers:{'X-CSRF-Token':session.csrf}});
         if (r.ok) {setSession(null); setMessages([]); setCid('');}
       }}>Sign out</button></div>
       <label><input type="checkbox" checked={poll} disabled={busy} onChange={e => setPoll(e.target.checked)}/> Submit and poll</label>
       <section aria-live="polite" aria-busy={busy}>{messages.map((message, index) => <p className={message.startsWith('You:') ? 'customer' : 'assistant'} key={index}>{message}</p>)}{busy && <p>Working…</p>}</section>
-      {cid && tools.length > 0 && <aside><h2>Secure action form</h2><p>Private details stay with the service. They are not sent to the language model.</p>
-        <form onSubmit={supply}><label>Action <select value={tool} disabled={busy || !!pending} onChange={e => {setTool(e.target.value); setValues({});}}>
-          {tools.map(item => <option key={item.name} value={item.name}>{item.label}</option>)}
-        </select></label>
+      {cid && <form onSubmit={submit}><label htmlFor="message">How can we help?</label><textarea id="message" placeholder="For example: I would like a new card." value={text} maxLength={4000} onChange={e => setText(e.target.value)} disabled={busy || !!pending}/><p>Describe what you need. Keep account numbers and other private details out of chat.</p><button disabled={busy || !!pending || !text.trim()}>Send message</button></form>}
+      {cid && showInputs && tools.some(item => item.name === tool) && <aside><h2>{tools.find(item => item.name === tool)?.label}: private details</h2><p>Private details stay with the service. They are not sent to the language model.</p>
+        <form onSubmit={supply}>
         {tools.find(item => item.name === tool)?.fields.map(field => <label className="secure-field" key={field.name}>{field.label}
           {field.options ? <select required={field.required} value={values[field.name] || ''} disabled={busy || !!pending} onChange={e => setValues(old => ({...old,[field.name]:e.target.value}))}>
             <option value="">Choose a masked selection</option>{field.options.map(option => <option key={option.ref} value={option.ref}>{option.label}</option>)}
@@ -113,8 +118,8 @@ function App() {
           <input type={field.type === 'string' ? 'text' : 'number'} step={field.type === 'integer' ? '1' : 'any'} required={field.required} value={values[field.name] || ''} disabled={busy || !!pending} autoComplete="off" maxLength={4000} onChange={e => setValues(old => ({...old,[field.name]:e.target.value}))}/>}
         </label>)}<button disabled={busy || !!pending}>Review action</button></form>
       </aside>}
-      {reply?.can_confirm && <aside><strong>Action review</strong><p>{reply.message}</p><button disabled={busy || !!pending} onClick={confirm}>{reply.confirmation_label || 'Confirm action'}</button></aside>}
-      {cid && <form onSubmit={submit}><label htmlFor="message">Your message (keep private details in the secure form)</label><textarea id="message" value={text} maxLength={4000} onChange={e => setText(e.target.value)} disabled={busy || !!pending}/><button disabled={busy || !!pending || !text.trim()}>Send message</button></form>}
+      {reply?.can_confirm && <aside><strong>Action review</strong><p>{reply.message}</p><button disabled={busy || !!pending} onClick={confirm}>{reply.confirmation_label || 'Confirm action'}</button>{tool && <button disabled={busy || !!pending} onClick={() => setShowInputs(true)}>Edit private details</button>}</aside>}
+      {cid && tools.length > 0 && <details><summary>Choose an action manually</summary><p>You can also describe your request in chat above.</p><select aria-label="Choose an action manually" value={tool} disabled={busy || !!pending} onChange={e => {setTool(e.target.value); setValues({}); setShowInputs(!!e.target.value);}}><option value="">Choose an action</option>{tools.map(item => <option key={item.name} value={item.name}>{item.label}</option>)}</select><button disabled={busy || !!pending || !tool} onClick={() => setShowInputs(true)}>Enter private details</button></details>}
       {pending && !busy && <button onClick={() => void request(pending)}>Retry same submission</button>}
     </>}
     {error && <p role="alert">{error}</p>}

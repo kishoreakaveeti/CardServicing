@@ -1252,6 +1252,10 @@
       ],
       "messages": [
         {
+          "kind": "note",
+          "label": "Primary entry: customer describes the request in chat. Claude may propose an eligible tool with incomplete arguments; Reply.input_tool opens its private form automatically. Manual action selection is an optional secondary zero-model path. Execution still requires complete original-schema validation and confirmation."
+        },
+        {
           "kind": "call",
           "from": "browser",
           "to": "experience",

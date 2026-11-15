@@ -125,7 +125,7 @@ def create_app(model=None, gateway=None, *, config=None):
             data['proposal'] = ProposedToolCall(**data['proposal'])
         return Conversation(**data)
 
-    def reply(c, text, *, language=False):
+    def reply(c, text, *, language=False, input_tool=None):
         c.history.append({'role': 'assistant', 'content': text if language else 'Action workflow updated.',
                           'kind': 'model' if language else 'workflow'})
         spec = app.state.gateway.catalogue[c.proposal.name] if c.proposal else None
@@ -133,7 +133,7 @@ def create_app(model=None, gateway=None, *, config=None):
                                              and not c.submission['result'] and not spec.safe_retry)
         return {'message': text, 'review': c.review, 'can_confirm': can_confirm,
                 'confirmation_label': (spec.entry.confirmation_label or spec.entry.label) if spec else None,
-                'usage': dict(c.usage)}
+                'usage': dict(c.usage), 'input_tool': input_tool}
 
     async def execute(cid, c):
         proposal = c.proposal
@@ -241,10 +241,12 @@ def create_app(model=None, gateway=None, *, config=None):
                     c.draft = {'tool': turn.name, 'arguments': proposal_arguments}
                     name = missing[0]
                     label = spec.entry.field_labels.get(name, spec.input_schema['properties'][name].get('title', name))
-                    return reply(c, f'Please provide {label} in the secure action form.')
+                    return reply(c, f'I can help with {spec.entry.label.lower()}. Please complete the private details below.',
+                                 input_tool=turn.name)
                 arguments = spec.validate(partial)
             except ValueError:
-                return reply(c, 'Please supply private details using the secure action form and use its current selection.')
+                return reply(c, 'Please supply private details using the secure action form and use its current selection.',
+                             input_tool=turn.name)
             c.draft = {'tool': turn.name, 'arguments': proposal_arguments}
             c.proposal = ProposedToolCall(turn.name, arguments)
             if spec.entry.confirmation == 'none':
@@ -303,7 +305,7 @@ def create_app(model=None, gateway=None, *, config=None):
             missing = spec.missing(values)
             c.draft = {'tool': body.tool, 'arguments': references}
             if missing:
-                return reply(c, 'Please complete the required fields in the secure action form.')
+                return reply(c, 'Please complete the required fields in the secure action form.', input_tool=body.tool)
             arguments = spec.validate(values)
         except ValueError:
             raise HTTPException(422, 'Structured details or selections are invalid') from None

@@ -5,5 +5,5 @@ logger.error = (message, options) => error(message.replace(/([?&](?:code|state|s
 export default defineConfig({
   customLogger: logger,
   build: { sourcemap: true },
-  server: { port: 8080, proxy: { '/api': 'http://experience:8000', '/auth': 'http://experience:8000' } }
+  server: { port: 8080, strictPort: true, proxy: { '/api': process.env.EXPERIENCE_PROXY_TARGET || 'http://experience:8000', '/auth': process.env.EXPERIENCE_PROXY_TARGET || 'http://experience:8000' } }
 });

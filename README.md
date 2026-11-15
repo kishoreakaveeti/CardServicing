@@ -1,336 +1,297 @@
 # Card Servicing
 
-The current application is the [independent HTTP service stack](docs/http-stack.md):
-React → Experience API → Agent API → Streamable HTTP MCP → Cards API, with local
-Keycloak sign-in. The guide includes Windows setup, single-component debugging,
-**Debug Full Stack**, security boundaries, durable operations, and verification.
+React ? Experience API ? Agent API ? Streamable HTTP MCP ? Cards API.
+Claude interprets ordinary text; private details use a masked picker and a secure
+form. Every write requires a review and confirmation. All cards are simulations.
 
-```powershell
-.\scripts\setup-stack.ps1
-.\scripts\stack.ps1 -Build
-# Open http://localhost:8080; use alex.synthetic and DEMO_PASSWORD from .env.stack.
-# Start a conversation, enter Alex in the secure action form,
-# choose the masked account ending 5678, then Review action and Create card.
-.\scripts\stack.ps1 -Stop
-```
+## Current VS Code profiles
 
-The earlier host/API and infrastructure walkthrough below is retained, including
-existing local documentation edits. For that older infrastructure, use
-`compose.infra.yaml`; `compose.yaml` and the VS Code launches now target the HTTP
-stack. Follow the linked guide for current run/debug commands.
-
-The current [private-input and model-context flow](docs/model-privacy.md) keeps
-raw identifiers out of Claude, uses a shared allowlist builder, and defaults
-prompt caching off. Structured review, confirmation and safe replay need zero
-model calls. Free text is for intent and safe corrections; private pastes are
-rejected before reaching the model.
-
-A local learning project for creating simulated cards through a browser chatbot
-or REST API. The chat backend uses hosted Claude to understand customer messages
-and propose a configured MCP tool. The application validates the proposal, shows
-a masked review, and calls the separate Cards API only after confirmation.
-
-```text
-Browser :8020 -> Chat workflow / CardServicingAgent -> hosted Claude
-                          |
-                  validated review + confirmation
-                          |
-                    local MCP child (stdio)
-                          |
-                  Cards REST API :8010 -> SQLite
-```
-
-The default catalogue exposes **create_card**. Cards are simulation identifiers
-(`SIM-...`), not payment network PANs. There is no physical issuance, PIN/CVV,
-account lookup, authentication or production card processing. Use synthetic data.
-
-## Quick start: clone and debug Chat + API together
-
-These instructions use **Windows, PowerShell and VS Code**. The simplest mode
-runs both Python applications locally with structured stdout telemetry: **Docker
-and MongoDB are not required**. Hosted chat requires your own Anthropic API key,
-network access and a Messages model available to your account; usage is billed
-by Anthropic. Automated tests and the stub demo need no cloud key.
-
-Prerequisites:
-
-- Python 3.10+ installed and available as `python` (CI uses 3.12).
-- Git, or download/extract this repository's ZIP from GitHub.
-- VS Code with the **Python** and **Python Debugger** extensions.
-- Docker Desktop only if you choose the optional container/infrastructure modes.
-
-### 1. Get the repository and install dependencies
-
-```powershell
-git clone https://github.com/kishoreakaveeti/CardServicing.git
-cd CardServicing
-python -m venv .venv
-.\.venv\Scripts\Activate.ps1
-python -m pip install -e ".[dev,infra,chat]"
-```
-
-If you downloaded a ZIP, open the extracted repository folder and run the commands
-starting at `python -m venv .venv`. If you already have `.venv`, activate and reuse
-it rather than recreating it. If PowerShell blocks activation, you can run commands
-with `.\.venv\Scripts\python.exe` directly.
-
-### 2. Configure your local .env
-
-For a fresh checkout, copy the example only if `.env` does not already exist:
-
-```powershell
-if (-not (Test-Path .env)) { Copy-Item .env.example .env }
-```
-
-Edit the root **`.env`**, preserving any other existing settings:
-
-```dotenv
-CARD_STORE=sqlite
-SQLITE_PATH=data/cards.db
-TELEMETRY_SINK=stdout
-MODEL_PROVIDER=anthropic
-MODEL_ID=YOUR_CLAUDE_MODEL_ID
-ANTHROPIC_API_KEY=YOUR_ANTHROPIC_API_KEY
-CARD_API_BASE_URL=http://127.0.0.1:8010
-```
-
-Replace the key/model placeholders locally. See [Anthropic's model IDs](https://platform.claude.com/docs/en/models/overview)
-for an ID available to your account. The application has no default model ID.
-`stdout` skips Mongo configuration and credentials. Environment variables override
-`.env`; restart the applications after changing configuration.
-
-`.env` and `data/` are ignored by Git. Commit only placeholder values in
-`.env.example`; never place real credentials in source, documentation, browser
-code, `launch.json` or logs. Before committing, `git ls-files -- .env` should print
-nothing. Do not force-add `.env`.
-
-### 3. Start both debuggers with one selection
-
-Open this folder in VS Code, then:
-
-1. Run **Python: Select Interpreter** and choose `.venv/Scripts/python.exe`.
-2. Open **Run and Debug** (`Ctrl+Shift+D`).
-3. Select **Debug Chat + API** and press **F5**.
-4. Wait for **both** terminals to report `Application startup complete`:
-   Cards API on **8010**, Chat on **8020**. Chat automatically starts the MCP child.
-5. Open **http://127.0.0.1:8020/**. You can also run:
-
-   ```powershell
-   Start-Process 'http://127.0.0.1:8020'
-   ```
-
-`Start-Process` only opens a browser; it does not start the servers. Do not also
-launch manual Uvicorn instances on these ports while the debuggers are running.
-
-### 4. Create a simulated card
-
-Enter `I want a new card`, then answer the questions with synthetic details:
-
-```text
-My given name is Alex, my user name is alex.synthetic,
-and my existing account number is 0012345678.
-```
-
-Claude can collect several values in one message or ask for missing information.
-Question wording/order can vary. Review the masked account, then click **Create
-card**. Success displays the actual `SIM-...` identifier and UUID returned by the
-API. Clicking the same confirmation again returns the original saved result.
-Use **New conversation** for another operation. Blocking/replacement are not
-production capabilities in the default catalogue.
-
-### 5. Follow the breakpoints
-
-| Put a breakpoint inside | What to inspect |
-| --- | --- |
-| `src/card_chat/main.py` -> `message`, at `c = get(cid)` | Incoming text and conversation ID; every customer message enters here |
-| `src/card_chat/agent.py` -> `interpret_turn` | History, collected details and allowed tools |
-| `src/card_chat/provider.py` -> `turn`, after Messages returns | Claude's text/question or proposed `tool_use` |
-| `src/card_chat/main.py` -> `spec.validate` and review creation | Validated tool/arguments and masked review |
-| `src/card_chat/main.py` -> `execute`, at `gateway.execute(...)` | Confirmed snapshot; no extra model call |
-| `src/card_servicing/cards.py` -> `store.create_idempotent(...)` | HTTP creation and durable replay, reached after confirmation |
-
-F10 steps over; F5 continues to the next breakpoint. Both sessions appear under
-**CALL STACK**. Stepping does not automatically cross HTTP or process boundaries;
-continue to the breakpoint in the receiving process. Long pauses inside REST can
-exceed the ten-second client timeout; resume and retry the same confirmed
-create-card submission. Do not restart chat to recover an uncertain write: its
-submission key is in memory.
-
-Debug configurations are custom names in [.vscode/launch.json](.vscode/launch.json):
-
-| Configuration | Behavior |
-| --- | --- |
-| **Debug Chat + API** | Starts Debug API and Debug Chat together; stopping one stops both |
-| **Debug API** | Starts the host Cards API on 8010 |
-| **Debug Chat** | Starts host Chat on 8020 and manages its MCP child |
-| **Attach to Docker API** | Attaches to an already-running debug API container on 5679 |
-
-MCP automatic child attachment is disabled (`subProcess:false`) to avoid the
-previous stdio startup problem. Chat/agent/model and API breakpoints still work;
-inspect the MCP boundary in `gateway.execute` or attach to its child separately.
-
-## Addresses: which page should I open?
-
-| Purpose | Host-run API | Docker-run API |
+| Profile | Runs where | What F5 does |
 | --- | --- | --- |
-| Chat window | http://127.0.0.1:8020/ | http://127.0.0.1:8020/ (chat still runs on host) |
-| Cards Swagger | http://127.0.0.1:8010/docs | http://127.0.0.1:8011/docs |
-| API readiness | http://127.0.0.1:8010/health/ready | http://127.0.0.1:8011/health/ready |
-| MCP destination setting | `CARD_API_BASE_URL=http://127.0.0.1:8010` | `CARD_API_BASE_URL=http://127.0.0.1:8011` |
+| **Debug Full Stack** | Docker | Compatibility name for the Docker compound below |
+| **Debug Full Stack (Docker)** | Docker | One shared task builds/starts the stack, then attaches four Python debuggers and launches Chrome |
+| **Debug Frontend** | Browser, Docker-served frontend | Launches Chrome at localhost:8080; start the Docker stack first |
+| **Attach to Experience API** | Docker | Attaches to loopback port 5681 |
+| **Attach to Agent API** | Docker | Attaches to loopback port 5682 |
+| **Attach to MCP Server** | Docker | Attaches to loopback port 5683 |
+| **Attach to Cards API** | Docker | Attaches to loopback port 5684 |
+| **Debug Full Stack (Local)** | Native Windows | Checks prerequisites, starts local Vite, launches four local Python processes and Chrome |
+| **Debug Local Experience API** | Native Windows | Launches Experience on 8020 |
+| **Debug Local Agent API** | Native Windows | Launches Agent on 8021 |
+| **Debug Local MCP Server** | Native Windows | Launches MCP on 8030 |
+| **Debug Local Cards API** | Native Windows | Launches Cards on 8010 |
+| **Debug Local Frontend** | Browser, local Vite | Launches Chrome; run local Vite first |
 
-The API has no page at `/`: opening port 8010 or 8011 without `/docs` can correctly
-return **Not Found**. The chat page is on 8020. MCP uses stdio, not an HTTP port.
+Docker Python profiles **attach** to existing processes with `/app/src` source
+mappings. Local Python profiles **launch** `.venv/Scripts/python.exe` directly;
+there are no remote source mappings, published debugger ports or application
+images in local mode. Both modes use one process per service without reload.
 
-## Run without VS Code debugging
+The former **Debug Chat + API**, **Debug Chat**, **Debug API**, and **Attach to
+Docker API** profiles are superseded. Their old walkthrough is archived in
+[legacy-host-setup.md](docs/legacy-host-setup.md), not the current runbook.
 
-Use two terminals, activate the same environment in each, and keep `.env` as above.
-Do not run these in parallel with the compound debugger.
+## One-time setup
 
-Terminal 1:
-
-```powershell
-.\.venv\Scripts\Activate.ps1
-python -m uvicorn card_servicing.main:app --host 127.0.0.1 --port 8010
-```
-
-Terminal 2:
-
-```powershell
-.\.venv\Scripts\Activate.ps1
-python -m uvicorn card_chat.main:app --host 127.0.0.1 --port 8020
-```
-
-Wait for both startup messages, then open 8020. Stop each terminal server with
-**Ctrl+C**. For VS Code sessions use the red Stop button; the compound stops both.
-To switch from terminal runs to debugging, stop the terminal servers first.
-
-## Run without an Anthropic key
-
-Tests require neither Docker nor cloud credentials:
+Open this repository root in VS Code. Install the Python Debugger extension;
+Chrome debugging uses VS Code's built-in JavaScript debugger. From PowerShell:
 
 ```powershell
-python -m pytest
-python scripts/export_cards_openapi.py --check
-python scripts/render_chat_diagrams.py --check
+python -m venv .venv
+.\.venv\Scripts\python.exe -m pip install -e '.[dev,chat,infra]' debugpy
+.\scripts\setup-stack.ps1
 ```
 
-For a browser demonstration with a scripted model and isolated HTTP/MCP processes:
+Setup preserves existing `.env.stack` credentials and signing keys. Never commit
+`.env`, `.env.stack` or `data/identity`. For natural-language intent, configure:
+
+```text
+# .env.stack
+STACK_MODEL_PROVIDER=anthropic
+# .env
+MODEL_ID=your-supported-Claude-model
+ANTHROPIC_API_KEY=your-key
+```
+
+`STACK_MODEL_PROVIDER=stub` provides a credential-free test adapter, with manual
+selection; it does not understand natural language. Prompt caching defaults off.
+
+## Docker: build, deploy, then attach
+
+Install/start Docker Desktop with Linux containers. Host Node.js is unnecessary
+for this mode: Docker builds the React app and Python images.
+
+### 1. Build and start without debuggers
 
 ```powershell
-python scripts/chat_stub_smoke.py
+.\scripts\stack.ps1 -Build
 ```
 
-Open 8020. In order, enter `freeze card`, `new card`, `Alex / alex.synthetic`,
-`0012345678`, then click Create card twice. Replies are scripted in that order;
-restart the harness to repeat. It uses an isolated in-memory API, not your card
-database. Stop any existing chat server before starting this harness.
+This builds the runtime image stages, creates the containers and persistent
+volumes, and waits for health. It publishes only frontend 8080 and Keycloak 8081
+on loopback. The four backend APIs use Compose DNS names inside the network.
+Open http://localhost:8080. Use `localhost` consistently for OIDC sign-in.
 
-To verify a separately running API through chat and real MCP, using a stub model:
+### 2. Start debug images and listeners
+
+Stop any existing VS Code debug session, then:
 
 ```powershell
-python scripts/smoke_chat.py --api-url http://127.0.0.1:8010 --lose-first-response
+.\scripts\stack.ps1 -DebugComponent All -Build
 ```
 
-Add `--live` for the configured Anthropic model. The smoke deliberately loses the
-first creation result, then checks that retry returns the original card. It uses
-synthetic data and live mode incurs cloud usage.
+The override selects debugpy image stages, runs Vite with source maps, and maps
+Experience/Agent/MCP/Cards listeners to 5681/5682/5683/5684 respectively. The
+script waits for HTTP health and listener readiness. It does not wait for
+attachment before starting HTTP, so the shared pre-launch task cannot deadlock.
 
-## Optional Docker API and MongoDB
+### 3. Attach
 
-The host **Debug Chat + API** mode above needs no containers when using stdout.
-To run the API in Docker instead, stop the host API and use Docker Desktop:
+In **Run and Debug**, select **Debug Full Stack (Docker)** and press **F5**.
+Its shared task brings up or reuses the debug stack once, then all four attach
+profiles connect and Chrome opens. If you already ran step 2, the task reuses
+healthy services/listeners. **Debug Full Stack** remains an alias for this mode.
+Set a breakpoint and perform a browser request; startup alone does not execute
+message or card-write handlers.
+
+For only one component:
 
 ```powershell
-$env:TELEMETRY_SINK = 'stdout'
-.\scripts\start-docker-api.ps1 -Standalone -DebugApi -Build
+.\scripts\stack.ps1 -DebugComponent Agent -Build
+# Select Attach to Agent API, then F5.
 ```
 
-Set `CARD_API_BASE_URL=http://127.0.0.1:8011` in `.env`, then start **Attach to Docker
-API** and **Debug Chat** as separate sessions. Do not use **Debug Chat + API** in
-this mode: that compound starts a second host API. The container's SQLite mount
-uses the same `data/cards.db`; use one API execution mode per database at a time.
+Substitute `Experience`, `MCP`, or `Cards` and select its corresponding attach
+profile. `-DebugComponent Frontend` starts Vite with Python listeners disabled;
+select **Debug Frontend**. Other application services continue running normally.
 
-For the original Mongo/Redis/RabbitMQ development infrastructure, use
-`scripts/setup-infra.ps1`. If `.env` is absent it generates local infrastructure
-credentials from the example. If `.env` already exists it preserves its values:
-replace any `GENERATE_ME` password/hash placeholders before starting those services.
-Do not overwrite a configured `.env` to change modes. Set `TELEMETRY_SINK=mongo`
-for Mongo telemetry, then use the normal startup script (without `-Standalone`).
-See [infrastructure setup](docs/local-infrastructure.md),
-[Docker debugging](docs/docker-debugging.md), and
-[the same-build Mongo/stdout switch](docs/infrastructure-adapters.md) for full steps.
+### 4. Rebuild after edits and stop
 
-| Setting | Default / supported values |
-| --- | --- |
-| `CARD_STORE` | `sqlite` only |
-| `SQLITE_PATH` | `data/cards.db` |
-| `TELEMETRY_SINK` | `mongo` (default), `stdout`, `none` |
-| `MODEL_PROVIDER` | `anthropic` |
-| `MODEL_ID`, `ANTHROPIC_API_KEY` | Required for live chat; server-side only |
-| `CARD_API_BASE_URL` | `http://127.0.0.1:8010`; optional gateway prefix supported |
-| `TOOL_CATALOGUE_PATH` | Optional; defaults to `src/card_chat/tools.json` |
-
-## REST contract and persistence
-
-`POST /cards` requires `Idempotency-Key`, for example `card-demo-001`:
-
-```json
-{"user_name":"alex.synthetic","given_name":"Alex","account_number":"0012345678"}
-```
-
-Returns **201**, a UUID `id`, `SIM-...` card number, created status and timestamp.
-Account identifiers stay strings, including leading zeros. Invalid requests return
-422 before writes. The same key and normalized body replay the original 201;
-a changed body with that key returns 409. Storage failures return sanitized 503.
-Responses include `Idempotency-Replayed`, `X-Trace-ID`, and `Cache-Control:no-store`.
-
-SQLite stores cards and durable replay snapshots in `data/cards.db`. MongoDB, when
-selected, stores diagnostics rather than cards or chat context. Conversation
-history, proposals and submission keys are in memory; use a single chat worker
-without reload. Redis/RabbitMQ are provisioned for future work, outside creation.
-The `/items` routes remain simple API learning examples.
-
-## Catalogue, diagrams and CI
-
-The versioned [tool catalogue](src/card_chat/tools.json) references stable OpenAPI
-operation IDs. Claude selects from discovered tools, asks questions, and proposes
-one action. The workflow validates and requires confirmation before a write.
-For supported JSON-body/path-parameter operations, adding an entry and restarting
-chat requires no server/agent/UI branch. See [catalogue authoring](docs/tool-catalogue.md).
-
-Open the [offline sequence-diagram viewer](docs/diagrams/index.html) locally:
+Images contain source snapshots. After changing Python or frontend source,
+disconnect, rerun the relevant startup command with `-Build`, then attach again.
+Debugger disconnect leaves containers running. The startup script reopens a
+listener by restarting its service when a previous detach closed that listener.
 
 ```powershell
-Start-Process .\docs\diagrams\index.html
+.\scripts\stack.ps1 -Build   # Return to normal runtime images, no debug listeners.
+.\scripts\stack.ps1 -Stop    # Remove containers/network; preserve named volumes.
 ```
 
-The [walkthrough](docs/chat-end-to-end.md) traces every boundary and idempotency.
-To update API/diagram artifacts after changing their source:
+VS Code also provides **Tasks: Run Task ? Stop Debug Stack**. To inspect logs
+when Docker is on PATH:
 
 ```powershell
-python scripts/export_cards_openapi.py
-python scripts/render_chat_diagrams.py
+docker compose --env-file .env --env-file .env.stack ps
+docker compose --env-file .env --env-file .env.stack logs --tail 50 agent mcp
 ```
 
-[GitHub Actions CI](.github/workflows/ci.yml) runs on pushes and pull requests:
-install dependencies, run pytest, check OpenAPI freshness, then check SVG freshness
-and code references. It does not rewrite Markdown/SVGs, deploy, or make live Claude
-calls. Commit updated sources and generated artifacts together.
+For catalogue/discovery startup breakpoints, start a healthy stack first, then:
 
-## Troubleshooting and further reading
+```powershell
+.\scripts\stack.ps1 -DebugComponent MCP -Build -WaitForDebugger
+# Attach to MCP Server; continue to start HTTP.
+```
 
-| Symptom | Check |
-| --- | --- |
-| Site cannot be reached | Both servers must finish startup; opening the URL alone starts nothing |
-| Not Found on 8010/8011 | Use `/docs` for the API, or 8020 for chat |
-| Address already in use | Stop the prior terminal/debug instance before launching another |
-| Chat replies but no breakpoints | Check CALL STACK includes Debug Chat and the browser reaches that process |
-| API breakpoint does not hit during questions | Expected: the API is called after confirmation |
-| Chat fails during startup | Run `python -m card_chat.catalogue`; inspect terminal errors before any MCP connection-closed message |
-| Language-service error | Check local key, accessible model ID, network access and environment overrides without logging secrets |
+Use `Agent` similarly for discovery. This special mode starts only the selected
+service with `--no-deps` and waits for its listener, not HTTP readiness.
 
-More detail: [chat guide](docs/chat-demo.md), [architecture](docs/architecture.md),
-[adapter configuration](docs/infrastructure-adapters.md),
-[persistence](docs/card-persistence.md), [health checks](docs/health-checks.md),
-[infrastructure viewers](docs/local-infrastructure.md), and
-[Docker debugging](docs/docker-debugging.md).
+## Local: launch the application without building Docker images
+
+Install **Node.js 22 LTS with npm on Windows**, then restart VS Code so PATH is
+updated. Local mode needs the Python environment above and frontend packages:
+
+```powershell
+Push-Location frontend
+npm ci
+Pop-Location
+```
+
+### 1. Stop conflicting application processes
+
+Docker and local modes share browser/identity ports 8080/8081. Stop existing
+VS Code debug sessions before switching. To keep only Docker-hosted Keycloak:
+
+```powershell
+docker compose --env-file .env --env-file .env.stack stop frontend experience agent mcp cards
+docker compose --env-file .env --env-file .env.stack up -d --wait identity
+```
+
+This is a convenient hybrid: **all five application components run natively**;
+only the identity provider remains in Docker. No application image is built or
+deployed. Docker Desktop's CLI may need adding to PATH; the startup script's
+Docker detection paths are documented in `scripts/stack.ps1`.
+
+### 2. Identity option with no Docker at all
+
+Authentication remains enabled locally. To avoid Docker entirely, run a native
+Keycloak installation rather than the identity container. Use the repository's
+Keycloak 26.4.7 version and its supported JDK (OpenJDK 21), following the vendor
+[Windows ZIP setup](https://www.keycloak.org/getting-started/getting-started-zip)
+and [realm import instructions](https://www.keycloak.org/server/importExport).
+Stop the Docker identity first if it is running; both cannot bind port 8081.
+
+In a separate PowerShell terminal, with the paths adjusted to your installation:
+
+```powershell
+$repoRoot = (Get-Location).Path
+$keycloakDir = 'C:\Tools\keycloak-26.4.7'
+New-Item -ItemType Directory -Force "$keycloakDir\data\import" | Out-Null
+Copy-Item -LiteralPath "$repoRoot\data\identity\realm.json" -Destination "$keycloakDir\data\import\cards-realm.json"
+& "$keycloakDir\bin\kc.bat" start-dev --http-host=127.0.0.1 --http-port=8081 --hostname=http://localhost:8081 --import-realm
+```
+
+The imported realm contains the same synthetic users and client credentials as
+`.env.stack`. Imports do not replace an existing realm: use a fresh native
+installation/data directory initially, or deliberately reconcile its clients.
+Keep that terminal running. Native and Docker identity stores are separate;
+existing browser sessions may require signing in again after switching.
+
+Local wrappers default to issuer `http://localhost:8081/realms/cards`. For another
+Keycloak realm, set `LOCAL_OIDC_ISSUER` before opening VS Code and register the
+same clients/audiences/permissions plus callback `http://localhost:8080/auth/callback`.
+Do not disable authentication to get local debugging working.
+
+### 3. Launch the local full stack
+
+Select **Debug Full Stack (Local)** and press **F5**. The compound:
+
+1. Checks npm, installed frontend dependencies, identity discovery and free ports.
+2. Starts Vite locally, proxying `/api` and `/auth` to Experience on 8020.
+3. Launches four Python debug sessions from the workspace venv.
+4. Waits inside each service launcher for its downstream dependency before import/startup.
+5. Waits for Experience HTTP readiness alongside the Python launches, then opens Chrome on localhost:8080.
+
+Dependency order is Cards ? MCP ? Agent ? Experience. Launchers wait up to three
+minutes; errors appear in their individual terminals. If a startup breakpoint
+pauses one service, continue it before expecting its upstream services to become
+ready. Unlike Docker attach mode, local startup breakpoints bind before module
+import. Save and restart the affected debug session after code changes; no image
+build is involved.
+
+Local storage uses `data/local/cards.db`, `agent.db` and `sessions.db`, separate
+from Docker volumes. `scripts/local_service.py` translates service DNS names,
+key paths and service identities into native settings without printing secrets.
+Only Agent receives the Anthropic key in its process environment.
+
+For an individual local component, keep its dependencies running and choose
+**Debug Local Agent API**, **Debug Local MCP Server**, etc. These launch profiles
+start a new process; stop an existing process on that port first. They do not
+start dependencies themselves. The same launchers work without VS Code, using
+separate terminals in this order:
+
+```powershell
+.\.venv\Scripts\python.exe scripts/local_service.py cards
+.\.venv\Scripts\python.exe scripts/local_service.py mcp
+.\.venv\Scripts\python.exe scripts/local_service.py agent
+.\.venv\Scripts\python.exe scripts/local_service.py experience
+```
+
+Start frontend in a fifth terminal:
+
+```powershell
+$env:EXPERIENCE_PROXY_TARGET = 'http://127.0.0.1:8020'
+Set-Location frontend
+npm run dev:local
+```
+
+Select **Debug Local Frontend** to debug that already running local Vite server.
+The local compound owns the frontend background task, not its process lifetime:
+when stopping local mode, stop Python/Chrome sessions with the red Stop button,
+then **Tasks: Terminate Task ? Start Local Frontend** (or Ctrl+C in its terminal).
+Stop native Keycloak with Ctrl+C separately. Docker shutdown commands do not stop
+native Python/Node processes. To return to Docker, release local ports first,
+then run `scripts/stack.ps1 -Build` or choose the Docker compound.
+
+## Sign in and follow a request through the stack
+
+Use username `alex.synthetic` and `DEMO_PASSWORD` from `.env.stack` (not your
+Windows/OpenAI password). Start a conversation and type **I would like a new
+card**. Claude selects the registered action. Complete its private form with
+synthetic given name `Alex` and the masked account ending `5678`, review, confirm.
+
+Useful breakpoints, in request order:
+
+1. React `submit` in `frontend/src/main.tsx`.
+2. Experience `message` / `forward` in `src/card_chat/experience.py`.
+3. Agent `interpret_turn` in `agent.py`, then `message` in `main.py`.
+4. React `supply` and Agent `structured` for private details (no model call).
+5. React `confirm`, then Agent `confirm` / `execute` for stored approval.
+6. MCP `call_tool` / `execute` in `mcp_server.py`.
+7. Cards `create_card` in `src/card_servicing/cards.py` before `create_idempotent`.
+
+Cards writes only after confirmation. Long debugger pauses can trigger the
+10-second downstream or 120-second outer HTTP timeout. Continue the paused
+request and use the supported retry; the saved execution key prevents another
+card. Do not start a new card request to recover an uncertain outcome.
+
+## Checks and troubleshooting
+
+```powershell
+.\.venv\Scripts\python.exe -m pytest -q
+.\.venv\Scripts\python.exe scripts/export_cards_openapi.py --check
+.\.venv\Scripts\python.exe scripts/render_chat_diagrams.py --check
+# With the chosen stack running on browser port 8080:
+.\.venv\Scripts\python.exe scripts/smoke_stack.py
+```
+
+- **Port in use:** stop the other deployment mode and any old local Vite task.
+- **Local npm not found:** install Node on Windows and restart VS Code. Docker's Node installation does not supply host npm.
+- **Identity unavailable:** start the selected Keycloak instance and verify `/realms/cards/.well-known/openid-configuration` on 8081.
+- **Local Agent waits:** check Cards/MCP terminals and continue startup breakpoints. No MCP child process or stdio is used.
+- **Unbound Docker breakpoint:** rebuild the image; maps are workspace `src` ? `/app/src`.
+- **Unbound local breakpoint:** use the workspace venv and native launch profile, not a Docker attach profile.
+- **No natural-language interpretation:** check `STACK_MODEL_PROVIDER=anthropic` and key/model settings. Stub mode uses the manual fallback.
+
+Verified: 147 automated tests passed; four native Windows Python services started
+and served health checks, and authenticated native Agent ? remote HTTP MCP ?
+Cards creation succeeded with zero model calls, using the existing Keycloak
+container. Only smoke-test child processes were stopped afterward; the Docker
+application was left unchanged. Interactive VS Code compound/browser checks and a fully native
+Keycloak installation remain manual verification steps; host Node availability
+is checked explicitly before attempting local launch.
+
+Further detail: [HTTP/security architecture](docs/http-stack.md),
+[model privacy/caching/usage](docs/model-privacy.md),
+[verification history](docs/http-stack-verification.md),
+[OpenAPI contract](docs/cards.openapi.json). Redis, RabbitMQ and MongoDB are
+optional legacy infrastructure, not required by the current HTTP application.

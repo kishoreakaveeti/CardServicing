@@ -105,7 +105,7 @@
 <rect x="35" y="2254" width="1630" height="49" rx="5" fill="#fef3c7" stroke="#cbd5e1"/>
 <text x="55" y="2279" font-size="17" fill="#1e293b">Other catalogue operations use this same path with their compiled method, path parameters and JSON body.</text>
 <text x="40" y="2377" class="heading" font-size="20" fill="#0f172a">Traceable code references</text>
-<a href="../../src/card_chat/main.py"><text x="40" y="2402" font-size="16" fill="#1d4ed8">src/card_chat/main.py:320</text></a>
+<a href="../../src/card_chat/main.py"><text x="40" y="2402" font-size="16" fill="#1d4ed8">src/card_chat/main.py:322</text></a>
 <a href="../../src/card_chat/main.py"><text x="40" y="2427" font-size="16" fill="#1d4ed8">src/card_chat/main.py:138</text></a>
 <a href="../../src/card_chat/gateway.py"><text x="40" y="2452" font-size="16" fill="#1d4ed8">src/card_chat/gateway.py:23</text></a>
 <a href="../../src/card_chat/mcp_server.py"><text x="40" y="2477" font-size="16" fill="#1d4ed8">src/card_chat/mcp_server.py:26</text></a>

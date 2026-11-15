@@ -46,7 +46,9 @@ def tools_for_model(catalogue):
                     'description': 'Use the exact opaque reference supplied in verified draft facts. If absent, ask the customer to use the secure action form.',
                     'x-model-input': 'reference'}
         definition['input_schema'] = {'type': 'object', 'properties': properties,
-            'required': list(spec.input_schema.get('required', [])), 'additionalProperties': False}
+            # An intent proposal may omit unknown inputs. Only the original
+            # execution schema can authorize a complete reviewed submission.
+            'required': [], 'additionalProperties': False}
         definitions[name] = definition
     return definitions
 

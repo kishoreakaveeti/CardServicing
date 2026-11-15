@@ -1,5 +1,26 @@
 # HTTP stack verification — 15 November 2026
 
+## Chat-first follow-up
+
+The main interaction is now free text. A model proposal can identify a tool with
+incomplete arguments; the Agent returns `Reply.input_tool` and React opens the
+corresponding private form. The manual action picker is a collapsed secondary
+path. MCP's original required fields, authorization and confirmation still gate
+execution. Both Agent modes are covered by the new intent-to-form tests.
+
+The local ignored `.env.stack` now explicitly selects `STACK_MODEL_PROVIDER=anthropic`
+using the existing configured model/key; fresh installations still default to
+the credential-free stub unless configured otherwise. Caching remains off.
+
+Verification: **143 tests passed**, frontend type check and production build
+passed, and diagrams were regenerated. One live non-sensitive request, "I would
+like to create a new card, please", selected `create_card` with no review yet,
+pending private inputs. It used one model call, 1,062 input tokens and 97 output
+tokens, with zero cache reads/writes. No confirmation or Cards write was
+requested by this live test. Rebuilt debug containers are healthy; VS Code
+sessions need reconnecting after their processes restart. Interactive desktop
+windows were not inspected or controlled for this change.
+
 ## Private-input follow-up
 
 The follow-up started from the working stack with **105 passing tests** and a

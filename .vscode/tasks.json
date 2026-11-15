@@ -1,7 +1,100 @@
 {
   "version": "2.0.0",
   "tasks": [
-    {"label": "Start Full Debug Stack", "type": "shell", "command": "powershell", "args": ["-NoProfile", "-ExecutionPolicy", "Bypass", "-File", "${workspaceFolder}/scripts/stack.ps1", "-DebugComponent", "All", "-Build"], "problemMatcher": []},
-    {"label": "Stop Debug Stack", "type": "shell", "command": "powershell", "args": ["-NoProfile", "-ExecutionPolicy", "Bypass", "-File", "${workspaceFolder}/scripts/stack.ps1", "-Stop"], "problemMatcher": []}
+    {
+      "label": "Start Full Debug Stack",
+      "type": "shell",
+      "command": "powershell",
+      "args": [
+        "-NoProfile",
+        "-ExecutionPolicy",
+        "Bypass",
+        "-File",
+        "${workspaceFolder}/scripts/stack.ps1",
+        "-DebugComponent",
+        "All",
+        "-Build"
+      ],
+      "problemMatcher": []
+    },
+    {
+      "label": "Stop Debug Stack",
+      "type": "shell",
+      "command": "powershell",
+      "args": [
+        "-NoProfile",
+        "-ExecutionPolicy",
+        "Bypass",
+        "-File",
+        "${workspaceFolder}/scripts/stack.ps1",
+        "-Stop"
+      ],
+      "problemMatcher": []
+    },
+    {
+      "label": "Check Local Prerequisites",
+      "type": "process",
+      "command": "${workspaceFolder}/.venv/Scripts/python.exe",
+      "args": [
+        "${workspaceFolder}/scripts/check_local.py"
+      ],
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "Start Local Frontend",
+      "type": "shell",
+      "command": "npm.cmd",
+      "args": [
+        "run",
+        "dev:local"
+      ],
+      "options": {
+        "cwd": "${workspaceFolder}/frontend",
+        "env": {
+          "EXPERIENCE_PROXY_TARGET": "http://127.0.0.1:8020",
+          "NO_COLOR": "1"
+        }
+      },
+      "isBackground": true,
+      "problemMatcher": {
+        "owner": "local-vite",
+        "pattern": {
+          "regexp": "^(NEVER_MATCH_VITE_ERROR)$",
+          "message": 1
+        },
+        "background": {
+          "activeOnStart": true,
+          "beginsPattern": "VITE v",
+          "endsPattern": "Local:.*8080"
+        }
+      },
+      "presentation": {
+        "panel": "dedicated"
+      }
+    },
+    {
+      "label": "Prepare Local Stack",
+      "dependsOrder": "sequence",
+      "dependsOn": [
+        "Check Local Prerequisites",
+        "Start Local Frontend"
+      ],
+      "problemMatcher": []
+    },
+    {
+      "label": "Wait for Local HTTP",
+      "type": "process",
+      "command": "${workspaceFolder}/.venv/Scripts/python.exe",
+      "args": [
+        "${workspaceFolder}/scripts/wait_local.py"
+      ],
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "problemMatcher": []
+    }
   ]
 }

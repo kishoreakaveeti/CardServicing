@@ -50,6 +50,7 @@ class Reply(BaseModel):
     confirmation_label: str | None = None
     id: str | None = None
     usage: dict[str, int] = Field(default_factory=dict)
+    input_tool: str | None = None
 
 
 class Operation(BaseModel):

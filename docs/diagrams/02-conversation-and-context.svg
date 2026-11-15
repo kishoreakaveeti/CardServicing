@@ -128,6 +128,6 @@
 <a href="../../src/card_chat/agent.py"><text x="40" y="2919" font-size="16" fill="#1d4ed8">src/card_chat/agent.py:11</text></a>
 <a href="../../src/card_chat/catalogue.py"><text x="40" y="2944" font-size="16" fill="#1d4ed8">src/card_chat/catalogue.py:101</text></a>
 <a href="../../src/card_chat/main.py"><text x="40" y="2969" font-size="16" fill="#1d4ed8">src/card_chat/main.py:237</text></a>
-<a href="../../src/card_chat/main.py"><text x="40" y="2994" font-size="16" fill="#1d4ed8">src/card_chat/main.py:255</text></a>
+<a href="../../src/card_chat/main.py"><text x="40" y="2994" font-size="16" fill="#1d4ed8">src/card_chat/main.py:257</text></a>
 <text x="40" y="3062" font-size="15" fill="#475569">Source: card-chat-flows.json | Regenerate: python scripts/render_chat_diagrams.py</text>
 </svg>

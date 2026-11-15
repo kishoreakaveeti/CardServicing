@@ -8,14 +8,17 @@ does not send private identifiers through the model conversation.
 ## Create a simulated card
 
 Start the stack with `scripts/stack.ps1 -Build`, open http://localhost:8080 and
-sign in with the existing synthetic credentials. Start a conversation, enter
-`Alex` in the secure form, select the masked account ending `5678`, click
+sign in with the existing synthetic credentials. With Claude enabled, start a
+conversation and type **"I would like a new card"**. The model identifies the
+action and the UI opens its matching private form automatically. Enter `Alex`,
+select the masked account ending `5678`, click
 **Review action**, then **Create card**. The username comes from verified
 identity. The picker contains only accounts from the signed customer assertion.
 No full account number is returned to React.
 
-The whole structured flow makes **zero model calls**, even with the Anthropic
-adapter configured. Chat is optional for intent, questions and safe corrections.
+Chat is the primary entry point for intent, questions and safe corrections.
+The secondary **Choose an action manually** panel retains a structured-only flow
+that makes **zero model calls**, even with the Anthropic adapter configured.
 After completing the form, "Create the card using these details" can produce a
 model proposal using opaque references. Confirmation and eligible replay still
 make zero additional calls. The result displays the actual `SIM-...` card and
@@ -92,6 +95,10 @@ for non-sensitive scalar facts; it defaults empty and rejects identifier,
 credential, sensitive and trusted fields. The fixture `block_card` allows only
 `reason`; its card ID remains private. The model receives reference-string
 schemas for private fields, while MCP retains the original execution schemas.
+Model-facing proposal arguments are optional so Claude can identify intent
+before private values exist. Original required-field validation still applies
+before any review or execution. `Reply.input_tool` is the typed cue used by
+React to display the matching form in both immediate and polled responses.
 Examples/defaults and arbitrary schema annotations never enter the model prefix.
 
 React renders the returned scalar form fields and masked options generically.
@@ -158,7 +165,7 @@ cache writes. A cache hit must be demonstrated by nonzero reported reads; a
 configured flag or a mocked counter is not evidence of a real hit.
 
 Baseline before this change: **105 tests passed**, one existing deprecation
-warning, and diagrams were current. The final suite passes **141 tests**.
+warning, and diagrams were current. The current suite passes **143 tests**.
 Automated outgoing-payload tests now use an
 actual Anthropic SDK with a mocked HTTP transport, not just a mocked adapter
 method. They inject private values into text, history, drafts, tool results and
@@ -171,7 +178,11 @@ Measured automated call counts: structured-only card flow **0**; optional
 model-assisted proposal **1**; confirmation, eligible retry and duplicate
 confirmation **0 additional** in both modes. Mock token/cache counters test
 instrumentation only. **No live Claude token measurements or real cache hits
-were collected.** See [verification results](http-stack-verification.md).
+were collected during that privacy verification.** A subsequent chat-first
+smoke test verified one live Claude intent request (1,062 input tokens, 97 output
+tokens, zero cache reads/writes), without confirmation or a Cards write. This
+is not a completed-card cost benchmark. The current suite passes 143 tests.
+See [verification results](http-stack-verification.md).
 
 The earlier scripted, all-details real-MCP retry fixture asserted one model
 invocation per completed card. Its structured-input replacement asserts zero.
