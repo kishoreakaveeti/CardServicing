@@ -18,11 +18,11 @@ the complete stack; the other generated diagrams follow individual workflow step
 
 ## Run and debug
 
-[README](../README.md) is the authoritative startup guide. Its two complete paths are:
+[Getting started](getting-started.md) is the authoritative startup guide. Its two complete paths are:
 
-- [Docker containers](../README.md#1-run-and-debug-using-local-docker-containers): prerequisites,
+- [Docker containers](getting-started.md#1-run-and-debug-using-local-docker-containers): prerequisites,
   shared configuration, normal run, full-stack debug/individual attach, rebuild and stop.
-- [Native application](../README.md#2-run-and-debug-natively-on-your-computer): Node/npm,
+- [Native application](getting-started.md#2-run-and-debug-natively-on-your-computer): Node/npm,
   dependency preparation, terminal-only execution, native F5, ports and shutdown.
 
 Docker provides Mongo and Identity; no host Mongo server, SQLite server, JDK or

@@ -1,6 +1,6 @@
 # Debug the full application in Docker
 
-The authoritative installation and launch instructions are in [README: Docker containers](../README.md#1-run-and-debug-using-local-docker-containers). For native execution use [README: native mode](../README.md#2-run-and-debug-natively-on-your-computer). This guide covers the current full stack, not the archived API-only scripts.
+The authoritative installation and launch instructions are in [Setup guide: Docker containers](getting-started.md#1-run-and-debug-using-local-docker-containers). For native execution use [Setup guide: native mode](getting-started.md#2-run-and-debug-natively-on-your-computer). This guide covers the current full stack, not the archived API-only scripts.
 
 ## Prerequisites
 

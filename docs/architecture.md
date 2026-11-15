@@ -1,6 +1,6 @@
 # Architecture and technology stack
 
-Use [README](../README.md) for current [Docker](../README.md#1-run-and-debug-using-local-docker-containers) and [native](../README.md#2-run-and-debug-natively-on-your-computer) prerequisites, configuration, run/debug commands and switching steps. Architecture and API behavior are shared by both modes; process locations and persistence paths differ.
+Use [setup guide](getting-started.md) for current [Docker](getting-started.md#1-run-and-debug-using-local-docker-containers) and [native](getting-started.md#2-run-and-debug-natively-on-your-computer) prerequisites, configuration, run/debug commands and switching steps. Architecture and API behavior are shared by both modes; process locations and persistence paths differ.
 
 ## Runtime boundaries
 

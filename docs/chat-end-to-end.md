@@ -1,6 +1,6 @@
 # Banking chat: end-to-end request trace
 
-For installation and run/debug steps use [README: Docker](../README.md#1-run-and-debug-using-local-docker-containers) or [README: native](../README.md#2-run-and-debug-natively-on-your-computer). Both expose the React UI at `http://localhost:8080`. The native BFF port 8020 and container API port 8000 are not the UI.
+For installation and run/debug steps use [Setup guide: Docker](getting-started.md#1-run-and-debug-using-local-docker-containers) or [Setup guide: native](getting-started.md#2-run-and-debug-natively-on-your-computer). Both expose the React UI at `http://localhost:8080`. The native BFF port 8020 and container API port 8000 are not the UI.
 
 ## 1. Independent processes and startup
 

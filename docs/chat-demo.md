@@ -1,6 +1,6 @@
 # Chat-first banking demo
 
-Start with [README](../README.md): it has separate prerequisite/configuration/run/debug instructions for [Docker](../README.md#1-run-and-debug-using-local-docker-containers) and [native execution](../README.md#2-run-and-debug-natively-on-your-computer), including operation without native Mongo or any Mongo instance.
+Start with [setup guide](getting-started.md): it has separate prerequisite/configuration/run/debug instructions for [Docker](getting-started.md#1-run-and-debug-using-local-docker-containers) and [native execution](getting-started.md#2-run-and-debug-natively-on-your-computer), including operation without native Mongo or any Mongo instance.
 
 The browser UI is `http://localhost:8080` in either mode. Native port 8020 is the Experience/BFF API, not the UI. The application uses React, Experience, Agent, remote HTTP MCP, Cards, SQLite, Identity and optional Mongo diagnostics; it does not start a stdio MCP child.
 

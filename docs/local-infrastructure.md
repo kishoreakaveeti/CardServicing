@@ -144,7 +144,7 @@ against the shared SQLite file at the same time.
 To debug the full host chat flow instead of Swagger alone, stop the manual API,
 select **Debug Chat + API**, and open `http://127.0.0.1:8020` after both sessions
 start. Keep `CARD_API_BASE_URL=http://127.0.0.1:8010` for that mode. See
-[chat debugging](../README.md#2-run-and-debug-natively-on-your-computer).
+[chat debugging](getting-started.md#2-run-and-debug-natively-on-your-computer).
 
 ### RabbitMQ management
 

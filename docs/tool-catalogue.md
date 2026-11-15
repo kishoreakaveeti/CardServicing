@@ -185,8 +185,8 @@ for an uncertain outcome rather than inventing another operation.
 
 ## Run and debug catalogue changes
 
-Use [README: Docker](../README.md#1-run-and-debug-using-local-docker-containers) or
-[README: native](../README.md#2-run-and-debug-natively-on-your-computer) for prerequisites,
+Use [Setup guide: Docker](getting-started.md#1-run-and-debug-using-local-docker-containers) or
+[Setup guide: native](getting-started.md#2-run-and-debug-natively-on-your-computer) for prerequisites,
 Mongo/console options, exact launch profiles and switching steps. The UI is
 `http://localhost:8080` in either mode. Set model/key in the ignored files described there.
 
