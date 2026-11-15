@@ -320,6 +320,110 @@
           }
         }
       }
+    },
+    "/banking/cards/{card_id}/block": {
+      "post": {
+        "tags": [
+          "banking"
+        ],
+        "summary": "Block Card",
+        "operationId": "block_card",
+        "parameters": [
+          {
+            "name": "card_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Card Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CardBlockInput"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CardBlockResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/banking/cards/{card_id}/unblock": {
+      "post": {
+        "tags": [
+          "banking"
+        ],
+        "summary": "Unblock Card",
+        "operationId": "unblock_card",
+        "parameters": [
+          {
+            "name": "card_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Card Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CardBlockInput"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CardBlockResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
@@ -434,7 +538,10 @@
           },
           "status": {
             "type": "string",
-            "const": "created",
+            "enum": [
+              "created",
+              "blocked"
+            ],
             "title": "Status",
             "default": "created"
           },
@@ -454,6 +561,43 @@
           "card_number"
         ],
         "title": "Card"
+      },
+      "CardBlockInput": {
+        "properties": {
+          "reason": {
+            "type": "string",
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Reason",
+            "default": "Customer requested"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "CardBlockInput"
+      },
+      "CardBlockResponse": {
+        "properties": {
+          "card_id": {
+            "type": "string",
+            "title": "Card Id"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "message": {
+            "type": "string",
+            "title": "Message",
+            "default": "Card successfully blocked"
+          }
+        },
+        "type": "object",
+        "required": [
+          "card_id",
+          "status"
+        ],
+        "title": "CardBlockResponse"
       },
       "CardIssuance": {
         "properties": {
@@ -501,7 +645,10 @@
           },
           "status": {
             "type": "string",
-            "const": "created",
+            "enum": [
+              "created",
+              "blocked"
+            ],
             "title": "Status",
             "default": "created"
           },

@@ -14,7 +14,7 @@ Complete README shared setup: host Python/venv and generated credentials, Docker
 
 ## Start and attach
 
-Select **Debug Full Stack (Docker)** in Run and Debug and press F5. Its shared task builds/starts debug containers, waits for health/listeners, attaches four Python debuggers and opens Chrome at `http://localhost:8080`. You do not need a separate start command before this profile. **Debug Full Stack** is an alias.
+Select **Debug Full Stack (Docker)** in Run and Debug and press F5. Its shared task builds/starts debug containers, waits for health/listeners, attaches six Python debuggers and opens Chrome at `http://localhost:8080`. You do not need a separate start command before this profile. **Debug Full Stack** is an alias.
 
 For manual preparation, run:
 
@@ -24,14 +24,16 @@ For manual preparation, run:
 
 Then select the full Docker profile or individual attach profiles. The full profile reuses prepared services. Individual attach configurations do not start containers.
 
-| Profile | Host port | Source mapping |
-| --- | --- | --- |
-| Attach to Experience API | 5681 | workspace `src` to `/app/src` |
-| Attach to Agent API | 5682 | Same |
-| Attach to MCP Server | 5683 | Same |
-| Attach to Cards API | 5684 | Same |
+| Profile | Host port | Container listener | Container name | Source mapping |
+| --- | --- | --- | --- | --- |
+| Attach to Experience API | 5681 | 5678 | `card-servicing-experience` | workspace `src` to `/app/src` |
+| Attach to Agent API | 5682 | 5678 | `card-servicing-agent` | Same |
+| Attach to MCP Server | 5683 | 5678 | `card-servicing-mcp` | Same |
+| Attach to Cards API | 5684 | 5678 | `cards-api` | Same |
+| Attach to FinCrime API | 5685 | 5678 | `fincrime-api` | Same |
+| Attach to FinCrime Agent | 5686 | 5678 | `fincrime-agent` | Same |
 
-For only Agent, run `stack.ps1 -DebugComponent Agent -Build`, then select **Attach to Agent API**. Use `Experience`, `MCP` or `Cards` similarly. **Debug Frontend** opens a browser against an already running frontend.
+For only Cards Agent, run `stack.ps1 -DebugComponent Cards-Agent -Build`, then select **Attach to Agent API**. Use `Experience`, `MCP`, `Cards-API`, `FinCrime-API`, or `FinCrime-Agent` similarly. **Debug Frontend** opens a browser against an already running frontend.
 
 ## Trigger and inspect a request
 
@@ -49,7 +51,7 @@ Attach using **Attach to MCP Server** and continue. This special command starts 
 
 Mongo starts automatically from `mongo:8.0`; no Windows Mongo server installation is needed. Setting `TELEMETRY_SINK=stdout` or `none` changes logging but the current full Compose stack still starts its configured Mongo container. To run with no Mongo instance, use native application mode with console/disabled telemetry. See [Mongo logging](mongodb-logging.md).
 
-Cards, Agent and Experience SQLite databases live in separate Docker named volumes. Native `data/local/` databases are separate; a native customer will not automatically exist in Docker. Do not expect DB Browser to open a Docker database at the native filesystem path.
+Cards, FinCrime, Agent and Experience SQLite databases live in separate Docker named volumes (`cards_data`, `fincrime_data`, `agent_data`, `experience_data`). Native `data/local/` databases are separate; a native customer will not automatically exist in Docker. Do not expect DB Browser to open a Docker database at the native filesystem path.
 
 After source edits, disconnect and relaunch the Docker profile to rebuild images. Restarting an old image does not include changed code. Shift+F5 disconnects debuggers but leaves containers running. Use `stack.ps1 -Stop` to remove containers/network while retaining volumes. Never remove volumes merely to resolve a debugger problem.
 

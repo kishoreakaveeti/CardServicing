@@ -194,7 +194,8 @@ def test_changes_of_action_corrections_and_workflow_eligibility():
         prepare_review(client, cid)
         model.outputs = [CustomerReply('Which card should I block?')]
         client.post(path + '/messages', json={'text': 'Block a card instead.'})
-        assert set(model.seen_tools[-1]) == {'create_card', 'block_card', 'logout'}
+        # Under agent-specific tool isolation, FinCrime agent only sees FinCrime tools
+        assert set(model.seen_tools[-1]) == {'block_card', 'logout'}
         prepare_review(client, cid, {'card_id': '000042', 'reason': 'original reason'}, 'block_card')
         model.outputs = [ProposedToolCall('block_card', {'reason': 'updated reason'})]
         corrected = client.post(path + '/messages', json={'text': 'Use updated reason.'}).json()

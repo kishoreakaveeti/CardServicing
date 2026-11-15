@@ -100,6 +100,10 @@ class StubModel:
             candidates = ['register']
         elif any(word in text for word in ('login', 'log in', 'log me in', 'sign in')):
             candidates = ['login']
+        elif 'card' in text and any(word in text for word in ('unblock', 'un-block', 'unfreeze', 'un-freeze', 'reactivate', 'restore')):
+            candidates = ['unblock_card']
+        elif 'card' in text and any(word in text for word in ('block', 'freeze', 'stop', 'lost', 'stolen')):
+            candidates = ['block_card']
         elif 'account' in text and any(word in text for word in ('create', 'open', 'new')):
             candidates = ['create_account']
         elif 'card' in text and any(word in text for word in ('issue', 'new', 'want', 'additional', 'another')):

@@ -106,10 +106,10 @@
 <rect x="35" y="2278" width="1630" height="49" rx="5" fill="#fef3c7" stroke="#cbd5e1"/>
 <text x="55" y="2303" font-size="17" fill="#1e293b">Other catalogue operations use this same path with their compiled method, path parameters and JSON body.</text>
 <text x="40" y="2401" class="heading" font-size="20" fill="#0f172a">Traceable code references</text>
-<a href="../../src/card_chat/main.py"><text x="40" y="2426" font-size="16" fill="#1d4ed8">src/card_chat/main.py:360</text></a>
-<a href="../../src/card_chat/main.py"><text x="40" y="2451" font-size="16" fill="#1d4ed8">src/card_chat/main.py:140</text></a>
+<a href="../../src/card_chat/main.py"><text x="40" y="2426" font-size="16" fill="#1d4ed8">src/card_chat/main.py:429</text></a>
+<a href="../../src/card_chat/main.py"><text x="40" y="2451" font-size="16" fill="#1d4ed8">src/card_chat/main.py:157</text></a>
 <a href="../../src/card_chat/gateway.py"><text x="40" y="2476" font-size="16" fill="#1d4ed8">src/card_chat/gateway.py:23</text></a>
-<a href="../../src/card_chat/mcp_server.py"><text x="40" y="2501" font-size="16" fill="#1d4ed8">src/card_chat/mcp_server.py:26</text></a>
+<a href="../../src/card_chat/mcp_server.py"><text x="40" y="2501" font-size="16" fill="#1d4ed8">src/card_chat/mcp_server.py:69</text></a>
 <a href="../../src/api_client/client.py"><text x="40" y="2526" font-size="16" fill="#1d4ed8">src/api_client/client.py:37</text></a>
 <a href="../../src/card_servicing/cards.py"><text x="40" y="2551" font-size="16" fill="#1d4ed8">src/card_servicing/cards.py:59</text></a>
 <text x="40" y="2619" font-size="15" fill="#475569">Source: card-chat-flows.json | Regenerate: python scripts/render_chat_diagrams.py</text>

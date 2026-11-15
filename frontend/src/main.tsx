@@ -3,7 +3,7 @@ import { createRoot } from 'react-dom/client';
 import './style.css';
 import { readSessionResponse } from './http';
 
-type Reply = { id?: string; message: string; review: string | null; can_confirm: boolean; confirmation_label: string | null; input_tool?: string | null; data?: {accounts?: {account_number:string;account_type:string}[];cards?: {id:string;account_number:string;card_number:string}[]} };
+type Reply = { id?: string; message: string; review: string | null; can_confirm: boolean; confirmation_label: string | null; input_tool?: string | null; data?: {accounts?: {account_number:string;account_type:string}[];cards?: {id:string;account_number:string;card_number:string;status?:string}[]} };
 type Session = { name: string; csrf: string };
 type Job = { status: 'pending' | 'running' | 'succeeded' | 'failed'; status_url: string; result: Reply | null; error: string | null };
 type Pending = { path: string; body: object; key: string };
@@ -138,13 +138,15 @@ function App() {
       <form onSubmit={submit}><label>How can we help?<textarea value={text} onChange={e=>setText(e.target.value)} placeholder="I want to register" maxLength={4000}/></label><p>Keep credentials out of chat. Use the secure form.</p><button disabled={busy || !!pending || !text.trim()}>Send message</button></form>
     </> : <>
       <div className="toolbar"><span>Signed in as {session.name}</span><button disabled={busy} onClick={start}>{cid ? 'New conversation' : 'Start conversation'}</button><button disabled={busy} onClick={()=>void logout()}>Sign out</button></div>
-      <nav aria-label="Banking actions" className="toolbar">{[['view_accounts','View my accounts'],['create_account','Create account'],['view_cards','View my cards'],['issue_card','Issue new card']].map(([name,label])=><button key={name} disabled={busy || !!pending} onClick={()=>choose(name)}>{label}</button>)}</nav>
+      <nav aria-label="Banking actions" className="toolbar">{[['view_accounts','View my accounts'],['create_account','Create account'],['view_cards','View my cards'],['issue_card','Issue new card'],['block_card','Block card'],['unblock_card','Unblock card']].map(([name,label])=><button key={name} disabled={busy || !!pending} onClick={()=>choose(name)}>{label}</button>)}</nav>
       <label><input type="checkbox" checked={poll} disabled={busy} onChange={e => setPoll(e.target.checked)}/> Submit and poll</label>
       <section aria-live="polite" aria-busy={busy}>{messages.map((message, index) => <p className={message.startsWith('You:') ? 'customer' : 'assistant'} key={index}>{message}</p>)}{busy && <p>Working…</p>}</section>
       {cid && <form onSubmit={submit}><label htmlFor="message">How can we help?</label><textarea id="message" placeholder="For example: I would like a new card." value={text} maxLength={4000} onChange={e => setText(e.target.value)} disabled={busy || !!pending}/><p>Describe what you need. Keep account numbers and other private details out of chat.</p><button disabled={busy || !!pending || !text.trim()}>Send message</button></form>}
       {cid && showInputs && tools.some(item => item.name === tool) && <aside><h2>{tools.find(item => item.name === tool)?.label}: private details</h2><p>Private details stay with the service. They are not sent to the language model.</p>
         {['issue_card','create_card'].includes(tool) && <p>Ordinary requests return your existing card. Select “Issue an additional card” only if you want another card, then review and confirm.</p>}
         {tool==='issue_card' && tools.find(t=>t.name===tool)?.fields.some(f=>f.options?.length===0) && <p>Create an account first. <button onClick={()=>{setTool('create_account');setValues({});}}>Create account</button></p>}
+        {tool==='unblock_card' && tools.find(t=>t.name===tool)?.fields.some(f=>f.name==='card_id' && f.options?.length===0) && <p>No blocked cards are currently available to unblock.</p>}
+        {tool==='block_card' && tools.find(t=>t.name===tool)?.fields.some(f=>f.name==='card_id' && f.options?.length===0) && <p>No active cards are available to block.</p>}
         <form onSubmit={supply}>
         {tools.find(item => item.name === tool)?.fields.map(field => <label className="secure-field" key={field.name}>{field.label}
           {field.options ? <select required={field.required} value={values[field.name] || ''} disabled={busy || !!pending} onChange={e => setValues(old => ({...old,[field.name]:e.target.value}))}>
@@ -155,7 +157,7 @@ function App() {
       </aside>}
       {reply?.can_confirm && <aside><strong>Action review</strong><p>{reply.message}</p><button disabled={busy || !!pending} onClick={confirm}>{reply.confirmation_label || 'Confirm action'}</button>{tool && <button disabled={busy || !!pending} onClick={() => setShowInputs(true)}>Edit private details</button>}</aside>}
       {reply?.data?.accounts && <aside><h2>My accounts</h2>{reply.data.accounts.map(a=><p key={a.account_number}>{a.account_type} · {a.account_number}</p>)}{!reply.data.accounts.length && <button onClick={()=>choose('create_account')}>Create account</button>}</aside>}
-      {reply?.data?.cards && <aside><h2>My cards</h2>{reply.data.cards.map(c=><p key={c.id}>{c.card_number} · Account ending {c.account_number.slice(-4)}</p>)}</aside>}
+      {reply?.data?.cards && <aside><h2>My cards</h2>{reply.data.cards.map(c=><p key={c.id}>{c.card_number} · Account ending {c.account_number.slice(-4)}{c.status ? ` · [${c.status.toUpperCase()}]` : ''}</p>)}</aside>}
       {cid && tools.length > 0 && <details><summary>Choose an action manually</summary><p>You can also describe your request in chat above.</p><select aria-label="Choose an action manually" value={tool} disabled={busy || !!pending} onChange={e => {setTool(e.target.value); setValues({}); setShowInputs(!!e.target.value);}}><option value="">Choose an action</option>{tools.map(item => <option key={item.name} value={item.name}>{item.label}</option>)}</select><button disabled={busy || !!pending || !tool} onClick={() => setShowInputs(true)}>Enter private details</button></details>}
       {pending && !busy && <button onClick={() => void request(pending)}>Retry same submission</button>}
     </>}

@@ -26,7 +26,7 @@ class CardCreate(BaseModel):
 class Card(CardCreate):
     id: UUID
     card_number: str = Field(pattern=r'^SIM-[0-9a-f]{32}$', description='Simulation identifier; not a payment network PAN.')
-    status: Literal['created'] = 'created'
+    status: Literal['created', 'blocked'] = 'created'
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
 

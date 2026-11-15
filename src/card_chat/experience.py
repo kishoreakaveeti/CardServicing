@@ -214,6 +214,8 @@ def create_app(config=None):
         if value['claims'].get('local_customer'):
             current = await banking_request(request, 'accounts', value=value)
             value['claims']['accounts'] = [a['account_number'] for a in current['accounts']]
+            current_cards = await banking_request(request, 'cards', value=value)
+            value['claims']['cards'] = [{'id': c['id'], 'card_number': c['card_number'], 'status': c['status'], 'account_number': c['account_number']} for c in current_cards.get('cards', [])]
         dt = delegation.set(security.issue_customer(value['claims']))
         tt = trace.set(uuid4().hex)
         try:

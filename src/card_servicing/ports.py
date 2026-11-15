@@ -12,6 +12,10 @@ class AccountNotOwned(Exception):
     """The authenticated customer does not own the selected managed account."""
 
 
+class BlockedCardExists(Exception):
+    """Cannot issue a new card while an existing card on the account is blocked."""
+
+
 class CardStorePort(Protocol):
     dependency_name: str
 

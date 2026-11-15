@@ -58,12 +58,12 @@
 <rect x="35" y="1124" width="1330" height="49" rx="5" fill="#fef3c7" stroke="#cbd5e1"/>
 <text x="55" y="1149" font-size="17" fill="#1e293b">Claude does not fetch OpenAPI, call localhost or supply execution headers. Keys stay outside its schema.</text>
 <text x="40" y="1247" class="heading" font-size="20" fill="#0f172a">Traceable code references</text>
-<a href="../../src/card_chat/catalogue.py"><text x="40" y="1272" font-size="16" fill="#1d4ed8">src/card_chat/catalogue.py:223</text></a>
-<a href="../../src/card_chat/catalogue.py"><text x="40" y="1297" font-size="16" fill="#1d4ed8">src/card_chat/catalogue.py:139</text></a>
-<a href="../../src/card_chat/mcp_server.py"><text x="40" y="1322" font-size="16" fill="#1d4ed8">src/card_chat/mcp_server.py:65</text></a>
-<a href="../../src/card_chat/mcp_server.py"><text x="40" y="1347" font-size="16" fill="#1d4ed8">src/card_chat/mcp_server.py:69</text></a>
-<a href="../../src/card_chat/mcp_server.py"><text x="40" y="1372" font-size="16" fill="#1d4ed8">src/card_chat/mcp_server.py:74</text></a>
-<a href="../../src/card_chat/gateway.py"><text x="40" y="1397" font-size="16" fill="#1d4ed8">src/card_chat/gateway.py:33</text></a>
-<a href="../../src/card_chat/gateway.py"><text x="40" y="1422" font-size="16" fill="#1d4ed8">src/card_chat/gateway.py:48</text></a>
+<a href="../../src/card_chat/catalogue.py"><text x="40" y="1272" font-size="16" fill="#1d4ed8">src/card_chat/catalogue.py:224</text></a>
+<a href="../../src/card_chat/catalogue.py"><text x="40" y="1297" font-size="16" fill="#1d4ed8">src/card_chat/catalogue.py:140</text></a>
+<a href="../../src/card_chat/mcp_server.py"><text x="40" y="1322" font-size="16" fill="#1d4ed8">src/card_chat/mcp_server.py:108</text></a>
+<a href="../../src/card_chat/mcp_server.py"><text x="40" y="1347" font-size="16" fill="#1d4ed8">src/card_chat/mcp_server.py:112</text></a>
+<a href="../../src/card_chat/mcp_server.py"><text x="40" y="1372" font-size="16" fill="#1d4ed8">src/card_chat/mcp_server.py:117</text></a>
+<a href="../../src/card_chat/gateway.py"><text x="40" y="1397" font-size="16" fill="#1d4ed8">src/card_chat/gateway.py:37</text></a>
+<a href="../../src/card_chat/gateway.py"><text x="40" y="1422" font-size="16" fill="#1d4ed8">src/card_chat/gateway.py:52</text></a>
 <text x="40" y="1490" font-size="15" fill="#475569">Source: card-chat-flows.json | Regenerate: python scripts/render_chat_diagrams.py</text>
 </svg>

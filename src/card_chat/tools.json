@@ -4,6 +4,7 @@
   "tools": [
     {
       "name": "create_card",
+      "agents": ["cards_agent"],
       "operation_id": "create_card",
       "description": "Create a new simulated card for an existing authorized account. Use for new card creation, not freezing, blocking or replacement. Private details are collected by the secure form and masked account picker. Use only the opaque argument references supplied in verified draft facts; if missing, direct the customer to the form. Ordinary issuance returns an existing card without creating another. Additional issuance requires the customer to explicitly select the additional-card option in the secure form and confirm.",
       "confirmation": "required",
@@ -31,6 +32,7 @@
     },
     {
       "name": "view_accounts",
+      "agents": ["cards_agent"],
       "operation_id": "view_accounts",
       "label": "View my accounts",
       "confirmation": "none",
@@ -41,6 +43,7 @@
     },
     {
       "name": "create_account",
+      "agents": ["cards_agent"],
       "operation_id": "create_account",
       "label": "Create account",
       "confirmation": "required",
@@ -56,6 +59,7 @@
     },
     {
       "name": "view_cards",
+      "agents": ["cards_agent"],
       "operation_id": "view_cards",
       "label": "View my cards",
       "confirmation": "none",
@@ -66,6 +70,7 @@
     },
     {
       "name": "issue_card",
+      "agents": ["cards_agent"],
       "operation_id": "issue_card",
       "label": "Issue new card",
       "confirmation": "required",
@@ -84,6 +89,58 @@
       "result_labels": {
         "card_number": "Simulated card",
         "message": "Details"
+      }
+    },
+    {
+      "name": "block_card",
+      "agents": ["fincrime_agent"],
+      "operation_id": "block_card",
+      "label": "Block card",
+      "confirmation": "required",
+      "confirmation_label": "Block this card",
+      "description": "Block a simulated card. Open the secure form to select the card to block and enter the reason. Use for blocking, freezing or lost/stolen cards.",
+      "context_fields": [
+        "reason"
+      ],
+      "sensitive_fields": [
+        "card_id"
+      ],
+      "trusted_fields": {
+        "card_id": "card"
+      },
+      "field_labels": {
+        "card_id": "Card reference",
+        "reason": "Reason"
+      },
+      "result_labels": {
+        "card_id": "Card reference",
+        "status": "Status"
+      }
+    },
+    {
+      "name": "unblock_card",
+      "agents": ["fincrime_agent"],
+      "operation_id": "unblock_card",
+      "label": "Unblock card",
+      "confirmation": "required",
+      "confirmation_label": "Unblock this card",
+      "description": "Unblock a previously blocked card. Open the secure form to select the blocked card to unblock. Only blocked cards can be unblocked.",
+      "context_fields": [
+        "reason"
+      ],
+      "sensitive_fields": [
+        "card_id"
+      ],
+      "trusted_fields": {
+        "card_id": "card"
+      },
+      "field_labels": {
+        "card_id": "Blocked card reference",
+        "reason": "Reason"
+      },
+      "result_labels": {
+        "card_id": "Card reference",
+        "status": "Status"
       }
     }
   ]

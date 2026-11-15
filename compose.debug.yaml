@@ -8,21 +8,33 @@ services:
       DEBUG_ENABLED: ${DEBUG_EXPERIENCE:-1}
       DEBUG_WAIT: ${DEBUG_WAIT_EXPERIENCE:-0}
     ports: ["127.0.0.1:5681:5678"]
-  agent:
+  cards-agent:
     build: {target: debug}
     environment:
-      DEBUG_ENABLED: ${DEBUG_AGENT:-1}
-      DEBUG_WAIT: ${DEBUG_WAIT_AGENT:-0}
+      DEBUG_ENABLED: ${DEBUG_CARDS_AGENT:-${DEBUG_AGENT:-1}}
+      DEBUG_WAIT: ${DEBUG_WAIT_CARDS_AGENT:-${DEBUG_WAIT_AGENT:-0}}
     ports: ["127.0.0.1:5682:5678"]
-  mcp:
+  fincrime-agent:
+    build: {context: ., dockerfile: Dockerfile.fincrime-agent, target: debug}
+    environment:
+      DEBUG_ENABLED: ${DEBUG_FINCRIME_AGENT:-1}
+      DEBUG_WAIT: ${DEBUG_WAIT_FINCRIME_AGENT:-0}
+    ports: ["127.0.0.1:5686:5678"]
+  mcp-server:
     build: {target: debug}
     environment:
       DEBUG_ENABLED: ${DEBUG_MCP:-1}
       DEBUG_WAIT: ${DEBUG_WAIT_MCP:-0}
     ports: ["127.0.0.1:5683:5678"]
-  cards:
+  cards-api:
     build: {target: debug}
     environment:
       DEBUG_ENABLED: ${DEBUG_CARDS:-1}
       DEBUG_WAIT: ${DEBUG_WAIT_CARDS:-0}
     ports: ["127.0.0.1:5684:5678"]
+  fincrime-api:
+    build: {context: ., dockerfile: Dockerfile.fincrime-api, target: debug}
+    environment:
+      DEBUG_ENABLED: ${DEBUG_FINCRIME:-1}
+      DEBUG_WAIT: ${DEBUG_WAIT_FINCRIME:-0}
+    ports: ["127.0.0.1:5685:5678"]

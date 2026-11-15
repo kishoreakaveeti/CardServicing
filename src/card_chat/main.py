@@ -11,7 +11,8 @@ from fastapi.responses import FileResponse
 from card_chat.config import settings
 from card_chat.gateway import connect
 from card_chat.provider import make_model
-from card_chat.agent import CardServicingAgent
+from card_chat.agent import CardServicingAgent, FinCrimeAgent, AgentOrchestrator
+from card_chat.mcp_server import get_agent_tools_policy
 from card_chat.turns import CustomerReply, ProposedToolCall
 from card_chat.contracts import Message, Confirmation, Reply, Operation
 from card_chat.durable import Journal
@@ -53,7 +54,20 @@ def create_app(model=None, gateway=None, *, config=None):
         if model is None and gateway is None and not config.get('OIDC_ISSUER') and config.get('ALLOW_INSECURE_LOCAL') != '1':
             raise RuntimeError('Configure OIDC before starting Agent; isolated local tests must opt into ALLOW_INSECURE_LOCAL=1')
         app.state.model = model or make_model(config)
-        app.state.agent = CardServicingAgent(app.state.model)
+        cards_agent = CardServicingAgent(app.state.model)
+        local_fincrime = FinCrimeAgent(app.state.model)
+        fincrime_agent_url = config.get('FINCRIME_AGENT_URL')
+        if fincrime_agent_url:
+            from card_chat.fincrime_agent import RemoteFinCrimeAgent
+            fincrime_agent = RemoteFinCrimeAgent(fincrime_agent_url, fallback_agent=local_fincrime)
+        else:
+            fincrime_agent = local_fincrime
+        app.state.orchestrator = AgentOrchestrator(
+            app.state.model, cards_agent, fincrime_agent,
+            check_blocked_fn=check_account_has_blocked,
+            agent_tools_policy=get_agent_tools_policy(config)
+        )
+        app.state.agent = app.state.orchestrator
         try:
             if gateway is not None:
                 app.state.gateway = gateway
@@ -88,6 +102,15 @@ def create_app(model=None, gateway=None, *, config=None):
         if app.state.security.enabled:
             return principal.get() or {}
         return config.get('LOCAL_CUSTOMER', {'sub': owner(), 'permissions': ['tools:execute']})
+
+    async def check_account_has_blocked(account_num):
+        cards = caller().get('cards', [])
+        for c in cards:
+            if isinstance(c, dict) and c.get('account_number') == account_num and c.get('status') == 'blocked':
+                return True
+        if hasattr(app.state, 'fincrime_service') and app.state.fincrime_service:
+            return app.state.fincrime_service.is_account_blocked(account_num)
+        return False
 
     def permitted():
         names = config.get('MODEL_ALLOWED_TOOLS')
@@ -159,7 +182,21 @@ def create_app(model=None, gateway=None, *, config=None):
                   else 'The outcome may be uncertain. This action cannot be safely retried; check its status first.')
         try:
             # Execute the reviewed snapshot directly. Confirmation makes no model call.
-            result = await app.state.gateway.execute(submission['tool'], submission['arguments'], submission['key'])
+            calling_agent = None
+            if hasattr(spec.entry, 'agents') and spec.entry.agents:
+                calling_agent = spec.entry.agents[0]
+            elif spec.name in ('block_card', 'unblock_card'):
+                calling_agent = 'fincrime_agent'
+            else:
+                calling_agent = 'cards_agent'
+            try:
+                result = await app.state.gateway.execute(
+                    submission['tool'], submission['arguments'], submission['key'], agent=calling_agent
+                )
+            except TypeError:
+                result = await app.state.gateway.execute(
+                    submission['tool'], submission['arguments'], submission['key']
+                )
             if result.get('ok') is not True:
                 error = result.get('error', 'Execution failed.')
                 if not isinstance(error, str) or sanitise(error, private_values(c)) != error:
@@ -255,12 +292,15 @@ def create_app(model=None, gateway=None, *, config=None):
             c.usage['model_calls'] = c.usage.get('model_calls', 0) + 1
             try:
                 turn = await app.state.agent.interpret_turn(history, draft, tools)
-            except Exception:
+            except Exception as exc:
+                logger.exception("Language service / interpret_turn failed: %s", exc)
                 return reply(c, 'The language service is unavailable or proposed an invalid action. Please try again.')
             finally:
                 for key, value in getattr(app.state.model, 'last_usage', {}).items():
                     if key in ('input_tokens', 'output_tokens', 'cache_read_input_tokens', 'cache_creation_input_tokens'):
                         c.usage[key] = c.usage.get(key, 0) + value
+            if turn is None:
+                return reply(c, 'The language service is unavailable or proposed an invalid action. Please try again.')
             if isinstance(turn, CustomerReply):
                 return reply(c, sanitise(turn.text, private_values(c)), language=True)
             if turn.name == 'logout':
@@ -269,6 +309,33 @@ def create_app(model=None, gateway=None, *, config=None):
             if turn.name == 'issue_card' and not caller().get('accounts') and 'create_account' in catalogue:
                 c.draft = {'tool': 'create_account', 'arguments': {}}
                 return reply(c, 'Create an account first. You can choose to issue a card with it.', input_tool='create_account')
+            if turn.name in ('block_card', 'unblock_card') and 'card_id' not in turn.arguments:
+                import re
+                ending_match = re.search(r'ending in\s+([0-9a-zA-Z]{4})', safe_text, re.IGNORECASE)
+                if ending_match:
+                    last4 = ending_match.group(1).lower()
+                    for card in caller().get('cards', []):
+                        is_blocked = isinstance(card, dict) and card.get('status') == 'blocked'
+                        if turn.name == 'unblock_card' and not is_blocked:
+                            continue
+                        if turn.name == 'block_card' and is_blocked:
+                            continue
+                        num = (card.get('card_number') if isinstance(card, dict) else str(card)).lower()
+                        cid_val = card.get('id') if isinstance(card, dict) else str(card)
+                        if num.endswith(last4) or cid_val.endswith(last4):
+                            ref = bind(c.bindings, cid, owner(), turn.name, 'card_id', cid_val)
+                            turn.arguments['card_id'] = ref
+                            break
+            if turn.name in ('issue_card', 'create_card'):
+                account_ref = turn.arguments.get('account_number')
+                account_val = c.bindings.get(account_ref, {}).get('value', account_ref) if account_ref else None
+                if not account_val and verified_draft.get('tool') == turn.name:
+                    draft_ref = verified_draft.get('arguments', {}).get('account_number')
+                    if draft_ref:
+                        account_val = c.bindings.get(draft_ref, {}).get('value', draft_ref)
+                if account_val and await check_account_has_blocked(account_val):
+                    c.draft = {}
+                    return reply(c, f'Cannot issue a new card for account {mask(account_val)} because an existing card for this account is blocked. Under banking security rules, the blocked card must be resolved before a new card can be issued.')
             proposal_arguments = {**(verified_draft.get('arguments', {}) if verified_draft.get('tool') == turn.name else {}),
                                   **turn.arguments}
             try:
@@ -294,6 +361,13 @@ def create_app(model=None, gateway=None, *, config=None):
                 return response
             c.review = uuid4().hex
             details = '; '.join(f'{label}: {value}' for label, value in spec.masked(arguments).items())
+            if spec.name == 'unblock_card':
+                prompt_warning = (
+                    f'Please review: {spec.entry.label}. {details}. '
+                    f'ATTENTION: Unblocking this card will restore its active status and re-enable new card issuance on this account. '
+                    f'Confirm with the button or tell me what to change.'
+                )
+                return reply(c, prompt_warning)
             return reply(c, f'Please review: {spec.entry.label}. {details}. Confirm with the button or tell me what to change.')
 
     @app.get('/conversations/{cid}/inputs', response_model=InputOptions, response_model_exclude_none=True)
@@ -345,6 +419,10 @@ def create_app(model=None, gateway=None, *, config=None):
             if missing:
                 return reply(c, 'Please complete the required fields in the secure action form.', input_tool=body.tool)
             arguments = spec.validate(values)
+            if body.tool in ('issue_card', 'create_card'):
+                account_val = values.get('account_number')
+                if account_val and await check_account_has_blocked(account_val):
+                    return reply(c, f'Cannot issue a new card for account {mask(account_val)} because an existing card for this account is blocked. Under banking security rules, the blocked card must be resolved before a new card can be issued.')
         except ValueError:
             raise HTTPException(422, 'Structured details or selections are invalid') from None
         c.proposal = ProposedToolCall(body.tool, arguments)

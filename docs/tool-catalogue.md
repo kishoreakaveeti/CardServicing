@@ -2,14 +2,14 @@
 
 Both card tools expose the optional private `additional_card` boolean through the structured form. Ordinary issuance returns an existing card; an additional card requires an explicit reviewed choice. The MCP adapter carries `Card-Issuance-Outcome` as trusted result metadata. See [card issuance](card-issuance.md).
 
-The default catalogue now contains `create_card` (compatibility), `view_accounts`, `create_account`, `view_cards` and `issue_card`. Account/card writes require confirmation and an idempotency key; reads execute without confirmation. Registration/login are form-opening agent capabilities outside MCP; credentials are never tool arguments. Logout is also a form-opening capability, omitted when an explicit model tool allowlist is configured. See [Customer banking](customer-banking.md).
+The default catalogue contains `create_card` (compatibility), `view_accounts`, `create_account`, `view_cards`, `issue_card`, `block_card` and `unblock_card`. Account/card writes require confirmation and an idempotency key; reads execute without confirmation. Each tool specifies its permitted agent role via `"agents"` (e.g. `["cards_agent"]` or `["fincrime_agent"]`). Registration/login are form-opening agent capabilities outside MCP; credentials are never tool arguments. Logout is also a form-opening capability, omitted when an explicit model tool allowlist is configured. See [Customer banking](customer-banking.md).
 
 The tool catalogue is [src/card_chat/tools.json](../src/card_chat/tools.json).
 It is versioned JSON, compiled against a local OpenAPI 3.1.0 document at chat/MCP
 startup. Adding a supported REST operation needs a catalogue entry and restart;
 there is no MCP Python function, intent table, agent branch or browser branch per
-operation. The production catalogue includes the five card/account operations listed above.
-Blocking exists only in the integration-test fixture.
+operation. The production catalogue includes the core card/account operations as well as
+FinCrime card blocking and unblocking.
 
 ## Contract and registration
 

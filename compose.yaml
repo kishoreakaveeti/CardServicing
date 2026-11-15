@@ -25,6 +25,7 @@ x-telemetry: &telemetry
   ACCOUNT_HASH_KEY_VERSION: ${ACCOUNT_HASH_KEY_VERSION:-v1}
 services:
   frontend:
+    container_name: card-servicing-frontend
     build: {context: ./frontend, target: runtime}
     ports: ["127.0.0.1:8080:8080"]
     depends_on:
@@ -35,12 +36,13 @@ services:
       timeout: 3s
       retries: 20
   experience:
+    container_name: card-servicing-experience
     <<: *python
     environment:
       <<: [*oidc, *telemetry]
       APP_MODULE: card_chat.experience:app
-      AGENT_URL: http://agent:8000
-      CARD_API_BASE_URL: http://cards:8000
+      AGENT_URL: http://cards-agent:8000
+      CARD_API_BASE_URL: http://cards-api:8000
       PUBLIC_ORIGIN: http://localhost:8080
       OIDC_AUTHORIZE_URL: http://localhost:8081/realms/cards/protocol/openid-connect/auth
       SERVICE_CLIENT_ID: experience-service
@@ -52,13 +54,16 @@ services:
       - experience_data:/data
       - ./data/identity/delegation-private.pem:/keys/delegation-private.pem:ro
     depends_on:
-      agent: {condition: service_healthy}
-  agent:
+      cards-agent: {condition: service_healthy}
+  cards-agent:
+    container_name: card-servicing-agent
     <<: *python
     environment:
       <<: [*oidc, *telemetry]
       APP_MODULE: card_chat.main:app
-      MCP_URL: http://mcp:8000/mcp
+      MCP_URL: http://mcp-server:8000/mcp
+      FINCRIME_AGENT_URL: http://fincrime-agent:8000
+      FINCRIME_API_BASE_URL: http://fincrime-api:8000
       MODEL_PROVIDER: ${STACK_MODEL_PROVIDER:-stub}
       MODEL_ID: ${MODEL_ID:-}
       ANTHROPIC_PROMPT_CACHE: ${ANTHROPIC_PROMPT_CACHE:-false}
@@ -70,22 +75,72 @@ services:
       - agent_data:/data
       - ./data/identity/delegation-public.pem:/keys/delegation-public.pem:ro
     depends_on:
-      mcp: {condition: service_healthy}
-  mcp:
+      mcp-server: {condition: service_healthy}
+      fincrime-agent: {condition: service_healthy}
+  fincrime-agent:
+    container_name: fincrime-agent
+    build: {context: ., dockerfile: Dockerfile.fincrime-agent, target: runtime}
+    command: [python, scripts/service_entrypoint.py]
+    restart: unless-stopped
+    healthcheck:
+      test: [CMD, python, -c, "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=3)"]
+      interval: 5s
+      timeout: 4s
+      retries: 30
+      start_period: 15s
+    environment:
+      <<: [*oidc, *telemetry]
+      APP_MODULE: card_chat.fincrime_agent:app
+      MODEL_PROVIDER: ${STACK_MODEL_PROVIDER:-stub}
+      MODEL_ID: ${MODEL_ID:-}
+      ANTHROPIC_PROMPT_CACHE: ${ANTHROPIC_PROMPT_CACHE:-false}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      SERVICE_CLIENT_ID: agent-service
+      SERVICE_CLIENT_SECRET: ${AGENT_SECRET:?Run scripts/setup-stack.ps1}
+    volumes:
+      - ./data/identity/delegation-public.pem:/keys/delegation-public.pem:ro
+  mcp-server:
+    container_name: card-servicing-mcp
     <<: *python
     environment:
       <<: [*oidc, *telemetry]
       APP_MODULE: card_chat.mcp_server:app
-      CARD_API_BASE_URL: http://cards:8000
-      MCP_RESOURCE: http://mcp:8000/mcp
+      CARD_API_BASE_URL: http://cards-api:8000
+      FINCRIME_API_BASE_URL: http://fincrime-api:8000
+      MCP_RESOURCE: http://mcp-server:8000/mcp
       SERVICE_CLIENT_ID: mcp-service
       SERVICE_CLIENT_SECRET: ${MCP_SECRET:?Run scripts/setup-stack.ps1}
     volumes:
       - ./data/identity/delegation-public.pem:/keys/delegation-public.pem:ro
     depends_on:
-      cards: {condition: service_healthy}
+      cards-api: {condition: service_healthy}
+      fincrime-api: {condition: service_healthy}
       identity: {condition: service_healthy}
-  cards:
+  fincrime-api:
+    container_name: fincrime-api
+    build: {context: ., dockerfile: Dockerfile.fincrime-api, target: runtime}
+    command: [python, scripts/service_entrypoint.py]
+    restart: unless-stopped
+    healthcheck:
+      test: [CMD, python, -c, "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=3)"]
+      interval: 5s
+      timeout: 4s
+      retries: 20
+    environment:
+      <<: [*oidc, *telemetry]
+      APP_MODULE: fincrime_servicing.main:app
+      CARD_API_BASE_URL: http://cards-api:8000
+      FINCRIME_DB: /data/fincrime.db
+      SERVICE_CLIENT_ID: mcp-service
+      SERVICE_CLIENT_SECRET: ${MCP_SECRET:?Run scripts/setup-stack.ps1}
+    volumes:
+      - fincrime_data:/data
+      - ./data/identity/delegation-public.pem:/keys/delegation-public.pem:ro
+    depends_on:
+      cards-api: {condition: service_healthy}
+      mongodb: {condition: service_healthy}
+  cards-api:
+    container_name: cards-api
     <<: *python
     environment:
       <<: [*oidc, *telemetry]
@@ -103,6 +158,7 @@ services:
       timeout: 4s
       retries: 20
   mongodb:
+    container_name: card-servicing-mongodb
     image: mongo:8.0
     environment:
       MONGO_INITDB_ROOT_USERNAME: ${MONGO_USER:?Run scripts/setup-stack.ps1}
@@ -117,6 +173,7 @@ services:
       retries: 20
       start_period: 20s
   identity:
+    container_name: card-servicing-identity
     image: quay.io/keycloak/keycloak:26.4.7
     command: [start-dev, --import-realm]
     environment:
@@ -139,5 +196,6 @@ volumes:
   agent_data:
   experience_data:
   cards_data:
+  fincrime_data:
   identity_data:
   mongodb_data:

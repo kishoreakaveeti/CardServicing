@@ -51,15 +51,20 @@ class Security:
                     not all(isinstance(value, str) for value in claims.get('permissions', [])) or
                     not isinstance(claims['username'], str) or not isinstance(claims['sub'], str)):
                 raise ValueError('Invalid delegated facts')
+            if 'cards' in claims and not isinstance(claims['cards'], list):
+                raise ValueError('Invalid delegated facts')
             return claims
         except (jwt.PyJWTError, ValueError, TypeError, OSError):
             raise HTTPException(401, 'Invalid customer delegation') from None
 
     def issue_customer(self, claims):
         now = int(time.time())
-        return jwt.encode({'iss': 'card-experience', 'aud': ['agent', 'mcp', 'cards'],
-                           'sub': claims['sub'], 'username': claims['preferred_username'],
-                           'accounts': claims.get('accounts', []), 'iat': now,
+        username = claims.get('preferred_username') or claims.get('username') or ''
+        return jwt.encode({'iss': 'card-experience', 'aud': ['agent', 'mcp', 'cards', 'fincrime'],
+                           'sub': claims['sub'], 'username': username,
+                           'accounts': claims.get('accounts', []),
+                           'cards': claims.get('cards', []),
+                           'iat': now,
                            'permissions': claims.get('permissions', self.config.get('CUSTOMER_TOOL_PERMISSIONS', 'tools:execute').split()),
                            'exp': now + 3600, 'jti': uuid4().hex},
                           Path(self.config['DELEGATION_PRIVATE_KEY']).read_text(), algorithm='EdDSA')
@@ -112,7 +117,7 @@ def protect(app, config, audience, permission, client, *, customer=True):
         except HTTPException as exc:
             challenge = 'Bearer'
             if audience == 'mcp':
-                resource = config.get('MCP_RESOURCE', 'http://mcp:8000/mcp')
+                resource = config.get('MCP_RESOURCE', 'http://mcp-server:8000/mcp')
                 challenge += ' resource_metadata="' + resource.rsplit('/', 1)[0] + '/.well-known/oauth-protected-resource"'
             response = JSONResponse({'detail': exc.detail}, status_code=exc.status_code,
                                     headers={'WWW-Authenticate': challenge})

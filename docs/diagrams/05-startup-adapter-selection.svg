@@ -81,7 +81,7 @@
 <text x="40" y="1755" class="heading" font-size="20" fill="#0f172a">Traceable code references</text>
 <a href="../../src/card_servicing/config.py"><text x="40" y="1780" font-size="16" fill="#1d4ed8">src/card_servicing/config.py:34</text></a>
 <a href="../../src/card_servicing/main.py"><text x="40" y="1805" font-size="16" fill="#1d4ed8">src/card_servicing/main.py:24</text></a>
-<a href="../../src/card_servicing/ports.py"><text x="40" y="1830" font-size="16" fill="#1d4ed8">src/card_servicing/ports.py:15</text></a>
+<a href="../../src/card_servicing/ports.py"><text x="40" y="1830" font-size="16" fill="#1d4ed8">src/card_servicing/ports.py:19</text></a>
 <a href="../../src/card_servicing/persistence.py"><text x="40" y="1855" font-size="16" fill="#1d4ed8">src/card_servicing/persistence.py:12</text></a>
 <a href="../../src/card_servicing/main.py"><text x="40" y="1880" font-size="16" fill="#1d4ed8">src/card_servicing/main.py:54</text></a>
 <a href="../../src/card_servicing/telemetry.py"><text x="40" y="1905" font-size="16" fill="#1d4ed8">src/card_servicing/telemetry.py:67</text></a>

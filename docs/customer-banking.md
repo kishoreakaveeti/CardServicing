@@ -15,8 +15,10 @@ Start the existing stack using `.\scripts\stack.ps1 -Build` (see [HTTP stack set
 3. Select **Create account**, or type **Create a savings account**. Complete the private form with `savings` or `transaction` and optionally choose to issue a card. Review and confirm; no write happens before confirmation.
 4. Select **View my cards** or type **Show all my cards**. Results appear in the conversation interface. All card identifiers start with `SIM-`; they cannot be used for payments.
 5. Select **Issue new card**, or type **I want a new debit card**. Choose a masked account and confirm. Ordinary issuance returns an existing card; select the additional-card option explicitly to create another. With no eligible account, chat opens account creation first; the direct form offers the same option.
-6. Select **Sign out**, or type **Log me out** and confirm. Select **Login**, or type **Log me in**, then use the secure credentials form. Accounts and cards persist.
-7. Register a second customer. The account and card lists must be empty, and the first customer's account selections and conversation IDs must be inaccessible.
+6. Select **Block card**, or type **Block my card ending in 1234**. Choose a masked active card, review and confirm. The card status transitions to `[BLOCKED]` in My Cards, and subsequent card issuance on that account is blocked by the FinCrime pre-issuance rule.
+7. Select **Unblock card**, or type **Unblock my card ending in 1234**. An attention warning prompt confirms the intention to unblock and re-enable account issuance. Upon confirmation, card status is restored to active (`created`) and card issuance is re-enabled.
+8. Select **Sign out**, or type **Log me out** and confirm. Select **Login**, or type **Log me in**, then use the secure credentials form. Accounts and cards persist.
+9. Register a second customer. The account and card lists must be empty, and the first customer's account selections and conversation IDs must be inaccessible.
 
 Prominent action buttons start a fresh workflow. After a confirmed action, use another action button or **New conversation** to start another request. Retries reuse the reviewed snapshot and idempotency key. The optional existing OIDC sign-in remains available for the original synthetic identity demo; local registration is independent of Keycloak users.
 
@@ -55,6 +57,8 @@ The generated [Cards OpenAPI](cards.openapi.json) includes the following routes.
 | `POST /banking/accounts` | Create account; optionally issue card | Signed customer; Idempotency-Key |
 | `GET /banking/cards` | List cards on owned accounts | Signed customer assertion |
 | `POST /banking/cards` | Issue card on owned account | Signed customer; Idempotency-Key |
+| `POST /banking/cards/{card_id}/block` | Block card on owned account | Signed customer / BFF / FinCrime |
+| `POST /banking/cards/{card_id}/unblock` | Unblock card on owned account | Signed customer / BFF / FinCrime |
 
 Unknown or foreign account issuance returns 404; the original `/cards` compatibility route returns 403 when a registered customer supplies a foreign account. Duplicate usernames and mismatched retry bodies return 409. Validation errors omit input values. Storage failures return 503. The application retains existing trace middleware and telemetry adapters.
 

@@ -7,8 +7,10 @@
       "configurations": [
         "Debug Local Experience API",
         "Debug Local Agent API",
+        "Debug Local FinCrime Agent",
         "Debug Local MCP Server",
-        "Debug Local Cards API"
+        "Debug Local Cards API",
+        "Debug Local FinCrime API"
       ],
       "stopAll": true
     },
@@ -19,8 +21,10 @@
         "Debug Frontend",
         "Attach to Experience API",
         "Attach to Agent API",
+        "Attach to FinCrime Agent",
         "Attach to MCP Server",
-        "Attach to Cards API"
+        "Attach to Cards API",
+        "Attach to FinCrime API"
       ],
       "stopAll": true
     },
@@ -31,8 +35,10 @@
         "Debug Frontend",
         "Attach to Experience API",
         "Attach to Agent API",
+        "Attach to FinCrime Agent",
         "Attach to MCP Server",
-        "Attach to Cards API"
+        "Attach to Cards API",
+        "Attach to FinCrime API"
       ],
       "stopAll": true
     }
@@ -111,6 +117,38 @@
       "justMyCode": true
     },
     {
+      "name": "Attach to FinCrime API",
+      "type": "debugpy",
+      "request": "attach",
+      "connect": {
+        "host": "127.0.0.1",
+        "port": 5685
+      },
+      "pathMappings": [
+        {
+          "localRoot": "${workspaceFolder}/src",
+          "remoteRoot": "/app/src"
+        }
+      ],
+      "justMyCode": true
+    },
+    {
+      "name": "Attach to FinCrime Agent",
+      "type": "debugpy",
+      "request": "attach",
+      "connect": {
+        "host": "127.0.0.1",
+        "port": 5686
+      },
+      "pathMappings": [
+        {
+          "localRoot": "${workspaceFolder}/src",
+          "remoteRoot": "/app/src"
+        }
+      ],
+      "justMyCode": true
+    },
+    {
       "name": "Debug Local Experience API",
       "type": "debugpy",
       "request": "launch",
@@ -154,6 +192,24 @@
       "consoleName": "Local Agent API"
     },
     {
+      "name": "Debug Local FinCrime Agent",
+      "type": "debugpy",
+      "request": "launch",
+      "python": "${workspaceFolder}/.venv/Scripts/python.exe",
+      "program": "${workspaceFolder}/scripts/local_service.py",
+      "args": [
+        "fincrime_agent"
+      ],
+      "cwd": "${workspaceFolder}",
+      "env": {
+        "PYTHONPATH": "${workspaceFolder}/src"
+      },
+      "console": "integratedTerminal",
+      "justMyCode": true,
+      "subProcess": false,
+      "consoleName": "Local FinCrime Agent"
+    },
+    {
       "name": "Debug Local MCP Server",
       "type": "debugpy",
       "request": "launch",
@@ -188,6 +244,24 @@
       "justMyCode": true,
       "subProcess": false,
       "consoleName": "Local Cards API"
+    },
+    {
+      "name": "Debug Local FinCrime API",
+      "type": "debugpy",
+      "request": "launch",
+      "python": "${workspaceFolder}/.venv/Scripts/python.exe",
+      "program": "${workspaceFolder}/scripts/local_service.py",
+      "args": [
+        "fincrime"
+      ],
+      "cwd": "${workspaceFolder}",
+      "env": {
+        "PYTHONPATH": "${workspaceFolder}/src"
+      },
+      "console": "integratedTerminal",
+      "justMyCode": true,
+      "subProcess": false,
+      "consoleName": "Local FinCrime API"
     },
     {
       "name": "Debug Local Frontend",

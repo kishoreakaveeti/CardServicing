@@ -25,7 +25,7 @@ except RuntimeError:
     raise SystemExit('Identity service is unavailable at ' + os.environ['OIDC_ISSUER'] +
                      '. Check the Start Local Infrastructure task or start native Keycloak. '
                      'See README: Local launch prerequisites.') from None
-for port in (8080, 8010, 8020, 8021, 8030):
+for port in (8080, 8010, 8020, 8021, 8022, 8025, 8030):
     with socket.socket() as sock:
         try:
             sock.bind(('127.0.0.1', port))

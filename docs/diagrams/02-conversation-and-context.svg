@@ -122,12 +122,12 @@
 <text x="277.5" y="2701" text-anchor="middle" font-size="16" fill="#0f172a">URL</text>
 <path d="M425.0 2719 H130.0" fill="none" stroke="#334155" stroke-width="2" stroke-dasharray="7 5" marker-end="url(#arrow)"/>
 <text x="40" y="2819" class="heading" font-size="20" fill="#0f172a">Traceable code references</text>
-<a href="../../src/card_chat/main.py"><text x="40" y="2844" font-size="16" fill="#1d4ed8">src/card_chat/main.py:225</text></a>
-<a href="../../src/card_chat/main.py"><text x="40" y="2869" font-size="16" fill="#1d4ed8">src/card_chat/main.py:33</text></a>
+<a href="../../src/card_chat/main.py"><text x="40" y="2844" font-size="16" fill="#1d4ed8">src/card_chat/main.py:256</text></a>
+<a href="../../src/card_chat/main.py"><text x="40" y="2869" font-size="16" fill="#1d4ed8">src/card_chat/main.py:34</text></a>
 <a href="../../src/card_chat/provider.py"><text x="40" y="2894" font-size="16" fill="#1d4ed8">src/card_chat/provider.py:15</text></a>
-<a href="../../src/card_chat/agent.py"><text x="40" y="2919" font-size="16" fill="#1d4ed8">src/card_chat/agent.py:11</text></a>
-<a href="../../src/card_chat/catalogue.py"><text x="40" y="2944" font-size="16" fill="#1d4ed8">src/card_chat/catalogue.py:101</text></a>
-<a href="../../src/card_chat/main.py"><text x="40" y="2969" font-size="16" fill="#1d4ed8">src/card_chat/main.py:275</text></a>
-<a href="../../src/card_chat/main.py"><text x="40" y="2994" font-size="16" fill="#1d4ed8">src/card_chat/main.py:295</text></a>
+<a href="../../src/card_chat/agent.py"><text x="40" y="2919" font-size="16" fill="#1d4ed8">src/card_chat/agent.py:13</text></a>
+<a href="../../src/card_chat/catalogue.py"><text x="40" y="2944" font-size="16" fill="#1d4ed8">src/card_chat/catalogue.py:102</text></a>
+<a href="../../src/card_chat/main.py"><text x="40" y="2969" font-size="16" fill="#1d4ed8">src/card_chat/main.py:333</text></a>
+<a href="../../src/card_chat/main.py"><text x="40" y="2994" font-size="16" fill="#1d4ed8">src/card_chat/main.py:353</text></a>
 <text x="40" y="3062" font-size="15" fill="#475569">Source: card-chat-flows.json | Regenerate: python scripts/render_chat_diagrams.py</text>
 </svg>

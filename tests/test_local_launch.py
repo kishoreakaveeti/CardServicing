@@ -50,7 +50,7 @@ def test_local_browser_starts_only_after_experience_is_listening():
     launch = json.loads((ROOT / '.vscode/launch.json').read_text())
     local = next(c for c in launch['compounds'] if c['name'] == 'Debug Full Stack (Local)')
     assert local['preLaunchTask'] == 'Prepare Local Stack'
-    assert len(local['configurations']) == 4
+    assert len(local['configurations']) == 6
     assert 'Debug Local Frontend' not in local['configurations']
     experience = next(c for c in launch['configurations'] if c['name'] == 'Debug Local Experience API')
     ready = experience['serverReadyAction']
@@ -61,7 +61,7 @@ def test_local_browser_starts_only_after_experience_is_listening():
     assert 'preLaunchTask' not in browser
     # Simultaneous services must not share/reuse the generic Python debug terminal.
     launches = [c for c in launch['configurations'] if c['name'] in local['configurations']]
-    assert len({c['consoleName'] for c in launches}) == 4
+    assert len({c['consoleName'] for c in launches}) == 6
     prepare = next(t for t in tasks if t['label'] == 'Prepare Local Stack')
     assert prepare['dependsOn'] == ['Start Local Infrastructure', 'Check Local Prerequisites', 'Start Local Frontend']
 

@@ -27,8 +27,9 @@ class Entry(BaseModel):
     sensitive_fields: list[str] = Field(default_factory=list)
     idempotency_header: Literal['Idempotency-Key'] | None = None
     context_fields: list[str] = Field(default_factory=list)
-    trusted_fields: dict[str, Literal['account', 'username']] = Field(default_factory=dict)
+    trusted_fields: dict[str, Literal['account', 'username', 'card']] = Field(default_factory=dict)
     permissions: list[str] = Field(default_factory=lambda: ['tools:execute'])
+    agents: list[str] = Field(default_factory=list)
 
 
 class Catalogue(BaseModel):

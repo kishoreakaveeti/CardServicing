@@ -6,7 +6,7 @@ from pathlib import Path
 from uuid import uuid4
 from card_servicing.idempotency import IdempotencyConflict, fingerprint
 from card_servicing.models import Card, CardCreate, CardIssuance
-from card_servicing.ports import StorageUnavailable, AccountNotOwned
+from card_servicing.ports import StorageUnavailable, AccountNotOwned, BlockedCardExists
 
 
 def storage_operation(operation):
@@ -75,6 +75,7 @@ class SQLiteCardStore:
                 if statement.strip():
                     db.execute(statement)
             db.execute("INSERT OR IGNORE INTO card_statuses VALUES ('created', 'Simulated card created; no issuer integration')")
+            db.execute("INSERT OR IGNORE INTO card_statuses VALUES ('blocked', 'Card blocked by financial crime / customer request')")
             from card_servicing.banking import SCHEMA as BANKING_SCHEMA
             for statement in BANKING_SCHEMA.split(';'):
                 if statement.strip():
@@ -151,6 +152,9 @@ class SQLiteCardStore:
                 result = CardIssuance.for_card(Card.model_validate_json(old[1]), 'created')
                 replayed = True
             else:
+                if db.execute("SELECT 1 FROM cards WHERE account_number=? AND status='blocked'",
+                              (instruction.account_number,)).fetchone():
+                    raise BlockedCardExists()
                 db.row_factory = sqlite3.Row
                 query = 'SELECT * FROM cards WHERE account_number=?'
                 args = [instruction.account_number]
@@ -169,3 +173,29 @@ class SQLiteCardStore:
             if customer_id is not None:
                 db.execute('INSERT OR IGNORE INTO account_cards VALUES(?,?)', (str(result.id), instruction.account_number))
             return result, replayed
+
+    @storage_operation
+    def update_card_status(self, card_id: str, status: str) -> bool:
+        if not self.ready:
+            self.initialize()
+        with closing(self.connect()) as db, db:
+            db.execute('BEGIN IMMEDIATE')
+            cur = db.execute('UPDATE cards SET status=? WHERE id=? OR card_number=?', (status, str(card_id), str(card_id)))
+            return cur.rowcount > 0
+
+    @storage_operation
+    def has_blocked_cards_for_account(self, account_number: str) -> bool:
+        if not self.ready:
+            self.initialize()
+        with closing(self.connect()) as db:
+            row = db.execute("SELECT 1 FROM cards WHERE account_number=? AND status='blocked'", (account_number,)).fetchone()
+            return row is not None
+
+    @storage_operation
+    def get_card(self, card_id: str):
+        if not self.ready:
+            self.initialize()
+        with closing(self.connect()) as db:
+            db.row_factory = sqlite3.Row
+            row = db.execute('SELECT * FROM cards WHERE id=? OR card_number=?', (str(card_id), str(card_id))).fetchone()
+            return Card.model_validate(dict(row)) if row else None

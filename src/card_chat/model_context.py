@@ -8,7 +8,7 @@ PRIVATE_NOTICE = 'Please use the secure action form and masked account picker fo
 # Conservative fallback, not a general-purpose DLP guarantee. Structured input
 # and deny-by-default field projections are the primary privacy boundary.
 PRIVATE_TEXT = re.compile(
-    r'\d(?:[\s-]?\d){5,}|\b\d{3,4}\b|sk-ant-\S+|\bBearer\s+\S+|'
+    r'\d(?:[\s-]?\d){5,}|(?<!ending in )(?<!ending with )\b\d{3,4}\b|sk-ant-\S+|\bBearer\s+\S+|'
     r'\b(?:cvv|cvc|pin|password|secret|credential|api[_ -]?key|access[_ -]?token)\b|'
     r'[\w.+-]+@[\w.-]+\.[A-Za-z]{2,}|'
     r'\bmy name is\b|'

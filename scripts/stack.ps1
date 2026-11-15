@@ -1,5 +1,5 @@
 param(
-    [ValidateSet('None','Frontend','Experience','Agent','MCP','Cards','All')][string]$DebugComponent = 'None',
+    [ValidateSet('None','Frontend','Experience','Cards-Agent','FinCrime-Agent','MCP-Server','Cards-API','FinCrime-API','Agent','MCP','Cards','FinCrime','All')][string]$DebugComponent = 'None',
     [switch]$Build, [switch]$Stop, [switch]$WaitForDebugger
 )
 $ErrorActionPreference = 'Stop'
@@ -29,23 +29,41 @@ if ($Stop) {
     Invoke-Compose -Arguments ($composeArgs + @('down'))
     exit 0
 }
-$components = @('Experience', 'Agent', 'MCP', 'Cards')
+$aliasMap = @{
+    'Agent' = 'Cards-Agent'
+    'MCP' = 'MCP-Server'
+    'Cards' = 'Cards-API'
+    'FinCrime' = 'FinCrime-API'
+}
+if ($aliasMap.ContainsKey($DebugComponent)) {
+    $DebugComponent = $aliasMap[$DebugComponent]
+}
+$components = @('Experience', 'Cards-Agent', 'FinCrime-Agent', 'MCP-Server', 'Cards-API', 'FinCrime-API')
 foreach ($component in $components) {
+    $envKey = $component.Replace('-', '_').ToUpper()
     $enabled = if ($DebugComponent -eq 'All' -or $DebugComponent -eq $component) { '1' } else { '0' }
-    [Environment]::SetEnvironmentVariable("DEBUG_$($component.ToUpper())", $enabled, 'Process')
-    [Environment]::SetEnvironmentVariable("DEBUG_WAIT_$($component.ToUpper())", '0', 'Process')
+    [Environment]::SetEnvironmentVariable("DEBUG_$envKey", $enabled, 'Process')
+    [Environment]::SetEnvironmentVariable("DEBUG_WAIT_$envKey", '0', 'Process')
 }
 if ($DebugComponent -ne 'None') { $composeArgs += @('-f', 'compose.debug.yaml') }
 $upArgs = @('up', '-d')
 if ($Build) { $upArgs += '--build' }
 if ($WaitForDebugger) {
     if ($DebugComponent -notin $components) { throw '-WaitForDebugger requires one Python component.' }
-    [Environment]::SetEnvironmentVariable("DEBUG_WAIT_$($DebugComponent.ToUpper())", '1', 'Process')
-    # Existing dependencies must already be healthy. Never wait for HTTP before attach.
-    $upArgs += @('--no-deps', $DebugComponent.ToLower())
+    $envKey = $DebugComponent.Replace('-', '_').ToUpper()
+    [Environment]::SetEnvironmentVariable("DEBUG_WAIT_$envKey", '1', 'Process')
+    $serviceName = $DebugComponent.ToLower()
+    $upArgs += @('--no-deps', $serviceName)
 } else { $upArgs += @('--wait', '--wait-timeout', '360') }
 Invoke-Compose -Arguments ($composeArgs + $upArgs)
-$ports = @{ Experience=5681; Agent=5682; MCP=5683; Cards=5684 }
+$ports = @{
+    'Experience' = 5681
+    'Cards-Agent' = 5682
+    'MCP-Server' = 5683
+    'Cards-API' = 5684
+    'FinCrime-API' = 5685
+    'FinCrime-Agent' = 5686
+}
 foreach ($component in $components) {
     if ($DebugComponent -ne 'All' -and $DebugComponent -ne $component) { continue }
     $reopened = $false

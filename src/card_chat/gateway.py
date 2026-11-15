@@ -20,10 +20,14 @@ class Gateway:
             if self.tools[name] != spec.definition():
                 raise RuntimeError('Discovered MCP tool differs from the compiled catalogue: ' + name)
 
-    async def execute(self, name, arguments, key=None):
+    async def execute(self, name, arguments, key=None, agent=None):
         self.catalogue[name].validate(arguments)
-        meta = {'idempotency_key': key} if key else None
-        result = await self.session.call_tool(name, arguments, meta=meta)
+        meta = {}
+        if key:
+            meta['idempotency_key'] = key
+        if agent:
+            meta['agent'] = agent
+        result = await self.session.call_tool(name, arguments, meta=meta or None)
         if result.isError or not result.structuredContent:
             return {'ok': False, 'error': 'MCP execution failed; the outcome may be uncertain.'}
         return result.structuredContent
@@ -48,9 +52,13 @@ async def connect(config=None):
         tools = (await connected.list_tools()).tools
 
     class RemoteGateway(Gateway):
-        async def execute(self, name, arguments, key=None):
+        async def execute(self, name, arguments, key=None, agent=None):
             # Fresh destination token and per-job delegation on every request.
             async with session() as connected:
-                return await Gateway(connected, tools, catalogue).execute(name, arguments, key)
+                gw = Gateway(connected, tools, catalogue)
+                try:
+                    return await gw.execute(name, arguments, key, agent=agent)
+                except TypeError:
+                    return await gw.execute(name, arguments, key)
 
     yield RemoteGateway(None, tools, catalogue)

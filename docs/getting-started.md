@@ -112,7 +112,7 @@ Wait for success, then open **http://localhost:8080**. Use `localhost` consisten
 2. Ensure Docker Desktop is running; open the repository root in VS Code.
 3. Open **Run and Debug** (**Ctrl+Shift+D**), select **Debug Full Stack (Docker)** and press **F5**.
 4. Wait for **Start Full Debug Stack** to build/start debug images and check health/listeners. The first build can take several minutes. Do not bypass a failed task with **Debug Anyway**.
-5. VS Code attaches to four containerized Python processes and opens Chrome at `http://localhost:8080`.
+5. VS Code attaches to six containerized Python processes and opens Chrome at `http://localhost:8080`.
 6. Set breakpoints in your existing local source files and trigger a browser action. Local `src` maps to `/app/src` inside the containers.
 
 **You do not need to start the stack separately before F5.** That profile's shared pre-launch task runs the equivalent of:
@@ -123,12 +123,14 @@ Wait for success, then open **http://localhost:8080**. Use `localhost` consisten
 
 `Debug Full Stack` is a compatibility alias for the Docker profile. Debug images include `debugpy` and a Vite frontend with source maps. HTTP starts without waiting for debugger attachment.
 
-| Attach profile | Host debugger port | Container listener |
-| --- | --- | --- |
-| Attach to Experience API | 5681 | 5678 |
-| Attach to Agent API | 5682 | 5678 |
-| Attach to MCP Server | 5683 | 5678 |
-| Attach to Cards API | 5684 | 5678 |
+| Attach profile | Host debugger port | Container listener | Container name |
+| --- | --- | --- | --- |
+| Attach to Experience API | 5681 | 5678 | `card-servicing-experience` |
+| Attach to Agent API | 5682 | 5678 | `card-servicing-agent` |
+| Attach to MCP Server | 5683 | 5678 | `card-servicing-mcp` |
+| Attach to Cards API | 5684 | 5678 | `cards-api` |
+| Attach to FinCrime API | 5685 | 5678 | `fincrime-api` |
+| Attach to FinCrime Agent | 5686 | 5678 | `fincrime-agent` |
 
 ### Attach to one container
 
@@ -280,29 +282,39 @@ Prepare dependencies above. From the repository root, check prerequisites:
 .\.venv\Scripts\python.exe scripts/check_local.py
 ```
 
-Open **four separate PowerShell terminals at the repository root**, one command per terminal, in this order. Keep them running:
+Open **six separate PowerShell terminals at the repository root**, one command per terminal, in this order. Keep them running:
 
 ```powershell
-# Terminal 1
+# Terminal 1 — Cards Banking API (8010)
 .\.venv\Scripts\python.exe scripts/local_service.py cards
 ```
 
 ```powershell
-# Terminal 2
+# Terminal 2 — FinCrime API (8025)
+.\.venv\Scripts\python.exe scripts/local_service.py fincrime
+```
+
+```powershell
+# Terminal 3 — MCP Tool Server (8030)
 .\.venv\Scripts\python.exe scripts/local_service.py mcp
 ```
 
 ```powershell
-# Terminal 3
+# Terminal 4 — FinCrime Agent (8022)
+.\.venv\Scripts\python.exe scripts/local_service.py fincrime_agent
+```
+
+```powershell
+# Terminal 5 — Cards Agent / Orchestrator (8021)
 .\.venv\Scripts\python.exe scripts/local_service.py agent
 ```
 
 ```powershell
-# Terminal 4
+# Terminal 6 — Experience BFF (8020)
 .\.venv\Scripts\python.exe scripts/local_service.py experience
 ```
 
-In a **fifth terminal**, start Vite:
+In a **seventh terminal**, start Vite:
 
 ```powershell
 $env:EXPERIENCE_PROXY_TARGET = 'http://127.0.0.1:8020'
@@ -318,11 +330,11 @@ Wait for startup, then open **http://localhost:8080**. No debugger is attached. 
 2. Open the repository root; select `.venv/Scripts/python.exe` with **Python: Select Interpreter**.
 3. Select **Debug Full Stack (Local)** in **Run and Debug** and press **F5**.
 4. Preparation starts missing local infrastructure, validates prerequisites/free ports and starts Vite.
-5. VS Code launches four native Python debuggers in separately named service consoles; the dependency chain is Cards → MCP → Agent → Experience.
-6. Experience startup reports its listening address to VS Code. A `serverReadyAction` then launches the browser debugger at `http://localhost:8080`. There is no separate blocking HTTP-wait pre-launch task; the four Python debuggers can start independently.
+5. VS Code launches six native Python debuggers in separately named service consoles (`Local Experience API`, `Local Agent API`, `Local FinCrime Agent`, `Local MCP Server`, `Local Cards API`, `Local FinCrime API`).
+6. Experience startup reports its listening address to VS Code. A `serverReadyAction` then launches the browser debugger at `http://localhost:8080`.
 7. Set breakpoints in local source and trigger an action. For model-provider breakpoints, select Anthropic and send a chat intent; direct buttons/forms intentionally bypass the model.
 
-Individual **Debug Local Experience API**, **Debug Local Agent API**, **Debug Local MCP Server** and **Debug Local Cards API** profiles launch only that process; dependencies must already run. The browser-only **Debug Local Frontend** profile is hidden from the normal picker because it does not start the app. Use local launch profiles, not Docker **Attach to...** profiles, for native execution.
+Individual **Debug Local Experience API**, **Debug Local Agent API**, **Debug Local FinCrime Agent**, **Debug Local MCP Server**, **Debug Local Cards API**, and **Debug Local FinCrime API** profiles launch only that process; dependencies must already run. The browser-only **Debug Local Frontend** profile is hidden from the normal picker because it does not start the app. Use local launch profiles, not Docker **Attach to...** profiles, for native execution.
 
 Do not choose **Debug Anyway** after a failed prerequisite: it only skips the check and can open a browser against an unavailable server. Inspect the named task/service terminal. If an older debug session still shows **Wait for Local HTTP**, stop that session and its Vite task before starting the updated local profile. `KeyboardInterrupt` means a wait/process was interrupted; the startup message immediately before it identifies the awaited dependency. Loopback readiness requests bypass HTTP proxies.
 
@@ -332,13 +344,15 @@ Do not choose **Debug Anyway** after a failed prerequisite: it only skips the ch
 | --- | --- | --- |
 | Frontend | `http://localhost:8080` | Banking UI; proxies `/api` and `/auth` to Experience |
 | Identity | `http://localhost:8081/realms/cards` | OIDC issuer |
-| Cards | `http://127.0.0.1:8010/health/ready` | Banking API readiness |
-| MCP | `http://127.0.0.1:8030/health` | HTTP tool service |
-| Agent | `http://127.0.0.1:8021/health` | Conversation/orchestration |
+| Cards API | `http://127.0.0.1:8010/health/ready` | Banking API readiness |
+| FinCrime API | `http://127.0.0.1:8025/health/ready` | Risk & card blocking/unblocking API readiness |
+| MCP Server | `http://127.0.0.1:8030/health` | HTTP tool service |
+| FinCrime Agent | `http://127.0.0.1:8022/health` | Financial Crime agent microservice |
+| Cards Agent | `http://127.0.0.1:8021/health` | Conversation & orchestrator |
 | Experience | `http://127.0.0.1:8020/health` | Session/BFF; not the banking UI |
 | Mongo | `127.0.0.1:27018` by default | Diagnostics; unnecessary with `stdout`/`none` |
 
-Native files `data/local/cards.db`, `agent.db` and `sessions.db` are created automatically. Save and restart the affected Python debug session after edits; no image build is needed. Vite serves frontend edits during development.
+Native files `data/local/cards.db`, `fincrime.db`, `agent.db` and `sessions.db` are created automatically. Save and restart the affected Python debug session after edits; no image build is needed. Vite serves frontend edits during development.
 
 **Shift+F5** stops the compound's Python/browser sessions. Then stop **Start Local Frontend** with its Terminal trash-can button or **Tasks: Terminate Task**; that background task may remain running. For terminal execution, press Ctrl+C in each application terminal. Stop native Keycloak separately. Docker shutdown commands do not stop native Python/Node processes.
 
@@ -347,7 +361,7 @@ Native files `data/local/cards.db`, `agent.db` and `sessions.db` are created aut
 | Direction | Steps |
 | --- | --- |
 | Native → Docker | Stop native debuggers/terminal processes **and Vite**, freeing 8080. Keep existing Docker dependencies. Stop conflicting native Identity/Mongo services or resolve published-port conflicts. Select **Debug Full Stack (Docker)** and F5, or run `stack.ps1 -Build` |
-| Docker → native | Disconnect Docker debuggers; stop `frontend experience agent mcp cards` with the native-section Compose command. Keep Docker dependencies if desired. Select **Debug Full Stack (Local)** and F5, or use the five-terminal instructions |
+| Docker → native | Disconnect Docker debuggers; stop `frontend experience cards-agent fincrime-agent mcp-server cards-api fincrime-api` with the native-section Compose command. Keep Docker dependencies if desired. Select **Debug Full Stack (Local)** and F5, or use the seven-terminal instructions |
 
 SQLite state is separate in the two modes. Register/log in again after switching; use the same `localhost` browser URL. A native Keycloak installation also has a separate Identity store from Docker. Preserve the corresponding realm credentials/signing keys.
 

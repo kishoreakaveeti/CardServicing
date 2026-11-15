@@ -12,8 +12,10 @@ ROOT = Path(__file__).resolve().parents[1]
 SERVICES = {
     'experience': ('card_chat.experience:app', 8020, 'http://127.0.0.1:8021/health'),
     'agent': ('card_chat.main:app', 8021, 'http://127.0.0.1:8030/health'),
+    'fincrime_agent': ('card_chat.fincrime_agent:app', 8022, None),
     'mcp': ('card_chat.mcp_server:app', 8030, 'http://127.0.0.1:8010/health/ready'),
     'cards': ('card_servicing.main:app', 8010, None),
+    'fincrime': ('fincrime_servicing.main:app', 8025, 'http://127.0.0.1:8010/health/ready'),
 }
 
 
@@ -27,6 +29,9 @@ def configure(component):
         'PUBLIC_ORIGIN': 'http://localhost:8080', 'AGENT_URL': 'http://127.0.0.1:8021',
         'MCP_URL': 'http://127.0.0.1:8030/mcp', 'MCP_RESOURCE': 'http://127.0.0.1:8030/mcp',
         'CARD_API_BASE_URL': 'http://127.0.0.1:8010', 'CARD_STORE': 'sqlite',
+        'FINCRIME_API_BASE_URL': 'http://127.0.0.1:8025',
+        'FINCRIME_AGENT_URL': 'http://127.0.0.1:8022',
+        'FINCRIME_DB': str(ROOT / 'data/local/fincrime.db'),
         'TELEMETRY_SINK': config.get('TELEMETRY_SINK', 'mongo'),
         'MONGODB_HOST': config.get('LOCAL_MONGODB_HOST', '127.0.0.1'),
         'MONGODB_PORT': config.get('MONGODB_HOST_PORT', '27018'),
@@ -35,14 +40,17 @@ def configure(component):
     values.update({key: config[key] for key in ('MONGO_USER', 'MONGO_PASSWORD', 'MONGODB_DATABASE',
                    'ACCOUNT_HASH_KEY', 'ACCOUNT_HASH_KEY_VERSION') if config.get(key) is not None})
     identities = {'experience': ('experience-service', 'EXPERIENCE_SECRET'),
-                  'agent': ('agent-service', 'AGENT_SECRET'), 'mcp': ('mcp-service', 'MCP_SECRET')}
+                  'agent': ('agent-service', 'AGENT_SECRET'),
+                  'fincrime_agent': ('agent-service', 'AGENT_SECRET'),
+                  'mcp': ('mcp-service', 'MCP_SECRET'),
+                  'fincrime': ('mcp-service', 'MCP_SECRET')}
     if component in identities:
         client, secret = identities[component]
         values.update(SERVICE_CLIENT_ID=client, SERVICE_CLIENT_SECRET=config[secret])
     if component == 'experience':
         values.update(BROWSER_CLIENT_SECRET=config['BROWSER_SECRET'],
                       DELEGATION_PRIVATE_KEY=str(ROOT / 'data/identity/delegation-private.pem'))
-    if component == 'agent':
+    if component in ('agent', 'fincrime_agent'):
         values.update(MODEL_PROVIDER=config.get('STACK_MODEL_PROVIDER', 'stub'),
                       MODEL_ID=config.get('MODEL_ID', ''), ANTHROPIC_API_KEY=config.get('ANTHROPIC_API_KEY', ''),
                       ANTHROPIC_PROMPT_CACHE=config.get('ANTHROPIC_PROMPT_CACHE', 'false'))

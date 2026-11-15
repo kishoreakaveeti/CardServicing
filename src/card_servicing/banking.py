@@ -11,7 +11,7 @@ from fastapi import APIRouter, Header, HTTPException, Request, Response
 from pydantic import BaseModel, ConfigDict, Field
 
 from card_servicing.models import Card, CardCreate, CardIssuance
-from card_servicing.ports import AccountNotOwned
+from card_servicing.ports import AccountNotOwned, BlockedCardExists
 from card_servicing.idempotency import IdempotencyConflict
 from card_servicing.persistence import storage_operation
 from card_chat.security import principal
@@ -137,7 +137,31 @@ class BankingService:
                 additional=additional, customer_id=customer['sub'])
         except AccountNotOwned:
             raise HTTPException(404, 'Account not found') from None
+        except BlockedCardExists:
+            raise HTTPException(400, 'Cannot issue a new card while an existing card for this account is blocked.') from None
         return (result, replayed) if with_replay else result
+
+    @storage_operation
+    def block_card(self, customer, card_id, reason='Customer requested'):
+        card = self.store.get_card(card_id)
+        if not card:
+            raise HTTPException(404, 'Card not found')
+        if customer and not self.owns(customer['sub'], card.account_number):
+            raise HTTPException(403, 'Card does not belong to authorized customer')
+        self.store.update_card_status(card.id, 'blocked')
+        return {'card_id': str(card.id), 'status': 'blocked', 'message': 'Card successfully blocked'}
+
+    @storage_operation
+    def unblock_card(self, customer, card_id, reason='Customer requested unblock'):
+        card = self.store.get_card(card_id)
+        if not card:
+            raise HTTPException(404, 'Card not found')
+        if customer and not self.owns(customer['sub'], card.account_number):
+            raise HTTPException(403, 'Card does not belong to authorized customer')
+        if card.status != 'blocked':
+            raise HTTPException(400, 'Only blocked cards can be unblocked')
+        self.store.update_card_status(card.id, 'created')
+        return {'card_id': str(card.id), 'status': 'created', 'message': 'Card successfully unblocked'}
 
     @storage_operation
     def cards(self, customer):
@@ -233,3 +257,30 @@ def issue_card(body: CardIssue, request: Request, response: Response, idempotenc
         return result
     except IdempotencyConflict:
         raise HTTPException(409, 'Request key already used for different details') from None
+
+
+class CardBlockInput(BaseModel):
+    model_config = ConfigDict(extra='forbid')
+    reason: str = Field(default="Customer requested", min_length=1, max_length=200, title="Reason")
+
+
+class CardBlockResponse(BaseModel):
+    card_id: str = Field(title="Card Id")
+    status: str = Field(title="Status")
+    message: str = Field(default="Card successfully blocked", title="Message")
+
+
+@router.post('/cards/{card_id}/block', operation_id='block_card', response_model=CardBlockResponse)
+def block_card(card_id: str, body: CardBlockInput, request: Request):
+    cust = customer()
+    result = service(request).block_card(cust, card_id, body.reason)
+    diagnostic(request, 'card_blocked')
+    return result
+
+
+@router.post('/cards/{card_id}/unblock', operation_id='unblock_card', response_model=CardBlockResponse)
+def unblock_card(card_id: str, body: CardBlockInput, request: Request):
+    cust = customer()
+    result = service(request).unblock_card(cust, card_id, body.reason)
+    diagnostic(request, 'card_unblocked')
+    return result

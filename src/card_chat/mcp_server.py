@@ -1,6 +1,7 @@
 """Catalogue-driven official MCP Streamable HTTP server."""
 import asyncio
 import logging
+import json
 from time import perf_counter
 
 import anyio
@@ -21,6 +22,48 @@ from card_chat.config import settings
 from card_chat.security import Security, protect, principal, trace
 
 logger = logging.getLogger(__name__)
+
+DEFAULT_AGENT_TOOLS = {
+    "cards_agent": ["create_card", "issue_card", "view_cards", "view_accounts", "create_account", "logout"],
+    "fincrime_agent": ["block_card", "unblock_card"]
+}
+
+
+def get_agent_tools_policy(config=None, catalogue=None):
+    config = config or {}
+    raw = config.get("MCP_AGENT_TOOLS")
+    if isinstance(raw, str):
+        try:
+            return json.loads(raw)
+        except Exception:
+            pass
+    elif isinstance(raw, dict):
+        return raw
+    if catalogue is None:
+        try:
+            catalogue = load_catalogue(config)
+        except Exception:
+            catalogue = None
+    if catalogue:
+        policy = {'cards_agent': [], 'fincrime_agent': []}
+        for spec in catalogue.values():
+            agents = getattr(spec.entry, 'agents', None)
+            if agents:
+                for ag in agents:
+                    policy.setdefault(ag, []).append(spec.name)
+            elif spec.name in ('block_card', 'unblock_card'):
+                policy['fincrime_agent'].append(spec.name)
+            else:
+                policy['cards_agent'].append(spec.name)
+        if 'logout' not in policy['cards_agent']:
+            policy['cards_agent'].append('logout')
+        return policy
+    return DEFAULT_AGENT_TOOLS
+
+
+def get_tools_for_agent(agent_name: str, config=None, catalogue=None):
+    policy = get_agent_tools_policy(config, catalogue)
+    return policy.get(agent_name, [])
 
 
 def execute(spec, arguments, key, base_url, execution_headers=None):
@@ -85,7 +128,13 @@ def create_server(config):
             if not set(catalogue[name].entry.permissions) <= set(customer.get('permissions', [])):
                 raise HTTPException(403, 'Tool is not permitted for this customer')
         meta = server.request_context.meta
-        key = meta.model_dump().get('idempotency_key') if meta is not None else None
+        meta_dict = meta.model_dump() if meta is not None else {}
+        key = meta_dict.get('idempotency_key')
+        caller_agent = meta_dict.get('agent')
+        if caller_agent:
+            policy = get_agent_tools_policy(config, catalogue)
+            if caller_agent in policy and name not in policy[caller_agent]:
+                raise HTTPException(403, f"Tool '{name}' is not permitted for agent '{caller_agent}'")
         headers = await security.headers()
         return await anyio.to_thread.run_sync(execute, catalogue[name], arguments, key,
                     config.get('CARD_API_BASE_URL', 'http://127.0.0.1:8010'), headers)
@@ -96,9 +145,16 @@ def create_server(config):
 def create_app(config=None):
     config = settings() if config is None else config
     server = create_server(config)
+    allowed_hosts = ['mcp:8000', 'mcp-server:8000', 'card-servicing-mcp:8000', '127.0.0.1:*', 'localhost:*']
+    for url_key in ('MCP_URL', 'MCP_RESOURCE'):
+        if config.get(url_key):
+            from urllib.parse import urlsplit
+            netloc = urlsplit(config[url_key]).netloc
+            if netloc and netloc not in allowed_hosts:
+                allowed_hosts.append(netloc)
     manager = StreamableHTTPSessionManager(server, stateless=True, json_response=True,
         security_settings=TransportSecuritySettings(enable_dns_rebinding_protection=True,
-            allowed_hosts=['mcp:8000', '127.0.0.1:*', 'localhost:*'],
+            allowed_hosts=allowed_hosts,
             allowed_origins=[]))
 
     @asynccontextmanager
@@ -122,6 +178,16 @@ def create_app(config=None):
     @app.get('/health')
     async def health():
         return {'status': 'ok'}
+
+    @app.get('/mcp/agents/{agent_name}/tools')
+    async def agent_tools_endpoint(agent_name: str):
+        catalogue = load_catalogue(config)
+        policy = get_agent_tools_policy(config, catalogue)
+        allowed = set(policy.get(agent_name, []))
+        return {
+            'agent': agent_name,
+            'tools': [spec.definition() for spec in catalogue.values() if spec.name in allowed]
+        }
 
     @app.get('/.well-known/oauth-protected-resource')
     async def resource_metadata():

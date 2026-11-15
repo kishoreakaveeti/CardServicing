@@ -48,6 +48,18 @@ def authorise(spec, arguments, caller):
             continue
         if source == 'account' and arguments[field] not in caller.get('accounts', []):
             raise HTTPException(403, 'Selection is no longer authorized')
+        if source == 'card':
+            allowed_cards = [c['id'] if isinstance(c, dict) else c for c in caller.get('cards', [])]
+            if allowed_cards and arguments[field] not in allowed_cards:
+                raise HTTPException(403, 'Card selection is no longer authorized')
+            if spec.name == 'unblock_card':
+                blocked_cards = [c['id'] for c in caller.get('cards', []) if isinstance(c, dict) and c.get('status') == 'blocked']
+                if caller.get('cards') and any(isinstance(c, dict) and 'status' in c for c in caller.get('cards', [])) and arguments[field] not in blocked_cards:
+                    raise HTTPException(400, 'Only blocked cards can be unblocked')
+            elif spec.name == 'block_card':
+                active_cards = [c['id'] for c in caller.get('cards', []) if isinstance(c, dict) and c.get('status') != 'blocked']
+                if caller.get('cards') and any(isinstance(c, dict) and 'status' in c for c in caller.get('cards', [])) and arguments[field] not in active_cards:
+                    raise HTTPException(400, 'Card is already blocked')
         if source == 'username' and arguments[field] != caller.get('username'):
             raise HTTPException(403, 'Customer does not match this action')
 
@@ -70,6 +82,15 @@ def form_options(catalogue, caller, bindings, cid, owner):
             if source == 'account':
                 item['options'] = [{'ref': bind(bindings, cid, owner, name, field, value),
                                     'label': 'Account ' + mask(value)} for value in caller.get('accounts', [])]
+            elif source == 'card':
+                cards = caller.get('cards', [])
+                if name == 'unblock_card':
+                    cards = [c for c in cards if not (isinstance(c, dict) and c.get('status') != 'blocked')]
+                elif name == 'block_card':
+                    cards = [c for c in cards if not (isinstance(c, dict) and c.get('status') == 'blocked')]
+                item['options'] = [{'ref': bind(bindings, cid, owner, name, field, c['id'] if isinstance(c, dict) else c),
+                                    'label': ('Card ' + mask(c.get('card_number', c['id'])) + (f" [{c['status'].upper()}]" if 'status' in c else '')) if isinstance(c, dict) else ('Card ' + mask(c))}
+                                   for c in cards]
             fields.append(item)
         tools.append({'name': name, 'label': spec.entry.label, 'fields': fields})
     return {'tools': tools}
