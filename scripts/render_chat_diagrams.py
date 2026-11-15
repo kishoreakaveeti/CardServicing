@@ -12,8 +12,20 @@ import textwrap
 ROOT = Path(__file__).resolve().parents[1]
 DIRECTORY = ROOT / 'docs' / 'diagrams'
 SOURCE = DIRECTORY / 'card-chat-flows.json'
-COLORS = {'browser': '#155e75', 'experience': '#0369a1', 'identity': '#92400e', 'workflow': '#1d4ed8', 'agent': '#6d28d9',
-          'claude': '#9a3412', 'mcp': '#047857', 'api': '#0f766e', 'storage': '#334155'}
+COLORS = {
+    'browser': '#155e75',
+    'experience': '#0369a1',
+    'identity': '#92400e',
+    'workflow': '#1d4ed8',
+    'agent': '#6d28d9',
+    'fincrime_agent': '#9333ea',
+    'claude': '#9a3412',
+    'mcp': '#047857',
+    'api': '#0f766e',
+    'fincrime_api': '#c2410c',
+    'storage': '#334155',
+    'fincrime_storage': '#475569',
+}
 
 
 def render(diagram):

@@ -2,8 +2,8 @@
   "diagrams": [
     {
       "file": "01-startup-and-discovery.svg",
-      "title": "01 / Startup and tool discovery",
-      "subtitle": "Catalogue and OpenAPI determine registered capabilities; the chat backend discovers tools over MCP.",
+      "title": "01 / Startup, tool discovery, and policy partitioning",
+      "subtitle": "Catalogue and OpenAPI determine registered capabilities; MCP partitions tools by agent role (cards_agent vs fincrime_agent).",
       "steps": [
         {
           "owner": "workflow",
@@ -24,9 +24,9 @@
         },
         {
           "owner": "mcp",
-          "title": "Register listed operations",
+          "title": "Register operations and tool policy",
           "body": [
-            "Official SDK Server list_tools/call_tool handlers dispatch only compiled names."
+            "Official SDK Server list_tools/call_tool handlers dispatch operations and partition tool access per agent role."
           ],
           "references": [
             {
@@ -40,6 +40,10 @@
             {
               "path": "src/card_chat/mcp_server.py",
               "anchor": "@server.call_tool"
+            },
+            {
+              "path": "src/card_chat/mcp_server.py",
+              "anchor": "def get_agent_tools_policy"
             }
           ]
         },
@@ -64,15 +68,19 @@
       "participants": [
         {
           "id": "workflow",
-          "label": "Agent API"
+          "label": "Agent Orchestrator"
         },
         {
           "id": "agent",
-          "label": "Catalogue / OpenAPI"
+          "label": "Cards Agent"
+        },
+        {
+          "id": "fincrime_agent",
+          "label": "FinCrime Agent"
         },
         {
           "id": "mcp",
-          "label": "MCP HTTP service"
+          "label": "MCP Server"
         },
         {
           "id": "claude",
@@ -90,25 +98,19 @@
           "kind": "return",
           "from": "agent",
           "to": "workflow",
-          "label": "Compiled method/path, public inputs, policies and response schema"
+          "label": "Compiled method/path, public inputs, policies and response schemas"
         },
         {
           "kind": "call",
           "from": "workflow",
           "to": "mcp",
-          "label": "Connect to MCP_URL over Streamable HTTP with destination bearer token"
+          "label": "Connect to MCP over Streamable HTTP with destination bearer token"
         },
         {
           "kind": "call",
           "from": "mcp",
-          "to": "agent",
-          "label": "Compile the same catalogue and local OpenAPI document"
-        },
-        {
-          "kind": "return",
-          "from": "agent",
           "to": "mcp",
-          "label": "Only listed operations; one shared HTTP execution handler"
+          "label": "Compile catalogue and evaluate get_agent_tools_policy()"
         },
         {
           "kind": "call",
@@ -120,91 +122,80 @@
           "kind": "return",
           "from": "mcp",
           "to": "workflow",
-          "label": "All configured names, descriptions and input schemas"
+          "label": "Return full discovered definitions: cards and fincrime operations"
         },
         {
           "kind": "call",
           "from": "workflow",
-          "to": "workflow",
-          "label": "Verify discovered definitions match compiled catalogue"
+          "to": "agent",
+          "label": "Configure Cards Agent with cards-only tool allowlist"
         },
         {
           "kind": "call",
           "from": "workflow",
+          "to": "fincrime_agent",
+          "label": "Configure FinCrime Agent with fraud/block-only tool allowlist"
+        },
+        {
+          "kind": "call",
+          "from": "agent",
           "to": "claude",
-          "label": "Shared allowlist builder: recent sanitised turns, opaque verified draft facts, stable eligible tool schemas; optional static-prefix cache"
+          "label": "Agent queries Claude using strictly role-partitioned tool schemas"
         },
         {
           "kind": "return",
           "from": "claude",
-          "to": "workflow",
-          "label": "Clarifying/normal reply OR one proposed tool call"
+          "to": "agent",
+          "label": "Valid clarifying response or role-authorized tool proposal"
         },
         {
           "kind": "note",
           "from": "",
           "to": "",
-          "label": "Claude does not fetch OpenAPI, call localhost or supply execution headers. Keys stay outside its schema."
+          "label": "Role-based tool partitioning prevents agents from invoking tools outside their bounded domain."
         }
       ]
     },
     {
       "file": "02-conversation-and-context.svg",
-      "title": "02 / Each message and the question loop",
-      "subtitle": "Bounded sanitised context and eligible schemas reach Claude; private values stay in caller-bound server state.",
+      "title": "02 / Multi-agent conversation routing and FinCrime pre-check",
+      "subtitle": "AgentOrchestrator routes turns between Cards and FinCrime agents; cross-agent checks verify account status before issuance.",
       "steps": [
         {
           "owner": "workflow",
-          "title": "Message and context",
+          "title": "Message and context routing",
           "body": [
-            "History plus validated collected proposal details are in memory by cid."
+            "AgentOrchestrator inspects customer turn, locks context, and routes to specialized agent."
           ],
           "references": [
             {
-              "path": "src/card_chat/main.py",
-              "anchor": "async def message"
-            },
-            {
-              "path": "src/card_chat/main.py",
-              "anchor": "class Conversation"
-            }
-          ]
-        },
-        {
-          "owner": "claude",
-          "title": "Automatic selection",
-          "body": [
-            "No intent enum, fixed question mapping or forced create_card tool call."
-          ],
-          "references": [
-            {
-              "path": "src/card_chat/provider.py",
-              "anchor": "async def turn"
+              "path": "src/card_chat/agent.py",
+              "anchor": "class AgentOrchestrator"
             },
             {
               "path": "src/card_chat/agent.py",
-              "anchor": "async def interpret_turn"
+              "anchor": "def route"
+            },
+            {
+              "path": "src/card_chat/agent.py",
+              "anchor": "class FinCrimeAgent"
+            },
+            {
+              "path": "src/card_chat/fincrime_agent.py",
+              "anchor": "class RemoteFinCrimeAgent"
             }
           ]
         },
         {
-          "owner": "workflow",
-          "title": "Validate proposal and review",
+          "owner": "fincrime_api",
+          "title": "Cross-agent security check",
           "body": [
-            "Validate partial/complete arguments and required fields, then mask display values."
+            "Orchestrator queries FinCrime API to verify account status before card issuance."
           ],
           "references": [
             {
-              "path": "src/card_chat/catalogue.py",
-              "anchor": "def validate"
-            },
-            {
-              "path": "src/card_chat/main.py",
-              "anchor": "partial = resolve"
-            },
-            {
-              "path": "src/card_chat/main.py",
-              "anchor": "c.review = uuid4().hex"
+              "path": "src/fincrime_servicing/service.py",
+              "anchor": "def get_account_status"
             }
           ]
         }
@@ -220,55 +211,25 @@
         },
         {
           "id": "workflow",
-          "label": "Chat workflow"
+          "label": "Agent Orchestrator"
         },
         {
           "id": "agent",
-          "label": "Agent / adapter"
+          "label": "Cards Agent"
         },
         {
-          "id": "claude",
-          "label": "Hosted Claude"
+          "id": "fincrime_agent",
+          "label": "FinCrime Agent"
+        },
+        {
+          "id": "fincrime_api",
+          "label": "FinCrime API"
         }
       ],
       "messages": [
         {
           "kind": "note",
-          "label": "Private inputs bypass chat: the secure form and masked account picker produce a review with zero model calls. Only scoped opaque references enter verified draft facts. Private pastes and ambiguous older references trigger deterministic clarification."
-        },
-        {
-          "kind": "note",
-          "label": "React calls only Experience. OIDC session + CSRF at the browser boundary; separate bearer identities internally. Agent journals jobs and reviewed submissions in SQLite before execution."
-        },
-        {
-          "kind": "call",
-          "from": "browser",
-          "to": "experience",
-          "label": "POST /conversations"
-        },
-        {
-          "kind": "call",
-          "from": "experience",
-          "to": "workflow",
-          "label": "Typed HTTP contract; service token + signed customer assertion"
-        },
-        {
-          "kind": "return",
-          "from": "workflow",
-          "to": "experience",
-          "label": "cid + fixed greeting"
-        },
-        {
-          "kind": "return",
-          "from": "experience",
-          "to": "browser",
-          "label": "UI-ready reply or accepted operation and BFF polling URL"
-        },
-        {
-          "kind": "section",
-          "from": "",
-          "to": "",
-          "label": "For each customer message"
+          "label": "React calls Experience API with OIDC session + CSRF. AgentOrchestrator dynamically delegates turns to Cards or FinCrime agents."
         },
         {
           "kind": "call",
@@ -280,159 +241,137 @@
           "kind": "call",
           "from": "experience",
           "to": "workflow",
-          "label": "Typed HTTP contract; service token + signed customer assertion"
+          "label": "Forward message with service token and customer assertion"
         },
         {
           "kind": "call",
           "from": "workflow",
           "to": "workflow",
-          "label": "Lock; append history; invalidate previous review"
-        },
-        {
-          "kind": "call",
-          "from": "workflow",
-          "to": "agent",
-          "label": "interpret_turn(history, collected details, discovered tools)"
-        },
-        {
-          "kind": "call",
-          "from": "agent",
-          "to": "claude",
-          "label": "Shared allowlist builder: recent sanitised turns, opaque verified draft facts, stable eligible tool schemas; optional static-prefix cache"
+          "label": "AgentOrchestrator.route(history, text): evaluate intent"
         },
         {
           "kind": "section",
           "from": "",
           "to": "",
-          "label": "Missing information, ambiguous request or unsupported action"
+          "label": "Branch A: Fraud or Card Lifecycle intent ('i lost my card', 'unblock my card')"
         },
         {
-          "kind": "return",
-          "from": "claude",
-          "to": "agent",
-          "label": "One clarifying question or normal reply"
-        },
-        {
-          "kind": "return",
-          "from": "agent",
-          "to": "workflow",
-          "label": "CustomerReply"
-        },
-        {
-          "kind": "return",
+          "kind": "call",
           "from": "workflow",
-          "to": "experience",
-          "label": "Display reply; next answer retains same cid/context"
+          "to": "fincrime_agent",
+          "label": "RemoteFinCrimeAgent: POST http://fincrime-agent:8000/turn"
         },
         {
           "kind": "return",
-          "from": "experience",
-          "to": "browser",
-          "label": "UI-ready reply or accepted operation and BFF polling URL"
+          "from": "fincrime_agent",
+          "to": "workflow",
+          "label": "ProposedToolCall(name='block_card' or 'unblock_card', arguments)"
         },
         {
           "kind": "section",
           "from": "",
           "to": "",
-          "label": "Claude proposes one action"
+          "label": "Branch B: Card Servicing intent ('issue a card', 'view balance') with FinCrime guardrail"
         },
         {
-          "kind": "return",
-          "from": "claude",
+          "kind": "call",
+          "from": "workflow",
           "to": "agent",
-          "label": "tool_use(name, arguments)"
+          "label": "CardsAgent.interpret_turn(history, collected, cards_tools)"
         },
         {
           "kind": "return",
           "from": "agent",
           "to": "workflow",
-          "label": "ProposedToolCall"
+          "label": "ProposedToolCall(name='create_card', arguments)"
         },
         {
           "kind": "call",
           "from": "workflow",
-          "to": "workflow",
-          "label": "Reject unknown tool; validate arguments with compiled schema"
+          "to": "fincrime_api",
+          "label": "Pre-issuance check: GET /fincrime/accounts/{acc}/status"
         },
         {
-          "kind": "note",
+          "kind": "return",
+          "from": "fincrime_api",
+          "to": "workflow",
+          "label": "200 Status (active or blocked with fraud flags)"
+        },
+        {
+          "kind": "section",
           "from": "",
           "to": "",
-          "label": "Incomplete proposal: save valid partial details and ask for missing field. Invalid values: no review/write."
+          "label": "Finalize and present reviewed action to customer"
         },
         {
           "kind": "call",
           "from": "workflow",
           "to": "workflow",
-          "label": "Store complete snapshot; mask account; new review token"
+          "label": "Validate arguments, generate signed review token"
         },
         {
           "kind": "return",
           "from": "workflow",
           "to": "experience",
-          "label": "Generic action review and catalogue-labelled confirmation button"
+          "label": "Action review summary and confirmation button"
         },
         {
           "kind": "return",
           "from": "experience",
           "to": "browser",
-          "label": "UI-ready reply or accepted operation and BFF polling URL"
+          "label": "Render confirmation prompt in chat UI"
         }
       ]
     },
     {
       "file": "03-confirmation-to-card-api.svg",
-      "title": "03 / Confirmation to REST creation",
-      "subtitle": "Confirmation executes the stored proposal directly: no Claude call and no tool-specific routing.",
+      "title": "03 / Confirmation execution: FinCrime and Card APIs",
+      "subtitle": "Reviewed tool execution dispatches through MCP to FinCrime API or Cards API with audit logs and DB synchronization.",
       "steps": [
         {
-          "owner": "workflow",
-          "title": "Confirm stored proposal",
+          "owner": "mcp",
+          "title": "MCP Tool Execution",
           "body": [
-            "Review token binds to exact tool/arguments; no model call here."
+            "MCP server validates tool arguments and dispatches to appropriate backend service."
           ],
           "references": [
             {
-              "path": "src/card_chat/main.py",
-              "anchor": "async def confirm"
-            },
-            {
-              "path": "src/card_chat/main.py",
-              "anchor": "async def execute(cid, c)"
+              "path": "src/card_chat/mcp_server.py",
+              "anchor": "async def call_tool"
             }
           ]
         },
         {
-          "owner": "mcp",
-          "title": "Generic dispatch",
+          "owner": "fincrime_api",
+          "title": "FinCrime Audit and State Synchronization",
           "body": [
-            "Idempotency metadata is separate from public arguments; shared handler makes HTTP call."
+            "FinCrime API records idempotent audit event in fincrime.db and synchronizes card status with Cards Banking API."
           ],
           "references": [
             {
-              "path": "src/card_chat/gateway.py",
-              "anchor": "async def execute"
+              "path": "src/fincrime_servicing/service.py",
+              "anchor": "async def block_card"
             },
             {
-              "path": "src/card_chat/mcp_server.py",
-              "anchor": "def execute(spec"
-            },
-            {
-              "path": "src/api_client/client.py",
-              "anchor": "def execute_operation"
+              "path": "src/fincrime_servicing/persistence.py",
+              "anchor": "def block_card_idempotent"
             }
           ]
         },
         {
           "owner": "api",
-          "title": "API boundary",
+          "title": "Cards Banking Update",
           "body": [
-            "Preserve validation, durable creation and replay."
+            "Cards Banking API applies the state transition and updates cards.db."
           ],
           "references": [
             {
-              "path": "src/card_servicing/cards.py",
-              "anchor": "result, replayed = store.issue_idempotent"
+              "path": "src/card_servicing/banking.py",
+              "anchor": "def block_card"
+            },
+            {
+              "path": "src/card_servicing/persistence.py",
+              "anchor": "def update_card_status"
             }
           ]
         }
@@ -448,32 +387,30 @@
         },
         {
           "id": "workflow",
-          "label": "Chat workflow"
+          "label": "Agent Orchestrator"
         },
         {
           "id": "mcp",
-          "label": "MCP HTTP service"
+          "label": "MCP Server"
+        },
+        {
+          "id": "fincrime_api",
+          "label": "FinCrime API"
+        },
+        {
+          "id": "fincrime_storage",
+          "label": "fincrime.db"
         },
         {
           "id": "api",
-          "label": "Cards REST API"
+          "label": "Cards API"
         },
         {
           "id": "storage",
-          "label": "SQLite"
+          "label": "cards.db"
         }
       ],
       "messages": [
-        {
-          "kind": "note",
-          "label": "React calls only Experience. OIDC session + CSRF at the browser boundary; separate bearer identities internally. Agent journals jobs and reviewed submissions in SQLite before execution."
-        },
-        {
-          "kind": "note",
-          "from": "",
-          "to": "",
-          "label": "Before this sequence, Claude has already selected an action and the workflow has validated its review."
-        },
         {
           "kind": "call",
           "from": "browser",
@@ -484,97 +421,91 @@
           "kind": "call",
           "from": "experience",
           "to": "workflow",
-          "label": "Typed HTTP contract; service token + signed customer assertion"
+          "label": "Forward confirmation with service token and customer assertion"
         },
         {
           "kind": "call",
           "from": "workflow",
           "to": "workflow",
-          "label": "Lock; verify token; freeze reviewed tool and arguments"
-        },
-        {
-          "kind": "call",
-          "from": "workflow",
-          "to": "workflow",
-          "label": "Generate one key only for a replay-supported operation"
+          "label": "Verify review token; lock conversation state"
         },
         {
           "kind": "call",
           "from": "workflow",
           "to": "mcp",
-          "label": "call_tool(name, arguments, meta={idempotency_key})"
+          "label": "call_tool(name='block_card'|'unblock_card'|'create_card', arguments)"
+        },
+        {
+          "kind": "section",
+          "from": "",
+          "to": "",
+          "label": "Path 1: FinCrime Card Block / Unblock Execution"
         },
         {
           "kind": "call",
           "from": "mcp",
-          "to": "mcp",
-          "label": "Validate arguments; split path/body; inject execution header"
+          "to": "fincrime_api",
+          "label": "POST /fincrime/cards/{id}/block or /unblock + Idempotency-Key"
         },
         {
           "kind": "call",
-          "from": "mcp",
-          "to": "api",
-          "label": "Shared ApiClient.execute_operation: POST /cards + Idempotency-Key"
+          "from": "fincrime_api",
+          "to": "fincrime_storage",
+          "label": "block_card_idempotent: record audit event and idempotency key"
+        },
+        {
+          "kind": "return",
+          "from": "fincrime_storage",
+          "to": "fincrime_api",
+          "label": "Audit committed to fincrime.db"
         },
         {
           "kind": "call",
-          "from": "api",
+          "from": "fincrime_api",
           "to": "api",
-          "label": "Validate CardCreate and required header; authorization stays here"
+          "label": "Sync status: POST /cards/{id}/status {status: 'BLOCKED'|'ACTIVE'}"
         },
         {
           "kind": "call",
           "from": "api",
           "to": "storage",
-          "label": "issue_idempotent(body, key, additional flag)"
+          "label": "update_card_status(card_id, status) in cards.db"
         },
         {
           "kind": "return",
           "from": "storage",
           "to": "api",
-          "label": "Committed card or original replay"
+          "label": "Status updated in cards.db"
         },
         {
           "kind": "return",
           "from": "api",
-          "to": "mcp",
-          "label": "201 Card response"
+          "to": "fincrime_api",
+          "label": "200 Card status synchronized"
         },
         {
-          "kind": "call",
-          "from": "mcp",
+          "kind": "return",
+          "from": "fincrime_api",
           "to": "mcp",
-          "label": "Validate success status and OpenAPI response schema"
+          "label": "200 Operation successful with audit reference"
         },
         {
           "kind": "return",
           "from": "mcp",
           "to": "workflow",
-          "label": "Structured {ok, result} or sanitized error"
-        },
-        {
-          "kind": "call",
-          "from": "workflow",
-          "to": "workflow",
-          "label": "Cache success; format configured result labels"
+          "label": "Structured execution response"
         },
         {
           "kind": "return",
           "from": "workflow",
           "to": "experience",
-          "label": "Actual simulated reference; duplicate click uses cached result"
+          "label": "Execution result message"
         },
         {
           "kind": "return",
           "from": "experience",
           "to": "browser",
-          "label": "UI-ready reply or accepted operation and BFF polling URL"
-        },
-        {
-          "kind": "note",
-          "from": "",
-          "to": "",
-          "label": "Other catalogue operations use this same path with their compiled method, path parameters and JSON body."
+          "label": "UI confirmation notification"
         }
       ]
     },
@@ -1517,6 +1448,409 @@
         {
           "kind": "note",
           "label": "Account creation and optional issuance use durable linked retry keys. Restart preserves accounts/cards. Logout deletes the BFF session; subsequent customer requests require login."
+        }
+      ]
+    },
+    {
+      "file": "09-fincrime-multi-agent-orchestration.svg",
+      "title": "09 / FinCrime multi-agent orchestration and card lifecycle",
+      "subtitle": "End-to-end multi-agent orchestration: fraud routing, cross-agent security guardrails, blocking and unblocking lifecycle.",
+      "steps": [
+        {
+          "owner": "workflow",
+          "title": "Agent Orchestrator and Intent Routing",
+          "body": [
+            "AgentOrchestrator dispatches customer turns to specialized microservices based on domain intent."
+          ],
+          "references": [
+            {
+              "path": "src/card_chat/agent.py",
+              "anchor": "class AgentOrchestrator"
+            },
+            {
+              "path": "src/card_chat/agent.py",
+              "anchor": "def route"
+            },
+            {
+              "path": "src/card_chat/fincrime_agent.py",
+              "anchor": "class RemoteFinCrimeAgent"
+            }
+          ]
+        },
+        {
+          "owner": "mcp",
+          "title": "Role-Partitioned Tool Execution",
+          "body": [
+            "MCP Server enforces tool allowlists and dispatches calls to target backend microservices."
+          ],
+          "references": [
+            {
+              "path": "src/card_chat/mcp_server.py",
+              "anchor": "def get_agent_tools_policy"
+            },
+            {
+              "path": "src/card_chat/mcp_server.py",
+              "anchor": "async def call_tool"
+            }
+          ]
+        },
+        {
+          "owner": "fincrime_api",
+          "title": "FinCrime Persistence and Audit Sync",
+          "body": [
+            "FinCrime API guarantees durable audit persistence in fincrime.db and synchronizes state to Cards API."
+          ],
+          "references": [
+            {
+              "path": "src/fincrime_servicing/service.py",
+              "anchor": "async def block_card"
+            },
+            {
+              "path": "src/fincrime_servicing/service.py",
+              "anchor": "async def unblock_card"
+            },
+            {
+              "path": "src/fincrime_servicing/persistence.py",
+              "anchor": "def block_card_idempotent"
+            },
+            {
+              "path": "src/fincrime_servicing/persistence.py",
+              "anchor": "def is_account_blocked"
+            }
+          ]
+        },
+        {
+          "owner": "api",
+          "title": "Cards Banking Status Update",
+          "body": [
+            "Cards API updates durable card record in cards.db."
+          ],
+          "references": [
+            {
+              "path": "src/card_servicing/banking.py",
+              "anchor": "def block_card"
+            },
+            {
+              "path": "src/card_servicing/banking.py",
+              "anchor": "def unblock_card"
+            },
+            {
+              "path": "src/card_servicing/persistence.py",
+              "anchor": "def update_card_status"
+            }
+          ]
+        }
+      ],
+      "participants": [
+        {
+          "id": "browser",
+          "label": "Browser"
+        },
+        {
+          "id": "experience",
+          "label": "Experience API"
+        },
+        {
+          "id": "workflow",
+          "label": "Agent Orchestrator"
+        },
+        {
+          "id": "agent",
+          "label": "Cards Agent"
+        },
+        {
+          "id": "fincrime_agent",
+          "label": "FinCrime Agent"
+        },
+        {
+          "id": "mcp",
+          "label": "MCP Server"
+        },
+        {
+          "id": "fincrime_api",
+          "label": "FinCrime API"
+        },
+        {
+          "id": "fincrime_storage",
+          "label": "fincrime.db"
+        },
+        {
+          "id": "api",
+          "label": "Cards API"
+        },
+        {
+          "id": "storage",
+          "label": "cards.db"
+        }
+      ],
+      "messages": [
+        {
+          "kind": "note",
+          "label": "Microservice Architecture: fincrime-agent and fincrime-api run as dedicated containerized services with separate databases and MCP policies."
+        },
+        {
+          "kind": "section",
+          "from": "",
+          "to": "",
+          "label": "Phase 1: Card Blocking Journey ('I lost my card')"
+        },
+        {
+          "kind": "call",
+          "from": "browser",
+          "to": "experience",
+          "label": "POST /conversations/{cid}/messages {'text': 'i lost my card'}"
+        },
+        {
+          "kind": "call",
+          "from": "experience",
+          "to": "workflow",
+          "label": "Forward message with auth assertion"
+        },
+        {
+          "kind": "call",
+          "from": "workflow",
+          "to": "workflow",
+          "label": "AgentOrchestrator.route(): classify intent -> FINCRIME"
+        },
+        {
+          "kind": "call",
+          "from": "workflow",
+          "to": "fincrime_agent",
+          "label": "RemoteFinCrimeAgent: POST http://fincrime-agent:8000/turn"
+        },
+        {
+          "kind": "return",
+          "from": "fincrime_agent",
+          "to": "workflow",
+          "label": "ProposedToolCall(name='block_card', args={'card_id': 'c1', 'reason': 'lost_or_stolen'})"
+        },
+        {
+          "kind": "return",
+          "from": "workflow",
+          "to": "experience",
+          "label": "Action review requiring user confirmation"
+        },
+        {
+          "kind": "return",
+          "from": "experience",
+          "to": "browser",
+          "label": "Render confirmation prompt: 'Block card ending in 1234?'"
+        },
+        {
+          "kind": "call",
+          "from": "browser",
+          "to": "experience",
+          "label": "User confirms: POST /conversations/{cid}/confirm"
+        },
+        {
+          "kind": "call",
+          "from": "experience",
+          "to": "workflow",
+          "label": "Forward confirmation"
+        },
+        {
+          "kind": "call",
+          "from": "workflow",
+          "to": "mcp",
+          "label": "call_tool('block_card', {'card_id': 'c1', 'reason': 'lost_or_stolen'})"
+        },
+        {
+          "kind": "call",
+          "from": "mcp",
+          "to": "fincrime_api",
+          "label": "POST /fincrime/cards/c1/block + Idempotency-Key"
+        },
+        {
+          "kind": "call",
+          "from": "fincrime_api",
+          "to": "fincrime_storage",
+          "label": "block_card_idempotent(): record audit log and idempotency key"
+        },
+        {
+          "kind": "return",
+          "from": "fincrime_storage",
+          "to": "fincrime_api",
+          "label": "Committed to fincrime.db"
+        },
+        {
+          "kind": "call",
+          "from": "fincrime_api",
+          "to": "api",
+          "label": "POST /cards/c1/status {'status': 'BLOCKED'}"
+        },
+        {
+          "kind": "call",
+          "from": "api",
+          "to": "storage",
+          "label": "update_card_status(c1, 'BLOCKED')"
+        },
+        {
+          "kind": "return",
+          "from": "storage",
+          "to": "api",
+          "label": "Status updated in cards.db"
+        },
+        {
+          "kind": "return",
+          "from": "api",
+          "to": "fincrime_api",
+          "label": "200 Status synchronized"
+        },
+        {
+          "kind": "return",
+          "from": "fincrime_api",
+          "to": "mcp",
+          "label": "200 Card blocked with audit reference"
+        },
+        {
+          "kind": "return",
+          "from": "mcp",
+          "to": "workflow",
+          "label": "Execution successful"
+        },
+        {
+          "kind": "return",
+          "from": "workflow",
+          "to": "browser",
+          "label": "UI displays: 'Card ending in 1234 has been securely blocked.'"
+        },
+        {
+          "kind": "section",
+          "from": "",
+          "to": "",
+          "label": "Phase 2: Cross-Agent Pre-Issuance Security Guardrail"
+        },
+        {
+          "kind": "call",
+          "from": "browser",
+          "to": "workflow",
+          "label": "User requests: 'Issue a replacement card'"
+        },
+        {
+          "kind": "call",
+          "from": "workflow",
+          "to": "agent",
+          "label": "Route to Cards Agent: interpret_turn()"
+        },
+        {
+          "kind": "return",
+          "from": "agent",
+          "to": "workflow",
+          "label": "Propose create_card(account_id, product_code)"
+        },
+        {
+          "kind": "call",
+          "from": "workflow",
+          "to": "fincrime_api",
+          "label": "Pre-check: GET /fincrime/accounts/{acc}/status"
+        },
+        {
+          "kind": "call",
+          "from": "fincrime_api",
+          "to": "fincrime_storage",
+          "label": "is_account_blocked(account_id)"
+        },
+        {
+          "kind": "return",
+          "from": "fincrime_storage",
+          "to": "fincrime_api",
+          "label": "Account blocked due to active lost/stolen alert"
+        },
+        {
+          "kind": "return",
+          "from": "fincrime_api",
+          "to": "workflow",
+          "label": "403 / Warning: Account under active fraud investigation"
+        },
+        {
+          "kind": "return",
+          "from": "workflow",
+          "to": "browser",
+          "label": "Pre-issuance rejected: Security restriction prevents issuing new card."
+        },
+        {
+          "kind": "section",
+          "from": "",
+          "to": "",
+          "label": "Phase 3: Card Unblocking with Explicit Confirmation Prompt"
+        },
+        {
+          "kind": "call",
+          "from": "browser",
+          "to": "workflow",
+          "label": "User requests: 'Unblock my card ending in 1234'"
+        },
+        {
+          "kind": "call",
+          "from": "workflow",
+          "to": "fincrime_agent",
+          "label": "Route to FinCrime Agent: interpret_turn()"
+        },
+        {
+          "kind": "return",
+          "from": "fincrime_agent",
+          "to": "workflow",
+          "label": "Propose unblock_card(card_id='c1', reason='customer_found_card')"
+        },
+        {
+          "kind": "return",
+          "from": "workflow",
+          "to": "browser",
+          "label": "Render cautionary prompt: 'Confirm card reactivation? Only proceed if card is safely recovered.'"
+        },
+        {
+          "kind": "call",
+          "from": "browser",
+          "to": "workflow",
+          "label": "Customer confirms unblock"
+        },
+        {
+          "kind": "call",
+          "from": "workflow",
+          "to": "mcp",
+          "label": "call_tool('unblock_card', {'card_id': 'c1', 'reason': 'customer_found_card'})"
+        },
+        {
+          "kind": "call",
+          "from": "mcp",
+          "to": "fincrime_api",
+          "label": "POST /fincrime/cards/c1/unblock"
+        },
+        {
+          "kind": "call",
+          "from": "fincrime_api",
+          "to": "fincrime_storage",
+          "label": "unblock_card_idempotent(): record unblock event in fincrime.db"
+        },
+        {
+          "kind": "call",
+          "from": "fincrime_api",
+          "to": "api",
+          "label": "POST /cards/c1/status {'status': 'ACTIVE'}"
+        },
+        {
+          "kind": "call",
+          "from": "api",
+          "to": "storage",
+          "label": "update_card_status(c1, 'ACTIVE') in cards.db"
+        },
+        {
+          "kind": "return",
+          "from": "storage",
+          "to": "fincrime_api",
+          "label": "Status restored to ACTIVE"
+        },
+        {
+          "kind": "return",
+          "from": "fincrime_api",
+          "to": "workflow",
+          "label": "200 Unblock complete"
+        },
+        {
+          "kind": "return",
+          "from": "workflow",
+          "to": "browser",
+          "label": "UI confirmation: 'Card ending in 1234 has been reactivated.'"
         }
       ]
     }

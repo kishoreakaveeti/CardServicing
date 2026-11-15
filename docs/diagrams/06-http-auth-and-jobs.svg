@@ -119,8 +119,8 @@
 <text x="40" y="2354" class="heading" font-size="20" fill="#0f172a">Traceable code references</text>
 <a href="../../src/card_chat/experience.py"><text x="40" y="2379" font-size="16" fill="#1d4ed8">src/card_chat/experience.py:212</text></a>
 <a href="../../src/card_chat/security.py"><text x="40" y="2404" font-size="16" fill="#1d4ed8">src/card_chat/security.py:89</text></a>
-<a href="../../src/card_chat/main.py"><text x="40" y="2429" font-size="16" fill="#1d4ed8">src/card_chat/main.py:435</text></a>
-<a href="../../src/card_chat/main.py"><text x="40" y="2454" font-size="16" fill="#1d4ed8">src/card_chat/main.py:126</text></a>
+<a href="../../src/card_chat/main.py"><text x="40" y="2429" font-size="16" fill="#1d4ed8">src/card_chat/main.py:444</text></a>
+<a href="../../src/card_chat/main.py"><text x="40" y="2454" font-size="16" fill="#1d4ed8">src/card_chat/main.py:132</text></a>
 <a href="../../src/card_servicing/cards.py"><text x="40" y="2479" font-size="16" fill="#1d4ed8">src/card_servicing/cards.py:45</text></a>
 <text x="40" y="2547" font-size="15" fill="#475569">Source: card-chat-flows.json | Regenerate: python scripts/render_chat_diagrams.py</text>
 </svg>
