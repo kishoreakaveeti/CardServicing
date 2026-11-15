@@ -5,15 +5,86 @@
     {
       "name": "create_card",
       "operation_id": "create_card",
-      "description": "Create a new simulated card for an existing authorized account. Use for new card creation, not freezing, blocking or replacement. Private details are collected by the secure form and masked account picker. Use only the opaque argument references supplied in verified draft facts; if missing, direct the customer to the form.",
+      "description": "Create a new simulated card for an existing authorized account. Use for new card creation, not freezing, blocking or replacement. Private details are collected by the secure form and masked account picker. Use only the opaque argument references supplied in verified draft facts; if missing, direct the customer to the form. Ordinary issuance returns an existing card without creating another. Additional issuance requires the customer to explicitly select the additional-card option in the secure form and confirm.",
       "confirmation": "required",
       "label": "Create card",
       "confirmation_label": "Create card",
       "idempotency_header": "Idempotency-Key",
-      "field_labels": {"given_name": "Given name", "user_name": "User name", "account_number": "Account number"},
-      "sensitive_fields": ["account_number", "user_name"],
-      "trusted_fields": {"account_number": "account", "user_name": "username"},
-      "result_labels": {"card_number": "Simulated card", "id": "Reference"}
+      "field_labels": {
+        "given_name": "Given name",
+        "user_name": "User name",
+        "account_number": "Account number",
+        "additional_card": "Issue an additional card (creates another card)"
+      },
+      "sensitive_fields": [
+        "account_number",
+        "user_name"
+      ],
+      "trusted_fields": {
+        "account_number": "account",
+        "user_name": "username"
+      },
+      "result_labels": {
+        "card_number": "Simulated card",
+        "id": "Reference"
+      }
+    },
+    {
+      "name": "view_accounts",
+      "operation_id": "view_accounts",
+      "label": "View my accounts",
+      "confirmation": "none",
+      "description": "View my accounts. Open the secure form for required details. If no account exists, guide the customer to create an account first.",
+      "result_labels": {
+        "message": "Details"
+      }
+    },
+    {
+      "name": "create_account",
+      "operation_id": "create_account",
+      "label": "Create account",
+      "confirmation": "required",
+      "description": "Create account. Open the secure form for required details. If no account exists, guide the customer to create an account first.",
+      "idempotency_header": "Idempotency-Key",
+      "field_labels": {
+        "account_type": "Account type (savings or transaction)",
+        "issue_card": "Issue a card too"
+      },
+      "result_labels": {
+        "account_number": "Account number"
+      }
+    },
+    {
+      "name": "view_cards",
+      "operation_id": "view_cards",
+      "label": "View my cards",
+      "confirmation": "none",
+      "description": "View my cards. Open the secure form for required details. If no account exists, guide the customer to create an account first.",
+      "result_labels": {
+        "message": "Details"
+      }
+    },
+    {
+      "name": "issue_card",
+      "operation_id": "issue_card",
+      "label": "Issue new card",
+      "confirmation": "required",
+      "description": "Issue new card. Open the secure form for required details. If no account exists, guide the customer to create an account first. Ordinary issuance returns an existing card without creating another. Additional issuance requires the customer to explicitly select the additional-card option in the secure form and confirm.",
+      "idempotency_header": "Idempotency-Key",
+      "trusted_fields": {
+        "account_number": "account"
+      },
+      "field_labels": {
+        "account_number": "Account",
+        "additional_card": "Issue an additional card (creates another card)"
+      },
+      "sensitive_fields": [
+        "account_number"
+      ],
+      "result_labels": {
+        "card_number": "Simulated card",
+        "message": "Details"
+      }
     }
   ]
 }

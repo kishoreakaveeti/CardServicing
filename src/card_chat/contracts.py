@@ -51,6 +51,7 @@ class Reply(BaseModel):
     id: str | None = None
     usage: dict[str, int] = Field(default_factory=dict)
     input_tool: str | None = None
+    data: dict | None = None
 
 
 class Operation(BaseModel):

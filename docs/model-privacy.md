@@ -1,5 +1,9 @@
 # Private inputs and minimal model work
 
+Structured model usage and tool metrics now go to MongoDB when enabled. Prompts, arbitrary log text, credentials and raw tool arguments remain excluded; see [MongoDB logging](mongodb-logging.md).
+
+Customer registration/login credentials travel only through secure BFF forms to the Cards credential service. They never become conversation drafts, model arguments or tool results. Pre-login intent calls expose only registration/login form openers. `Reply.data` account/card lists are shown by React and excluded from model history. See [Customer banking](customer-banking.md) for session and ownership boundaries.
+
 The HTTP services, durable jobs, remote MCP catalogue and Cards contract remain
 separate. The model boundary now has one shared `build_context` projection,
 used by the agent and defensively repeated in the Anthropic adapter. The browser

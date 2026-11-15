@@ -28,3 +28,22 @@ class Card(CardCreate):
     card_number: str = Field(pattern=r'^SIM-[0-9a-f]{32}$', description='Simulation identifier; not a payment network PAN.')
     status: Literal['created'] = 'created'
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+
+
+class CardOrigination(CardCreate):
+    additional_card: bool = Field(default=False, strict=True,
+        description='Explicitly request another card even if this account already has one.')
+
+
+class CardIssuance(Card):
+    outcome: Literal['created', 'already_exists', 'additional_created']
+    message: str
+
+    @classmethod
+    def for_card(cls, card: Card, outcome: str):
+        messages = {
+            'created': 'A simulated card was created.',
+            'already_exists': 'A card already exists for this account. No new card was created. Select the additional-card option and confirm if you want another card.',
+            'additional_created': 'An additional simulated card was created.',
+        }
+        return cls(**card.model_dump(), outcome=outcome, message=messages[outcome])

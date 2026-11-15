@@ -7,6 +7,7 @@ from pathlib import Path
 from fastapi import FastAPI
 
 from card_servicing.cards import router
+from card_servicing.banking import router as banking_router
 
 
 def main() -> None:
@@ -18,6 +19,7 @@ def main() -> None:
         servers=[{"url": "http://127.0.0.1:8010", "description": "Local development"}],
     )
     application.include_router(router)
+    application.include_router(banking_router)
     destination = Path(__file__).resolve().parents[1] / "docs" / "cards.openapi.json"
     destination.parent.mkdir(parents=True, exist_ok=True)
     content = json.dumps(application.openapi(), indent=2) + "\n"

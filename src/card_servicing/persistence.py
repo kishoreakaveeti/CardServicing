@@ -5,8 +5,8 @@ from functools import wraps
 from pathlib import Path
 from uuid import uuid4
 from card_servicing.idempotency import IdempotencyConflict, fingerprint
-from card_servicing.models import Card, CardCreate
-from card_servicing.ports import StorageUnavailable
+from card_servicing.models import Card, CardCreate, CardIssuance
+from card_servicing.ports import StorageUnavailable, AccountNotOwned
 
 
 def storage_operation(operation):
@@ -39,6 +39,13 @@ CREATE TABLE IF NOT EXISTS card_idempotency (
     response_json TEXT NOT NULL,
     created_at TEXT NOT NULL
 );
+CREATE INDEX IF NOT EXISTS ix_cards_account ON cards(account_number, created_at, id);
+CREATE TABLE IF NOT EXISTS card_issuance_requests (
+    request_key TEXT PRIMARY KEY NOT NULL,
+    request_fingerprint TEXT NOT NULL,
+    card_id TEXT NOT NULL REFERENCES cards(id),
+    response_json TEXT NOT NULL
+);
 """
 
 class SQLiteCardStore:
@@ -62,11 +69,17 @@ class SQLiteCardStore:
         self.path.parent.mkdir(parents=True, exist_ok=True)
         with closing(self.connect()) as db, db:
             db.execute('BEGIN IMMEDIATE')
+            if db.execute('PRAGMA user_version').fetchone()[0] > 3:
+                raise StorageUnavailable('Unsupported future database schema')
             for statement in SCHEMA.split(';'):
                 if statement.strip():
                     db.execute(statement)
             db.execute("INSERT OR IGNORE INTO card_statuses VALUES ('created', 'Simulated card created; no issuer integration')")
-            db.execute('PRAGMA user_version = 1')
+            from card_servicing.banking import SCHEMA as BANKING_SCHEMA
+            for statement in BANKING_SCHEMA.split(';'):
+                if statement.strip():
+                    db.execute(statement)
+            db.execute('PRAGMA user_version = 3')
         self.ready = True
 
     @storage_operation
@@ -78,6 +91,11 @@ class SQLiteCardStore:
             db.execute('BEGIN')
             db.execute('SELECT id, created_at, user_name, given_name, account_number, card_number, status FROM cards LIMIT 1').fetchone()
             db.execute('SELECT idempotency_key, request_fingerprint, card_id, response_status_code, response_json, created_at FROM card_idempotency LIMIT 1').fetchone()
+            db.execute('SELECT id,username,password_hash FROM customers LIMIT 1').fetchone()
+            db.execute('SELECT account_number,customer_id,account_type FROM accounts LIMIT 1').fetchone()
+            db.execute('SELECT card_id,account_number FROM account_cards LIMIT 1').fetchone()
+            db.execute('SELECT customer_id,request_key,fingerprint,account_number FROM banking_requests LIMIT 1').fetchone()
+            db.execute('SELECT request_key,request_fingerprint,card_id,response_json FROM card_issuance_requests LIMIT 1').fetchone()
             return db.execute("SELECT code FROM card_statuses WHERE code = 'created'").fetchone() is not None
 
     def create(self, instruction: CardCreate) -> Card:
@@ -87,18 +105,67 @@ class SQLiteCardStore:
     def create_idempotent(self, instruction: CardCreate, key: str) -> tuple[Card, bool]:
         if not self.ready:
             self.initialize()
-        identity = fingerprint(instruction)
         with closing(self.connect()) as db, db:
             # Serialize key lookup and both inserts across processes as well as threads.
             db.execute('BEGIN IMMEDIATE')
-            existing = db.execute('SELECT request_fingerprint, response_json FROM card_idempotency WHERE idempotency_key = ?', (key,)).fetchone()
-            if existing:
-                if existing[0] != identity:
-                    raise IdempotencyConflict()
-                return Card.model_validate_json(existing[1]), True
-            card = Card(id=uuid4(), card_number='SIM-' + uuid4().hex, **instruction.model_dump())
-            db.execute('INSERT INTO cards (id, created_at, user_name, given_name, account_number, card_number, status) VALUES (?, ?, ?, ?, ?, ?, ?)',
-                       (str(card.id), card.created_at.isoformat(), card.user_name, card.given_name, card.account_number, card.card_number, card.status))
-            db.execute('INSERT INTO card_idempotency VALUES (?, ?, ?, ?, ?, ?)',
-                       (key, identity, str(card.id), 201, card.model_dump_json(), card.created_at.isoformat()))
+            return self._create_idempotent(db, instruction, key)
+
+    def _create_idempotent(self, db, instruction, key):
+        """Original card generation and snapshot, inside the caller's transaction."""
+        identity = fingerprint(instruction)
+        existing = db.execute('SELECT request_fingerprint, response_json FROM card_idempotency WHERE idempotency_key = ?', (key,)).fetchone()
+        if existing:
+            if existing[0] != identity:
+                raise IdempotencyConflict()
+            return Card.model_validate_json(existing[1]), True
+        card = Card(id=uuid4(), card_number='SIM-' + uuid4().hex, **instruction.model_dump())
+        db.execute('INSERT INTO cards (id, created_at, user_name, given_name, account_number, card_number, status) VALUES (?, ?, ?, ?, ?, ?, ?)',
+                   (str(card.id), card.created_at.isoformat(), card.user_name, card.given_name, card.account_number, card.card_number, card.status))
+        db.execute('INSERT INTO card_idempotency VALUES (?, ?, ?, ?, ?, ?)',
+                   (key, identity, str(card.id), 201, card.model_dump_json(), card.created_at.isoformat()))
         return card, False
+
+    @storage_operation
+    def issue_idempotent(self, instruction, key, *, additional=False, customer_id=None):
+        if not self.ready:
+            self.initialize()
+        identity = fingerprint(instruction) + (':additional' if additional else ':initial')
+        with closing(self.connect()) as db, db:
+            # One writer reservation covers ownership, replay, existence and creation.
+            # Independent service processes/channels therefore observe the same decision.
+            db.execute('BEGIN IMMEDIATE')
+            if customer_id is not None and not db.execute(
+                'SELECT 1 FROM accounts WHERE account_number=? AND customer_id=?',
+                (instruction.account_number, customer_id)).fetchone():
+                raise AccountNotOwned()
+            prior = db.execute('SELECT request_fingerprint,response_json FROM card_issuance_requests WHERE request_key=?', (key,)).fetchone()
+            if prior:
+                if prior[0] != identity:
+                    raise IdempotencyConflict()
+                return CardIssuance.model_validate_json(prior[1]), True
+            # Honor pre-migration card snapshots before checking current existence.
+            old = db.execute('SELECT request_fingerprint,response_json FROM card_idempotency WHERE idempotency_key=?', (key,)).fetchone()
+            if old:
+                if old[0] != fingerprint(instruction) or additional:
+                    raise IdempotencyConflict()
+                result = CardIssuance.for_card(Card.model_validate_json(old[1]), 'created')
+                replayed = True
+            else:
+                db.row_factory = sqlite3.Row
+                query = 'SELECT * FROM cards WHERE account_number=?'
+                args = [instruction.account_number]
+                if customer_id is None:
+                    query += ' AND user_name=?'
+                    args.append(instruction.user_name)
+                row = db.execute(query + ' ORDER BY created_at,id LIMIT 1', args).fetchone()
+                if row and not additional:
+                    result = CardIssuance.for_card(Card.model_validate(dict(row)), 'already_exists')
+                else:
+                    card, _ = self._create_idempotent(db, instruction, key)
+                    result = CardIssuance.for_card(card, 'additional_created' if additional else 'created')
+                replayed = False
+            db.execute('INSERT INTO card_issuance_requests VALUES(?,?,?,?)',
+                       (key, identity, str(result.id), result.model_dump_json()))
+            if customer_id is not None:
+                db.execute('INSERT OR IGNORE INTO account_cards VALUES(?,?)', (str(result.id), instruction.account_number))
+            return result, replayed

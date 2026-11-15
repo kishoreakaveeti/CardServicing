@@ -122,12 +122,20 @@ def test_mcp_discovery_and_real_rest_replay(monkeypatch):
         monkeypatch.setenv('CARD_API_BASE_URL', url)
         async def scenario():
             async with connect() as gateway:
-                assert set(gateway.tools['create_card']['input_schema']['properties']) == set(BODY)
+                assert set(gateway.tools['create_card']['input_schema']['properties']) == set(BODY) | {'additional_card'}
                 first = await gateway.execute('create_card', BODY, 'synthetic-mcp-test')
                 replay = await gateway.execute('create_card', BODY, 'synthetic-mcp-test')
                 assert first['ok'] is True
                 assert replay == first
                 assert first['result']['account_number'] == '0012345678'
+                duplicate = await gateway.execute('create_card', BODY, 'another-channel')
+                assert duplicate['issuance_outcome'] == 'already_exists'
+                assert duplicate['result'] == first['result']
+                additional_body = {**BODY, 'additional_card': True}
+                additional = await gateway.execute('create_card', additional_body, 'explicit-additional')
+                assert additional['issuance_outcome'] == 'additional_created'
+                assert additional['result']['id'] != first['result']['id']
+                assert await gateway.execute('create_card', additional_body, 'explicit-additional') == additional
                 assert (await gateway.execute('create_card', {**BODY, 'given_name': 'Sam'}, 'synthetic-mcp-test'))['ok'] is False
         asyncio.run(scenario())
 
@@ -228,7 +236,7 @@ def test_invalid_arguments_never_write(fields):
     model, gateway = StubModel(), Gateway()
     with TestClient(create_app(model, gateway)) as client:
         cid = client.post('/conversations').json()['id']
-        option = client.get(f'/conversations/{cid}/inputs').json()['tools'][0]['fields']
+        option = next(t for t in client.get(f'/conversations/{cid}/inputs').json()['tools'] if t['name'] == 'create_card')['fields']
         ref = next(field['options'][0]['ref'] for field in option if field.get('options'))
         response = client.post(f'/conversations/{cid}/inputs', json={'tool': 'create_card',
             'fields': {'given_name': 'Alex', **fields}, 'selections': {'account_number': ref}})
@@ -259,7 +267,7 @@ def test_anthropic_adapter_uses_automatic_tool_selection():
             reply = await adapter.turn([{'role': 'user', 'content': 'new card'}], {}, tools)
             assert isinstance(reply, CustomerReply)
             assert {t['name'] for t in create.call_args.kwargs['tools']} == set(tools)
-            assert create.call_args.kwargs['tools'][0]['input_schema']['properties']['account_number']['x-model-input'] == 'reference'
+            assert next(t for t in create.call_args.kwargs['tools'] if t['name'] == 'create_card')['input_schema']['properties']['account_number']['x-model-input'] == 'reference'
             assert create.call_args.kwargs['tool_choice']['type'] == 'auto'
             assert 'idempotency_key' not in str(create.call_args.kwargs)
             create.return_value = SimpleNamespace(stop_reason='tool_use', content=[SimpleNamespace(type='tool_use', name='create_card', input=BODY)])

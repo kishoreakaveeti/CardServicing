@@ -17,7 +17,7 @@
           "cards"
         ],
         "summary": "Originate a simulated card for an existing account",
-        "description": "Creates a simulation-only card number. Account existence is assumed. The same Idempotency-Key and normalized body replay the original response.",
+        "description": "Creates a simulation-only card number. Account existence is assumed. The same Idempotency-Key and normalized body replay the original response. Ordinary issuance returns an existing card. Additional cards require additional_card=true.",
         "operationId": "create_card",
         "parameters": [
           {
@@ -40,7 +40,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/CardCreate"
+                "$ref": "#/components/schemas/CardOrigination"
               }
             }
           }
@@ -48,6 +48,16 @@
         "responses": {
           "201": {
             "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Card"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Existing card returned; no new card created",
             "content": {
               "application/json": {
                 "schema": {
@@ -74,10 +84,310 @@
           }
         }
       }
+    },
+    "/banking/register": {
+      "post": {
+        "tags": [
+          "banking"
+        ],
+        "summary": "Register",
+        "operationId": "register_banking_register_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Credentials"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/banking/login": {
+      "post": {
+        "tags": [
+          "banking"
+        ],
+        "summary": "Login",
+        "operationId": "login_banking_login_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Credentials"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/banking/accounts": {
+      "get": {
+        "tags": [
+          "banking"
+        ],
+        "summary": "Accounts",
+        "operationId": "view_accounts",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Accounts"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "banking"
+        ],
+        "summary": "Create Account",
+        "operationId": "create_account",
+        "parameters": [
+          {
+            "name": "idempotency-key",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128,
+              "pattern": "^[A-Za-z0-9._:-]+$",
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AccountCreate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Account"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/banking/cards": {
+      "get": {
+        "tags": [
+          "banking"
+        ],
+        "summary": "Cards",
+        "operationId": "view_cards",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Cards"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "banking"
+        ],
+        "summary": "Issue Card",
+        "operationId": "issue_card",
+        "parameters": [
+          {
+            "name": "idempotency-key",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128,
+              "pattern": "^[A-Za-z0-9._:-]+$",
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CardIssue"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CardIssuance"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "An existing card was returned; no new card was created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CardIssuance"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
     "schemas": {
+      "Account": {
+        "properties": {
+          "account_number": {
+            "type": "string",
+            "title": "Account Number"
+          },
+          "account_type": {
+            "type": "string",
+            "title": "Account Type"
+          },
+          "created_at": {
+            "type": "string",
+            "title": "Created At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "account_number",
+          "account_type",
+          "created_at"
+        ],
+        "title": "Account"
+      },
+      "AccountCreate": {
+        "properties": {
+          "account_type": {
+            "type": "string",
+            "pattern": "^(savings|transaction)$",
+            "title": "Account Type"
+          },
+          "issue_card": {
+            "type": "boolean",
+            "title": "Issue Card",
+            "default": false
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "account_type"
+        ],
+        "title": "AccountCreate"
+      },
+      "Accounts": {
+        "properties": {
+          "accounts": {
+            "items": {
+              "$ref": "#/components/schemas/Account"
+            },
+            "type": "array",
+            "title": "Accounts"
+          },
+          "message": {
+            "type": "string",
+            "title": "Message"
+          }
+        },
+        "type": "object",
+        "required": [
+          "accounts",
+          "message"
+        ],
+        "title": "Accounts"
+      },
       "Card": {
         "properties": {
           "user_name": {
@@ -145,7 +455,7 @@
         ],
         "title": "Card"
       },
-      "CardCreate": {
+      "CardIssuance": {
         "properties": {
           "user_name": {
             "type": "string",
@@ -177,6 +487,116 @@
               "0012345678"
             ],
             "x-sensitive": true
+          },
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "card_number": {
+            "type": "string",
+            "pattern": "^SIM-[0-9a-f]{32}$",
+            "title": "Card Number",
+            "description": "Simulation identifier; not a payment network PAN."
+          },
+          "status": {
+            "type": "string",
+            "const": "created",
+            "title": "Status",
+            "default": "created"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "outcome": {
+            "type": "string",
+            "enum": [
+              "created",
+              "already_exists",
+              "additional_created"
+            ],
+            "title": "Outcome"
+          },
+          "message": {
+            "type": "string",
+            "title": "Message"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "user_name",
+          "given_name",
+          "account_number",
+          "id",
+          "card_number",
+          "outcome",
+          "message"
+        ],
+        "title": "CardIssuance"
+      },
+      "CardIssue": {
+        "properties": {
+          "account_number": {
+            "type": "string",
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Account Number"
+          },
+          "additional_card": {
+            "type": "boolean",
+            "title": "Additional Card",
+            "description": "Explicitly issue another card even when an account already has one. Requires customer confirmation.",
+            "default": false
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "account_number"
+        ],
+        "title": "CardIssue"
+      },
+      "CardOrigination": {
+        "properties": {
+          "user_name": {
+            "type": "string",
+            "maxLength": 100,
+            "minLength": 1,
+            "title": "User Name",
+            "description": "The customer's user name, as nonblank text.",
+            "examples": [
+              "alex.smith"
+            ]
+          },
+          "given_name": {
+            "type": "string",
+            "maxLength": 100,
+            "minLength": 1,
+            "title": "Given Name",
+            "description": "The customer's given name, as nonblank text.",
+            "examples": [
+              "Alex"
+            ]
+          },
+          "account_number": {
+            "type": "string",
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Account Number",
+            "description": "Existing account identifier. Keep it as a string and preserve leading zeros.",
+            "examples": [
+              "0012345678"
+            ],
+            "x-sensitive": true
+          },
+          "additional_card": {
+            "type": "boolean",
+            "title": "Additional Card",
+            "description": "Explicitly request another card even if this account already has one.",
+            "default": false
           }
         },
         "additionalProperties": false,
@@ -186,7 +606,52 @@
           "given_name",
           "account_number"
         ],
-        "title": "CardCreate"
+        "title": "CardOrigination"
+      },
+      "Cards": {
+        "properties": {
+          "cards": {
+            "items": {
+              "$ref": "#/components/schemas/Card"
+            },
+            "type": "array",
+            "title": "Cards"
+          },
+          "message": {
+            "type": "string",
+            "title": "Message"
+          }
+        },
+        "type": "object",
+        "required": [
+          "cards",
+          "message"
+        ],
+        "title": "Cards"
+      },
+      "Credentials": {
+        "properties": {
+          "username": {
+            "type": "string",
+            "pattern": "^[A-Za-z][A-Za-z0-9_.-]{2,63}$",
+            "title": "Username"
+          },
+          "password": {
+            "type": "string",
+            "maxLength": 128,
+            "minLength": 10,
+            "format": "password",
+            "title": "Password",
+            "writeOnly": true
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "username",
+          "password"
+        ],
+        "title": "Credentials"
       },
       "HTTPValidationError": {
         "properties": {

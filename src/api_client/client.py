@@ -16,6 +16,7 @@ class ApiClient:
             timeout=10.0,
             transport=transport,
         )
+        self.last_response_headers = httpx.Headers()
 
     def close(self) -> None:
         self._client.close()
@@ -40,6 +41,7 @@ class ApiClient:
             path = path.replace('{' + name + '}', quote(value, safe=''))
         response = self._client.request(method, path, json=body, headers=execution_headers)
         response.raise_for_status()
+        self.last_response_headers = response.headers
         return response.status_code, response.json()
 
     def list_items(self) -> list[dict[str, Any]]:

@@ -159,13 +159,15 @@ def test_http_works_with_provider_neutral_store_contract():
             raise StorageUnavailable()
         def create_idempotent(self, instruction, key):
             raise StorageUnavailable()
+        def issue_idempotent(self, instruction, key, **kwargs):
+            raise StorageUnavailable()
     with TestClient(create_app(card_store=UnavailableStore())) as client:
         assert client.get('/health/live').status_code == 200
         assert client.get('/health/ready').json()['checks'] == {'synthetic_provider': 'unavailable'}
         assert client.post('/cards', json=BODY, headers={'Idempotency-Key': 'outage'}).json() == {'detail': 'Card storage unavailable'}
 
 
-def test_previous_schema_database_replays_without_migration(tmp_path):
+def test_previous_schema_database_replays_after_additive_migration(tmp_path):
     path = tmp_path / 'legacy.db'
     with closing(sqlite3.connect(path)) as db:
         db.executescript((Path(__file__).parent / 'fixtures' / 'legacy_cards.sql').read_text())
@@ -176,6 +178,6 @@ def test_previous_schema_database_replays_without_migration(tmp_path):
         assert replay.json() == expected
         assert replay.headers['Idempotency-Replayed'] == 'true'
     with closing(sqlite3.connect(path)) as db:
-        assert db.execute('PRAGMA user_version').fetchone()[0] == 1
+        assert db.execute('PRAGMA user_version').fetchone()[0] == 3
         assert db.execute('SELECT count(*) FROM cards').fetchone()[0] == 1
         assert db.execute('SELECT count(*) FROM card_idempotency').fetchone()[0] == 1

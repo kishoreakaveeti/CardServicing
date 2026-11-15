@@ -1,5 +1,9 @@
 # Card persistence and diagnostics
 
+The full Docker stack starts MongoDB for operational diagnostics; customer/account/card records and retry snapshots remain in SQLite. See [service logging](mongodb-logging.md).
+
+Schema version 2 added `customers`, `accounts`, `account_cards` and customer-scoped `banking_requests` in the same SQLite database. Version 1 cards and original response snapshots remain intact; legacy account strings are not assigned to new customers. See [Customer banking schema and retry semantics](customer-banking.md#database-migration-and-retry-behavior).
+
 Normal entry point `card_servicing.main:app` initializes `data/cards.db`.
 `create_app()` defaults to isolated memory storage and disabled telemetry for tests;
 inject `card_store=SQLiteCardStore(path)` or use `local_infrastructure=True`.
@@ -9,15 +13,16 @@ inject `card_store=SQLiteCardStore(path)` or use `local_infrastructure=True`.
 `cards` stores UUID, UTC creation time, user name, given name, account number,
 unique simulation card number and status. `card_statuses` seeds `created`.
 `card_idempotency` stores the unique client key, canonical SHA-256 request fingerprint,
-card foreign key, original response JSON and status 201. Schema version is 1.
-The schema is dedicated to card origination and durable request replay.
+card foreign key, original response JSON and status 201. Schema version is 3.
+Customer banking tables extend the original card origination and durable replay schema.
 
 Every SQLite connection enables foreign keys. `BEGIN IMMEDIATE` reserves the writer
 before key lookup, coordinating concurrent threads and processes. Matching retries
 replay the saved response; mismatches raise 409. Card and response snapshot insert
 in one transaction, committing before return. Failure rolls back both. UUID-based
-simulation numbers also have a database uniqueness constraint. A fresh key represents
-a new origination; multiple cards for one account are allowed.
+simulation numbers also have a database uniqueness constraint. A fresh key represents a new request; it returns the existing card unless
+`additional_card=true` explicitly requests another card. Schema version 3 adds
+`card_issuance_requests` to persist each decision, including already-existing outcomes.
 
 ## Try idempotency in Swagger
 
@@ -29,7 +34,7 @@ Open `/docs`, expand POST /cards, enter key `card-001` and body:
 
 Execute twice: both responses are 201 with the same card number. The second has
 `Idempotency-Replayed: true`. Change the account with that key to receive 409;
-use a new key for a new card. Restart the API and retry to verify durable replay.
+use a new key and `additional_card=true` to intentionally issue another card. Restart the API and retry to verify durable replay.
 
 ## Inspect SQLite
 

@@ -19,6 +19,7 @@ from card_chat.contracts import Confirmation, Message, Operation, Reply, Structu
 from fastapi.exceptions import RequestValidationError
 from card_chat.security import Security, delegation, trace
 from uuid import uuid4
+from card_servicing.banking import Credentials
 
 
 def create_app(config=None):
@@ -30,6 +31,7 @@ def create_app(config=None):
     db = sqlite3.connect(path, check_same_thread=False)
     db.row_factory = sqlite3.Row
     db.execute('CREATE TABLE IF NOT EXISTS sessions(id TEXT PRIMARY KEY, data TEXT, expires REAL)')
+    db.execute('CREATE TABLE IF NOT EXISTS auth_attempts(bucket TEXT PRIMARY KEY, attempts INTEGER, expires REAL)')
     @asynccontextmanager
     async def lifespan(app):
         if not security.enabled:
@@ -39,6 +41,8 @@ def create_app(config=None):
         finally:
             db.close()
     app = FastAPI(title='Card Experience API', version='1.0', lifespan=lifespan)
+    from card_chat.observability import instrument
+    instrument(app, config, 'experience')
     app.state.sessions = db
 
     @app.exception_handler(RequestValidationError)
@@ -136,8 +140,80 @@ def create_app(config=None):
         result.delete_cookie('card_session', path='/')
         return result
 
+    async def banking_request(request, path, body=None, value=None):
+        dt = delegation.set(security.issue_customer(value['claims']) if value else None)
+        tt = trace.set(uuid4().hex)
+        try:
+            headers = await security.headers()
+            headers['X-Banking-BFF'] = '1'
+            async with httpx.AsyncClient(timeout=30) as client:
+                response = await client.request('POST' if body is not None else 'GET',
+                    config.get('CARD_API_BASE_URL', 'http://cards:8000').rstrip('/') + '/banking/' + path,
+                    json=body, headers=headers)
+            if response.status_code >= 400:
+                details = {401: 'Invalid username or password', 409: 'Username is already registered'}
+                raise HTTPException(response.status_code, details.get(response.status_code, 'Banking request rejected'))
+            return response.json()
+        except (httpx.RequestError, ValueError):
+            raise HTTPException(503, 'Banking service unavailable') from None
+        finally:
+            delegation.reset(dt)
+            trace.reset(tt)
+
+    async def credentials(request, body, action):
+        if request.headers.get('Origin') != origin:
+            raise HTTPException(403, 'Invalid origin')
+        # Bounded per-client attempt window, persisted across restarts.
+        bucket = hashlib.sha256((request.client.host if request.client else 'unknown').encode()).hexdigest()
+        now = time.time()
+        db.execute('DELETE FROM auth_attempts WHERE expires < ?', (now,))
+        db.execute('INSERT INTO auth_attempts VALUES(?,1,?) ON CONFLICT(bucket) DO UPDATE SET attempts=attempts+1', (bucket, now + 300))
+        db.commit()
+        if db.execute('SELECT attempts FROM auth_attempts WHERE bucket=?', (bucket,)).fetchone()[0] > 20:
+            raise HTTPException(429, 'Too many sign-in attempts. Try again in five minutes.')
+        claims = await banking_request(request, action, body.model_dump())
+        claims['local_customer'] = True
+        sid = secrets.token_urlsafe(32)
+        value = {'claims': claims, 'csrf': secrets.token_urlsafe(32)}
+        old = request.cookies.get('card_session')
+        if old:
+            load(old, consume=True)
+        store(sid, value, 3600)
+        result = JSONResponse({'name': claims['preferred_username'], 'csrf': value['csrf']}, status_code=201 if action == 'register' else 200)
+        result.set_cookie('card_session', sid, httponly=True, secure=secure_cookie, samesite='lax', max_age=3600, path='/')
+        return result
+
+    @app.post('/auth/register')
+    async def register_customer(body: Credentials, request: Request):
+        return await credentials(request, body, 'register')
+
+    @app.post('/auth/password-login')
+    async def password_login(body: Credentials, request: Request):
+        return await credentials(request, body, 'login')
+
+    @app.post('/api/entry/messages', response_model=Reply)
+    async def entry_message(body: Message, request: Request):
+        if request.headers.get('Origin') != origin:
+            raise HTTPException(403, 'Invalid origin')
+        from card_chat.model_context import sanitise, PRIVATE_NOTICE
+        safe = sanitise(body.text)
+        if safe != body.text:
+            return Reply(message=PRIVATE_NOTICE)
+        try:
+            async with httpx.AsyncClient(timeout=45) as client:
+                response = await client.post(config['AGENT_URL'].rstrip('/') + '/entry/messages',
+                    json={'text': safe}, headers=await security.headers())
+            if response.status_code != 200:
+                raise HTTPException(503, 'Language service unavailable. Choose Register or Login.')
+            return Reply.model_validate(response.json())
+        except (httpx.RequestError, ValueError):
+            raise HTTPException(503, 'Language service unavailable. Choose Register or Login.') from None
+
     async def forward(request, path, body=None):
         value = session(request)
+        if value['claims'].get('local_customer'):
+            current = await banking_request(request, 'accounts', value=value)
+            value['claims']['accounts'] = [a['account_number'] for a in current['accounts']]
         dt = delegation.set(security.issue_customer(value['claims']))
         tt = trace.set(uuid4().hex)
         try:

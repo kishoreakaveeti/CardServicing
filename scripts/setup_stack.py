@@ -13,6 +13,11 @@ env = ROOT / '.env.stack'
 values = dict(dotenv_values(env)) if env.exists() else {name: secrets.token_urlsafe(32) for name in
           ['EXPERIENCE_SECRET', 'AGENT_SECRET', 'MCP_SECRET', 'BROWSER_SECRET',
            'IDENTITY_ADMIN_PASSWORD', 'DEMO_PASSWORD']}
+original = dotenv_values(ROOT / '.env')
+# Keep original Mongo credentials when migrating an existing development setup.
+values.setdefault('MONGO_USER', original.get('MONGO_USER') or 'card_servicing')
+values.setdefault('MONGO_PASSWORD', original.get('MONGO_PASSWORD') or secrets.token_urlsafe(32))
+values.setdefault('ACCOUNT_HASH_KEY', original.get('ACCOUNT_HASH_KEY') or secrets.token_urlsafe(32))
 
 def mapper(name, kind, config):
     return {'name': name, 'protocol': 'openid-connect', 'protocolMapper': kind, 'config': config}

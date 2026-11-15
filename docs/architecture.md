@@ -1,5 +1,11 @@
 # Architecture and technology stack
 
+Card issuance now serializes ownership, replay and existing-card decisions in one SQLite transaction. Schema version 3 preserves decision snapshots; see [card issuance](card-issuance.md).
+
+The full stack now includes a persistent MongoDB diagnostics service. All Python HTTP layers reuse the existing redacted telemetry adapter; Agent/model/MCP structured metrics also reach Mongo. See [MongoDB logging](mongodb-logging.md).
+
+The current customer/account/card extension is documented in [Customer banking](customer-banking.md), including architecture and database diagrams. Registration/password verification bypass the model; direct and conversational banking share Agent/MCP tools and Cards banking services. The Cards database is authoritative for registered customer ownership.
+
 Current application architecture: [Independent HTTP stack](http-stack.md).
 Model data isolation and optional caching: [Private model context](model-privacy.md)
 and [sequence diagram](diagrams/07-private-inputs-and-model-context.svg).
@@ -26,11 +32,12 @@ using automatic tool choice before review. Confirmation executes a validated
 snapshot directly through the shared HTTP handler; it makes no model call.
 
 This API-first local learning project implements simulated card origination.
-The account already exists and is accepted without lookup.
+The compatibility card-only route assumes legacy accounts exist. Registered customer
+operations validate account ownership in SQLite; see the current banking guide.
 Swagger, Postman or the separate HTTPX client calls the API directly. An optional
 [browser chat demo](chat-demo.md) adds FastAPI chat → stdio MCP → HTTPX → REST.
 The chat process calls hosted Claude through a provider adapter; the API remains
-an independent process. Drafts and confirmation state live only in chat memory.
+an independent process. The current HTTP Agent persists drafts, confirmation snapshots and operations in its SQLite journal.
 
 | Component | Role and current status |
 | --- | --- |

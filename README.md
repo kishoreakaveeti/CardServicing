@@ -1,5 +1,11 @@
 # Card Servicing
 
+Ordinary card requests now return an existing card instead of creating another. Additional cards require an explicit choice and confirmation. See [card issuance and retry policy](docs/card-issuance.md).
+
+MongoDB now starts with the full Docker stack and receives service diagnostics by default. See [MongoDB logging and duplicate-card policy](docs/mongodb-logging.md).
+
+The chat-first interface now supports customer registration/login, owned accounts, optional and additional simulated cards, and direct action buttons. See [Customer banking: complete journey and API](docs/customer-banking.md). Existing OIDC service authentication, Agent/MCP orchestration and SQLite persistence remain in place.
+
 React ? Experience API ? Agent API ? Streamable HTTP MCP ? Cards API.
 Claude interprets ordinary text; private details use a masked picker and a secure
 form. Every write requires a review and confirmation. All cards are simulations.
@@ -149,15 +155,15 @@ Pop-Location
 ### 1. Stop conflicting application processes
 
 Docker and local modes share browser/identity ports 8080/8081. Stop existing
-VS Code debug sessions before switching. To keep only Docker-hosted Keycloak:
+VS Code debug sessions before switching. To keep Docker-hosted Keycloak and MongoDB:
 
 ```powershell
 docker compose --env-file .env --env-file .env.stack stop frontend experience agent mcp cards
-docker compose --env-file .env --env-file .env.stack up -d --wait identity
+docker compose --env-file .env --env-file .env.stack up -d --wait identity mongodb
 ```
 
 This is a convenient hybrid: **all five application components run natively**;
-only the identity provider remains in Docker. No application image is built or
+the identity provider and MongoDB remain in Docker. No application image is built or
 deployed. Docker Desktop's CLI may need adding to PATH; the startup script's
 Docker detection paths are documented in `scripts/stack.ps1`.
 
@@ -199,7 +205,17 @@ Select **Debug Full Stack (Local)** and press **F5**. The compound:
 2. Starts Vite locally, proxying `/api` and `/auth` to Experience on 8020.
 3. Launches four Python debug sessions from the workspace venv.
 4. Waits inside each service launcher for its downstream dependency before import/startup.
-5. Waits for Experience HTTP readiness alongside the Python launches, then opens Chrome on localhost:8080.
+5. Waits for all six HTTP endpoints (including Identity and Vite) alongside the Python launches, then opens Chrome on localhost:8080.
+
+The frontend browser profile is hidden from the normal launch picker because it
+only opens Chrome; it does not start application services. Use **Debug Full Stack
+(Local)** for F5 startup. The **Wait for Local HTTP** task now reports each missing
+service and signals readiness to VS Code with a background task matcher. If it
+fails, inspect its terminal and the Python terminals. **Debug Anyway** skips the
+readiness check and cannot fix a missing server. The UI uses port **8080**; port
+8000 is the internal Docker service port. A missing `npm` command requires
+installing Node.js with npm and restarting VS Code; an unavailable port 8081
+requires starting the external Identity service described above.
 
 Dependency order is Cards ? MCP ? Agent ? Experience. Launchers wait up to three
 minutes; errors appear in their individual terminals. If a startup breakpoint

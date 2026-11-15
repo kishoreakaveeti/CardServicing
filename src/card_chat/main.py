@@ -73,6 +73,8 @@ def create_app(model=None, gateway=None, *, config=None):
 
     app = FastAPI(title='Card Agent API', version='1.0', lifespan=lifespan)
     protect(app, config, 'agent', 'agent:invoke', 'experience-service')
+    from card_chat.observability import instrument
+    instrument(app, config, 'agent')
     app.state.journal = journal
 
     @app.exception_handler(RequestValidationError)
@@ -169,10 +171,20 @@ def create_app(model=None, gateway=None, *, config=None):
             fields = '; '.join(f'{label}: {mask(data[key]) if ("account" in key or "card_number" in key) and not str(data[key]).startswith("SIM-") else data[key]}'
                                for key, label in spec.entry.result_labels.items() if key in data)
             text = f'{spec.entry.label} succeeded.' + (' ' + fields if fields else '')
+            issuance_outcome = result.get('issuance_outcome', data.get('outcome'))
+            if spec.name in ('create_card', 'issue_card') and issuance_outcome == 'already_exists':
+                text = ('A card already exists for this account. No new card was created. '
+                        'To request another card, start a new action, select the additional-card option and confirm.'
+                        + (' ' + fields if fields else ''))
             submission['result'] = text
             c.usage['completed_actions'] = c.usage.get('completed_actions', 0) + 1
-            logger.warning('workflow_usage %s', json.dumps({'tool': spec.name, **c.usage}, sort_keys=True))
-            return reply(c, text)
+            metrics = {'tool': spec.name, **c.usage}
+            logger.warning('workflow_usage %s', json.dumps(metrics, sort_keys=True),
+                           extra={'telemetry_event': 'workflow_usage', 'telemetry_fields': metrics})
+            response = reply(c, text)
+            if proposal.name in ('view_accounts', 'view_cards'):
+                response['data'] = data
+            return response
         except Exception:
             return reply(c, 'Could not complete the action. ' + suffix)
 
@@ -184,6 +196,23 @@ def create_app(model=None, gateway=None, *, config=None):
     @app.get('/')
     async def index():
         return FileResponse(Path(__file__).with_name('index.html'))
+
+    @app.post('/entry/messages', response_model=Reply)
+    async def entry_message(body: Message):
+        safe = sanitise(body.text)
+        if safe != body.text:
+            return Reply(message=PRIVATE_NOTICE)
+        tools = {name: {'name': name, 'description': description,
+                 'input_schema': {'type': 'object', 'properties': {}, 'additionalProperties': False}}
+                 for name, description in [('register', 'Open the customer registration form.'),
+                                            ('login', 'Open the customer login form.')]}
+        try:
+            turn = await app.state.agent.interpret_turn([{'role': 'user', 'content': safe}], {}, tools)
+        except Exception:
+            raise HTTPException(503, 'Language service unavailable. Choose Register or Login.') from None
+        if isinstance(turn, ProposedToolCall):
+            return Reply(message='Please complete the secure form below.', input_tool=turn.name)
+        return Reply(message=sanitise(turn.text))
 
     @app.post('/conversations', response_model=Reply)
     async def start():
@@ -217,8 +246,12 @@ def create_app(model=None, gateway=None, *, config=None):
                     verified_draft = c.draft
                 except (ValueError, HTTPException):
                     pass  # Unbound, legacy or revoked facts never enter model context.
+            model_tools = tools_for_model(catalogue)
+            if config.get('MODEL_ALLOWED_TOOLS') is None:
+                model_tools['logout'] = {'name': 'logout', 'description': 'Ask the customer to confirm signing out.',
+                    'input_schema': {'type': 'object', 'properties': {}, 'additionalProperties': False}}
             history, draft, tools = build_context([turn for turn in c.history if turn.get('kind') in ('chat', 'model')],
-                verified_draft, tools_for_model(catalogue), private_values=private_values(c))
+                verified_draft, model_tools, private_values=private_values(c))
             c.usage['model_calls'] = c.usage.get('model_calls', 0) + 1
             try:
                 turn = await app.state.agent.interpret_turn(history, draft, tools)
@@ -230,7 +263,12 @@ def create_app(model=None, gateway=None, *, config=None):
                         c.usage[key] = c.usage.get(key, 0) + value
             if isinstance(turn, CustomerReply):
                 return reply(c, sanitise(turn.text, private_values(c)), language=True)
+            if turn.name == 'logout':
+                return reply(c, 'Confirm signing out using the button below.', input_tool='logout')
             spec = app.state.gateway.catalogue[turn.name]
+            if turn.name == 'issue_card' and not caller().get('accounts') and 'create_account' in catalogue:
+                c.draft = {'tool': 'create_account', 'arguments': {}}
+                return reply(c, 'Create an account first. You can choose to issue a card with it.', input_tool='create_account')
             proposal_arguments = {**(verified_draft.get('arguments', {}) if verified_draft.get('tool') == turn.name else {}),
                                   **turn.arguments}
             try:

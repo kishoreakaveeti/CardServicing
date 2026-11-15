@@ -1,5 +1,9 @@
 # Liveness and card readiness
 
+Readiness also checks the schema version 3 `card_issuance_requests` table used for durable issuance decisions.
+
+SQLite readiness also probes the version 2 customer, account, account-card link and banking retry tables. Customer banking shares the Cards database and existing trace middleware; see [Customer banking](customer-banking.md).
+
 | Endpoint | Meaning | Responses |
 | --- | --- | --- |
 | `/health/live` | Application is responding; no database calls | 200 `{"status":"ok"}` |

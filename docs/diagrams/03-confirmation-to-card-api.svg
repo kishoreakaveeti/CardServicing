@@ -1,28 +1,28 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="1700" height="2620" viewBox="0 0 1700 2620" role="img" aria-labelledby="title description">
+<svg xmlns="http://www.w3.org/2000/svg" width="1700" height="2644" viewBox="0 0 1700 2644" role="img" aria-labelledby="title description">
 <title id="title">03 / Confirmation to REST creation - sequence diagram</title>
 <desc id="description">Confirmation executes the stored proposal directly: no Claude call and no tool-specific routing. Read interactions from top to bottom. Dashed arrows are replies.</desc>
 <defs><marker id="arrow" markerWidth="9" markerHeight="9" refX="8" refY="4.5" orient="auto"><path d="M0 0 L9 4.5 L0 9" fill="#334155"/></marker></defs>
 <style>text{font-family:Consolas,"Liberation Mono",monospace}.heading{font-family:Arial,sans-serif;font-weight:700}</style>
-<rect width="1700" height="2620" fill="#fff"/>
+<rect width="1700" height="2644" fill="#fff"/>
 <text x="40" y="55" class="heading" font-size="32" fill="#0f172a">03 / Confirmation to REST creation</text>
 <text x="40" y="90" font-size="18" fill="#475569">Confirmation executes the stored proposal directly: no Claude call and no tool-specific routing.</text>
 <text x="40" y="120" font-size="16" fill="#475569">Time flows downward | Solid arrow: call | Dashed arrow: reply | Yellow: explanation</text>
-<path d="M130.0 207 V2335" stroke="#94a3b8" stroke-width="2" stroke-dasharray="6 6"/>
+<path d="M130.0 207 V2359" stroke="#94a3b8" stroke-width="2" stroke-dasharray="6 6"/>
 <rect x="19.0" y="155" width="222" height="52" rx="7" fill="#155e75"/>
 <text x="130.0" y="187" text-anchor="middle" class="heading" font-size="19" fill="white">Browser</text>
-<path d="M418.0 207 V2335" stroke="#94a3b8" stroke-width="2" stroke-dasharray="6 6"/>
+<path d="M418.0 207 V2359" stroke="#94a3b8" stroke-width="2" stroke-dasharray="6 6"/>
 <rect x="307.0" y="155" width="222" height="52" rx="7" fill="#0369a1"/>
 <text x="418.0" y="187" text-anchor="middle" class="heading" font-size="19" fill="white">Experience API</text>
-<path d="M706.0 207 V2335" stroke="#94a3b8" stroke-width="2" stroke-dasharray="6 6"/>
+<path d="M706.0 207 V2359" stroke="#94a3b8" stroke-width="2" stroke-dasharray="6 6"/>
 <rect x="595.0" y="155" width="222" height="52" rx="7" fill="#1d4ed8"/>
 <text x="706.0" y="187" text-anchor="middle" class="heading" font-size="19" fill="white">Chat workflow</text>
-<path d="M994.0 207 V2335" stroke="#94a3b8" stroke-width="2" stroke-dasharray="6 6"/>
+<path d="M994.0 207 V2359" stroke="#94a3b8" stroke-width="2" stroke-dasharray="6 6"/>
 <rect x="883.0" y="155" width="222" height="52" rx="7" fill="#047857"/>
 <text x="994.0" y="187" text-anchor="middle" class="heading" font-size="19" fill="white">MCP HTTP service</text>
-<path d="M1282.0 207 V2335" stroke="#94a3b8" stroke-width="2" stroke-dasharray="6 6"/>
+<path d="M1282.0 207 V2359" stroke="#94a3b8" stroke-width="2" stroke-dasharray="6 6"/>
 <rect x="1171.0" y="155" width="222" height="52" rx="7" fill="#0f766e"/>
 <text x="1282.0" y="187" text-anchor="middle" class="heading" font-size="19" fill="white">Cards REST API</text>
-<path d="M1570.0 207 V2335" stroke="#94a3b8" stroke-width="2" stroke-dasharray="6 6"/>
+<path d="M1570.0 207 V2359" stroke="#94a3b8" stroke-width="2" stroke-dasharray="6 6"/>
 <rect x="1459.0" y="155" width="222" height="52" rx="7" fill="#334155"/>
 <text x="1570.0" y="187" text-anchor="middle" class="heading" font-size="19" fill="white">SQLite</text>
 <rect x="35" y="245" width="1630" height="74" rx="5" fill="#fef3c7" stroke="#cbd5e1"/>
@@ -69,47 +69,48 @@
 <text x="1406.0" y="1315" text-anchor="middle" font-size="16" fill="#0f172a">required header;</text>
 <text x="1406.0" y="1339" text-anchor="middle" font-size="16" fill="#0f172a">authorization stays here</text>
 <path d="M1282.0 1357 H1347.0 V1379 H1282.0" fill="none" stroke="#334155" stroke-width="2" marker-end="url(#arrow)"/>
-<rect x="1285.0" y="1415" width="282.0" height="31" fill="white"/>
-<text x="1426.0" y="1435" text-anchor="middle" font-size="16" fill="#0f172a">create_idempotent(body, key)</text>
-<path d="M1282.0 1453 H1570.0" fill="none" stroke="#334155" stroke-width="2" marker-end="url(#arrow)"/>
-<rect x="1294.5" y="1486" width="263.0" height="55" fill="white"/>
-<text x="1426.0" y="1506" text-anchor="middle" font-size="16" fill="#0f172a">Committed card or original</text>
-<text x="1426.0" y="1530" text-anchor="middle" font-size="16" fill="#0f172a">replay</text>
-<path d="M1570.0 1548 H1282.0" fill="none" stroke="#334155" stroke-width="2" stroke-dasharray="7 5" marker-end="url(#arrow)"/>
-<rect x="1049.25" y="1581" width="177.5" height="31" fill="white"/>
-<text x="1138.0" y="1601" text-anchor="middle" font-size="16" fill="#0f172a">201 Card response</text>
-<path d="M1282.0 1619 H994.0" fill="none" stroke="#334155" stroke-width="2" stroke-dasharray="7 5" marker-end="url(#arrow)"/>
-<rect x="1000.75" y="1652" width="234.5" height="79" fill="white"/>
-<text x="1118.0" y="1672" text-anchor="middle" font-size="16" fill="#0f172a">Validate success status</text>
-<text x="1118.0" y="1696" text-anchor="middle" font-size="16" fill="#0f172a">and OpenAPI response</text>
-<text x="1118.0" y="1720" text-anchor="middle" font-size="16" fill="#0f172a">schema</text>
-<path d="M994.0 1738 H1059.0 V1760 H994.0" fill="none" stroke="#334155" stroke-width="2" marker-end="url(#arrow)"/>
-<rect x="718.5" y="1796" width="263.0" height="55" fill="white"/>
-<text x="850.0" y="1816" text-anchor="middle" font-size="16" fill="#0f172a">Structured {ok, result} or</text>
-<text x="850.0" y="1840" text-anchor="middle" font-size="16" fill="#0f172a">sanitized error</text>
-<path d="M994.0 1858 H706.0" fill="none" stroke="#334155" stroke-width="2" stroke-dasharray="7 5" marker-end="url(#arrow)"/>
-<rect x="708.0" y="1891" width="244.0" height="55" fill="white"/>
-<text x="830.0" y="1911" text-anchor="middle" font-size="16" fill="#0f172a">Cache success; format</text>
-<text x="830.0" y="1935" text-anchor="middle" font-size="16" fill="#0f172a">configured result labels</text>
-<path d="M706.0 1953 H771.0 V1975 H706.0" fill="none" stroke="#334155" stroke-width="2" marker-end="url(#arrow)"/>
-<rect x="425.75" y="2011" width="272.5" height="79" fill="white"/>
-<text x="562.0" y="2031" text-anchor="middle" font-size="16" fill="#0f172a">Actual simulated reference;</text>
-<text x="562.0" y="2055" text-anchor="middle" font-size="16" fill="#0f172a">duplicate click uses cached</text>
-<text x="562.0" y="2079" text-anchor="middle" font-size="16" fill="#0f172a">result</text>
-<path d="M706.0 2097 H418.0" fill="none" stroke="#334155" stroke-width="2" stroke-dasharray="7 5" marker-end="url(#arrow)"/>
-<rect x="142.5" y="2130" width="263.0" height="79" fill="white"/>
-<text x="274.0" y="2150" text-anchor="middle" font-size="16" fill="#0f172a">UI-ready reply or accepted</text>
-<text x="274.0" y="2174" text-anchor="middle" font-size="16" fill="#0f172a">operation and BFF polling</text>
-<text x="274.0" y="2198" text-anchor="middle" font-size="16" fill="#0f172a">URL</text>
-<path d="M418.0 2216 H130.0" fill="none" stroke="#334155" stroke-width="2" stroke-dasharray="7 5" marker-end="url(#arrow)"/>
-<rect x="35" y="2254" width="1630" height="49" rx="5" fill="#fef3c7" stroke="#cbd5e1"/>
-<text x="55" y="2279" font-size="17" fill="#1e293b">Other catalogue operations use this same path with their compiled method, path parameters and JSON body.</text>
-<text x="40" y="2377" class="heading" font-size="20" fill="#0f172a">Traceable code references</text>
-<a href="../../src/card_chat/main.py"><text x="40" y="2402" font-size="16" fill="#1d4ed8">src/card_chat/main.py:322</text></a>
-<a href="../../src/card_chat/main.py"><text x="40" y="2427" font-size="16" fill="#1d4ed8">src/card_chat/main.py:138</text></a>
-<a href="../../src/card_chat/gateway.py"><text x="40" y="2452" font-size="16" fill="#1d4ed8">src/card_chat/gateway.py:23</text></a>
-<a href="../../src/card_chat/mcp_server.py"><text x="40" y="2477" font-size="16" fill="#1d4ed8">src/card_chat/mcp_server.py:26</text></a>
-<a href="../../src/api_client/client.py"><text x="40" y="2502" font-size="16" fill="#1d4ed8">src/api_client/client.py:36</text></a>
-<a href="../../src/card_servicing/cards.py"><text x="40" y="2527" font-size="16" fill="#1d4ed8">src/card_servicing/cards.py:52</text></a>
-<text x="40" y="2595" font-size="15" fill="#475569">Source: card-chat-flows.json | Regenerate: python scripts/render_chat_diagrams.py</text>
+<rect x="1289.75" y="1415" width="272.5" height="55" fill="white"/>
+<text x="1426.0" y="1435" text-anchor="middle" font-size="16" fill="#0f172a">issue_idempotent(body, key,</text>
+<text x="1426.0" y="1459" text-anchor="middle" font-size="16" fill="#0f172a">additional flag)</text>
+<path d="M1282.0 1477 H1570.0" fill="none" stroke="#334155" stroke-width="2" marker-end="url(#arrow)"/>
+<rect x="1294.5" y="1510" width="263.0" height="55" fill="white"/>
+<text x="1426.0" y="1530" text-anchor="middle" font-size="16" fill="#0f172a">Committed card or original</text>
+<text x="1426.0" y="1554" text-anchor="middle" font-size="16" fill="#0f172a">replay</text>
+<path d="M1570.0 1572 H1282.0" fill="none" stroke="#334155" stroke-width="2" stroke-dasharray="7 5" marker-end="url(#arrow)"/>
+<rect x="1049.25" y="1605" width="177.5" height="31" fill="white"/>
+<text x="1138.0" y="1625" text-anchor="middle" font-size="16" fill="#0f172a">201 Card response</text>
+<path d="M1282.0 1643 H994.0" fill="none" stroke="#334155" stroke-width="2" stroke-dasharray="7 5" marker-end="url(#arrow)"/>
+<rect x="1000.75" y="1676" width="234.5" height="79" fill="white"/>
+<text x="1118.0" y="1696" text-anchor="middle" font-size="16" fill="#0f172a">Validate success status</text>
+<text x="1118.0" y="1720" text-anchor="middle" font-size="16" fill="#0f172a">and OpenAPI response</text>
+<text x="1118.0" y="1744" text-anchor="middle" font-size="16" fill="#0f172a">schema</text>
+<path d="M994.0 1762 H1059.0 V1784 H994.0" fill="none" stroke="#334155" stroke-width="2" marker-end="url(#arrow)"/>
+<rect x="718.5" y="1820" width="263.0" height="55" fill="white"/>
+<text x="850.0" y="1840" text-anchor="middle" font-size="16" fill="#0f172a">Structured {ok, result} or</text>
+<text x="850.0" y="1864" text-anchor="middle" font-size="16" fill="#0f172a">sanitized error</text>
+<path d="M994.0 1882 H706.0" fill="none" stroke="#334155" stroke-width="2" stroke-dasharray="7 5" marker-end="url(#arrow)"/>
+<rect x="708.0" y="1915" width="244.0" height="55" fill="white"/>
+<text x="830.0" y="1935" text-anchor="middle" font-size="16" fill="#0f172a">Cache success; format</text>
+<text x="830.0" y="1959" text-anchor="middle" font-size="16" fill="#0f172a">configured result labels</text>
+<path d="M706.0 1977 H771.0 V1999 H706.0" fill="none" stroke="#334155" stroke-width="2" marker-end="url(#arrow)"/>
+<rect x="425.75" y="2035" width="272.5" height="79" fill="white"/>
+<text x="562.0" y="2055" text-anchor="middle" font-size="16" fill="#0f172a">Actual simulated reference;</text>
+<text x="562.0" y="2079" text-anchor="middle" font-size="16" fill="#0f172a">duplicate click uses cached</text>
+<text x="562.0" y="2103" text-anchor="middle" font-size="16" fill="#0f172a">result</text>
+<path d="M706.0 2121 H418.0" fill="none" stroke="#334155" stroke-width="2" stroke-dasharray="7 5" marker-end="url(#arrow)"/>
+<rect x="142.5" y="2154" width="263.0" height="79" fill="white"/>
+<text x="274.0" y="2174" text-anchor="middle" font-size="16" fill="#0f172a">UI-ready reply or accepted</text>
+<text x="274.0" y="2198" text-anchor="middle" font-size="16" fill="#0f172a">operation and BFF polling</text>
+<text x="274.0" y="2222" text-anchor="middle" font-size="16" fill="#0f172a">URL</text>
+<path d="M418.0 2240 H130.0" fill="none" stroke="#334155" stroke-width="2" stroke-dasharray="7 5" marker-end="url(#arrow)"/>
+<rect x="35" y="2278" width="1630" height="49" rx="5" fill="#fef3c7" stroke="#cbd5e1"/>
+<text x="55" y="2303" font-size="17" fill="#1e293b">Other catalogue operations use this same path with their compiled method, path parameters and JSON body.</text>
+<text x="40" y="2401" class="heading" font-size="20" fill="#0f172a">Traceable code references</text>
+<a href="../../src/card_chat/main.py"><text x="40" y="2426" font-size="16" fill="#1d4ed8">src/card_chat/main.py:360</text></a>
+<a href="../../src/card_chat/main.py"><text x="40" y="2451" font-size="16" fill="#1d4ed8">src/card_chat/main.py:140</text></a>
+<a href="../../src/card_chat/gateway.py"><text x="40" y="2476" font-size="16" fill="#1d4ed8">src/card_chat/gateway.py:23</text></a>
+<a href="../../src/card_chat/mcp_server.py"><text x="40" y="2501" font-size="16" fill="#1d4ed8">src/card_chat/mcp_server.py:26</text></a>
+<a href="../../src/api_client/client.py"><text x="40" y="2526" font-size="16" fill="#1d4ed8">src/api_client/client.py:37</text></a>
+<a href="../../src/card_servicing/cards.py"><text x="40" y="2551" font-size="16" fill="#1d4ed8">src/card_servicing/cards.py:59</text></a>
+<text x="40" y="2619" font-size="15" fill="#475569">Source: card-chat-flows.json | Regenerate: python scripts/render_chat_diagrams.py</text>
 </svg>

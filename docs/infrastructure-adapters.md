@@ -1,5 +1,7 @@
 # Startup-selected infrastructure adapters
 
+The [customer banking extension](customer-banking.md) composes a SQLite BankingService alongside the existing card store; card generation and retry snapshots still use CardStorePort. Banking routes require the SQLite adapter; isolated memory-card factories return 503 for banking. Schema version 3 is additive and preserves version 1 cards and idempotency records.
+
 The same API build can use MongoDB, structured stdout, or no telemetry. SQLite
 remains the only configurable runtime card store. The browser, agent, Anthropic
 adapter, MCP discovery, confirmation and retry workflow are unchanged.
@@ -55,18 +57,20 @@ dependency_name: str
 initialize() -> None
 check_readiness() -> bool
 create_idempotent(instruction, key) -> tuple[Card, bool]
+issue_idempotent(instruction, key, *, additional=False, customer_id=None) -> tuple[CardIssuance, bool]
 ```
 
 The route and readiness depend on this contract, not `isinstance(SQLiteCardStore)`
 or SQLite exceptions. `SQLiteCardStore` translates expected SQLite, filesystem and
 stored-data decoding failures into `StorageUnavailable` at its public operation
 boundary. `IdempotencyConflict` remains a separate exception mapped to 409.
-Transactions, schema version 1, account strings, and original response snapshots
-are unchanged. Default readiness still reports `checks.sqlite`.
+Original card transactions, account strings and response snapshots are preserved;
+schema version 3 includes customer banking and issuance-decision tables. Default readiness still reports `checks.sqlite`.
 
 A future store implements the port and translates its own expected failures,
 then is added to settings/adapter construction. It must provide durable atomic
-create-or-replay guarantees; no card-route or chat rewrite is required. It must
+issuance decisions that serialize ownership, replay, existing-card checks and
+explicit additional issuance; no card-route or chat rewrite is required. It must
 not add a provider name until that actual implementation and tests exist.
 
 `TelemetryPort` retains `start`, `account_fields`, `emit`, and `close`. Mongo keeps

@@ -25,9 +25,14 @@ def configure(component):
         'DELEGATION_PUBLIC_KEY': str(ROOT / 'data/identity/delegation-public.pem'),
         'PUBLIC_ORIGIN': 'http://localhost:8080', 'AGENT_URL': 'http://127.0.0.1:8021',
         'MCP_URL': 'http://127.0.0.1:8030/mcp', 'MCP_RESOURCE': 'http://127.0.0.1:8030/mcp',
-        'CARD_API_BASE_URL': 'http://127.0.0.1:8010', 'CARD_STORE': 'sqlite', 'TELEMETRY_SINK': 'none',
+        'CARD_API_BASE_URL': 'http://127.0.0.1:8010', 'CARD_STORE': 'sqlite',
+        'TELEMETRY_SINK': config.get('TELEMETRY_SINK', 'mongo'),
+        'MONGODB_HOST': config.get('LOCAL_MONGODB_HOST', '127.0.0.1'),
+        'MONGODB_PORT': config.get('MONGODB_HOST_PORT', '27018'),
         'SQLITE_PATH': str(ROOT / 'data/local/cards.db'), 'AGENT_DB': str(ROOT / 'data/local/agent.db'),
         'SESSION_DB': str(ROOT / 'data/local/sessions.db')}
+    values.update({key: config[key] for key in ('MONGO_USER', 'MONGO_PASSWORD', 'MONGODB_DATABASE',
+                   'ACCOUNT_HASH_KEY', 'ACCOUNT_HASH_KEY_VERSION') if config.get(key) is not None})
     identities = {'experience': ('experience-service', 'EXPERIENCE_SECRET'),
                   'agent': ('agent-service', 'AGENT_SECRET'), 'mcp': ('mcp-service', 'MCP_SECRET')}
     if component in identities:
@@ -65,9 +70,12 @@ def main():
     args = parser.parse_args()
     configure(args.component)
     module, port, dependency = SERVICES[args.component]
+    print(f'{args.component}: waiting for Identity at {os.environ["OIDC_ISSUER"]}', flush=True)
     wait_for(os.environ['OIDC_ISSUER'] + '/.well-known/openid-configuration')
     if dependency:
+        print(f'{args.component}: waiting for downstream service at {dependency}', flush=True)
         wait_for(dependency)
+    print(f'{args.component}: starting HTTP on http://127.0.0.1:{port}', flush=True)
     import uvicorn
     uvicorn.run(module, host='127.0.0.1', port=port, access_log=False)
 

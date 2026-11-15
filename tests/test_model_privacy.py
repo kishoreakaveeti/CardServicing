@@ -116,7 +116,7 @@ def test_mocked_claude_real_remote_mcp_correct_private_write_and_zero_call_retri
             path = f'/conversations/{cid}'
             options = client.get(path + '/inputs').json()
             assert BODY['account_number'] not in json.dumps(options)
-            ref = next(field['options'][0]['ref'] for field in options['tools'][0]['fields'] if field.get('options'))
+            ref = next(field['options'][0]['ref'] for field in next(t for t in options['tools'] if t['name'] == 'create_card')['fields'] if field.get('options'))
             review = completed(client, path + '/inputs', {'tool': 'create_card', 'fields': {'given_name': 'Alex'},
                                'selections': {'account_number': ref}}, asynchronous)
             assert payloads == [] and executions == []
@@ -161,7 +161,7 @@ def test_permissions_reference_ownership_stale_review_and_revocation(identity):
         cid = client.post('/conversations', headers=good).json()['id']
         other = client.post('/conversations', headers=sam).json()['id']
         options = client.get(f'/conversations/{cid}/inputs', headers=good).json()
-        ref = next(f['options'][0]['ref'] for f in options['tools'][0]['fields'] if f.get('options'))
+        ref = next(f['options'][0]['ref'] for f in next(t for t in options['tools'] if t['name'] == 'create_card')['fields'] if f.get('options'))
         forbidden = client.post(f'/conversations/{other}/inputs', headers=sam, json={'tool': 'create_card',
             'fields': {'given_name': 'Sam'}, 'selections': {'account_number': ref}})
         assert forbidden.status_code == 422 and ref not in forbidden.text
@@ -194,7 +194,7 @@ def test_changes_of_action_corrections_and_workflow_eligibility():
         prepare_review(client, cid)
         model.outputs = [CustomerReply('Which card should I block?')]
         client.post(path + '/messages', json={'text': 'Block a card instead.'})
-        assert set(model.seen_tools[-1]) == {'create_card', 'block_card'}
+        assert set(model.seen_tools[-1]) == {'create_card', 'block_card', 'logout'}
         prepare_review(client, cid, {'card_id': '000042', 'reason': 'original reason'}, 'block_card')
         model.outputs = [ProposedToolCall('block_card', {'reason': 'updated reason'})]
         corrected = client.post(path + '/messages', json={'text': 'Use updated reason.'}).json()
@@ -263,7 +263,7 @@ def test_permissions_filter_individual_tools_before_the_model():
     with TestClient(create_app(model, gateway)) as client:
         cid = client.post('/conversations').json()['id']
         client.post(f'/conversations/{cid}/messages', json={'text': 'What actions are available?'})
-        assert set(model.seen_tools[0]) == {'create_card'}
+        assert set(model.seen_tools[0]) == {'create_card', 'logout'}
 
 
 def test_malformed_verified_account_facts_fail_closed(identity):

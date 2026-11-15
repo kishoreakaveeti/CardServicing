@@ -29,9 +29,13 @@ def test_required_valid_key(key):
     with TestClient(create_app()) as client:
         assert client.post('/cards', json=BODY, headers={} if key is None else {'Idempotency-Key':key}).status_code == 422
 
-def test_missing_field_and_new_intent():
+def test_missing_field_existing_card_and_explicit_additional_intent():
     with TestClient(create_app()) as client:
         assert client.post('/cards', json={}, headers={'Idempotency-Key':'one'}).status_code == 422
         a=client.post('/cards', json=BODY, headers={'Idempotency-Key':'one'}).json()
-        b=client.post('/cards', json=BODY, headers={'Idempotency-Key':'two'}).json()
+        exists=client.post('/cards', json=BODY, headers={'Idempotency-Key':'two'})
+        assert exists.status_code == 200
+        assert exists.headers['Card-Issuance-Outcome'] == 'already_exists'
+        assert exists.json() == a
+        b=client.post('/cards', json={**BODY,'additional_card':True}, headers={'Idempotency-Key':'three'}).json()
         assert a['card_number'] != b['card_number']

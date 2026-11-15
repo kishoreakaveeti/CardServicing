@@ -1,5 +1,9 @@
 # Independent HTTP stack
 
+Card issuance outcomes now distinguish created, already-existing and explicitly additional cards across both HTTP paths. See [card issuance](card-issuance.md).
+
+The stack also supports local customer registration/password login alongside the existing OIDC demo login. See [Customer banking](customer-banking.md) for the complete journey, service-token policy for BFF banking calls, new routes and database ownership checks. Banking direct-selection buttons bypass the LLM and reuse the existing reviewed tool workflow.
+
 The current path is React/TypeScript → Experience FastAPI → Agent FastAPI →
 remote MCP Streamable HTTP → Cards FastAPI. Agent alone calls Anthropic over
 HTTPS. Five application containers and a sixth Keycloak container have separate
@@ -169,7 +173,8 @@ are disabled in the Python entry point and nginx so OIDC callback query strings
 are not recorded; the Vite error logger redacts OIDC query credentials. Tool
 diagnostics contain the configured tool name, trace ID, duration and outcome,
 not credentials or arguments. Cards can use its
-existing redacted telemetry sinks; Compose selects `none` by default.
+existing redacted telemetry sinks; Compose now starts MongoDB and selects `mongo`
+by default across the Python services. See [MongoDB logging](mongodb-logging.md).
 
 References used for implementation: [MCP HTTP authorization](https://modelcontextprotocol.io/specification/2025-11-25/basic/authorization),
 [Python SDK authorization](https://py.sdk.modelcontextprotocol.io/run/authorization/),

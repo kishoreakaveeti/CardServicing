@@ -5,6 +5,7 @@ from uuid import uuid4
 
 from fastapi import Depends, FastAPI, HTTPException, Request, Response, status
 from fastapi.responses import JSONResponse
+from fastapi.exceptions import RequestValidationError
 
 from card_servicing.models import Item, ItemCreate
 from card_servicing.store import ItemStore
@@ -51,6 +52,9 @@ def create_app(card_settings: CardSettings | None = None, *,
         try:
             try:
                 card_store.initialize()
+                if isinstance(card_store, SQLiteCardStore):
+                    from card_servicing.banking import BankingService
+                    application.state.banking = BankingService(card_store)
             except StorageUnavailable as exc:
                 telemetry.emit('log', 'card_storage_initialization_failed',
                                level='ERROR', dependency=card_store.dependency_name,
@@ -68,7 +72,15 @@ def create_app(card_settings: CardSettings | None = None, *,
     application.state.telemetry = telemetry
     application.state.started = False
     application.state.card_settings = card_settings or CardSettings()
+    @application.exception_handler(RequestValidationError)
+    async def invalid_request(request, exc):
+        return JSONResponse({'detail': 'Invalid request fields'}, status_code=422)
+    @application.exception_handler(StorageUnavailable)
+    async def storage_unavailable(request, exc):
+        return JSONResponse({'detail': 'Banking storage unavailable'}, status_code=503)
     application.include_router(cards_router)
+    from card_servicing.banking import router as banking_router
+    application.include_router(banking_router)
     from card_chat.security import protect
     protect(application, security_config if security_config is not None else
             (load_config() if local_infrastructure else {}),
@@ -89,6 +101,7 @@ def create_app(card_settings: CardSettings | None = None, *,
         finally:
             route = request.scope.get('route')
             telemetry.emit('trace', 'http_request', trace_id=trace_id,
+                           service='cards',
                            span_id=uuid4().hex[:16], method=request.method,
                            route=getattr(route, 'path', 'unmatched'), status_code=code,
                            duration_ms=round((perf_counter() - start) * 1000, 3))

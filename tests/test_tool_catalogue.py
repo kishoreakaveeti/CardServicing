@@ -51,7 +51,7 @@ def test_config_only_second_operation_real_mcp_http(monkeypatch, lose_result):
             assert client.post(path + '/confirm', json={'review': review['review']}).status_code == 409
             assert httpx.get(url + '/test-stats').json()['writes'] == 0
             for definitions in model.seen_tools:
-                assert set(definitions) == {'create_card', 'block_card'}
+                assert set(definitions) == {'create_card', 'block_card', 'logout'}
                 assert set(definitions['block_card']['input_schema']['properties']) == {'card_id', 'reason'}
                 assert 'idempotency_key' not in json.dumps(definitions)
             confirmation = {'review': fresh['review']}

@@ -1,5 +1,7 @@
 # Local card chat demo
 
+For the current registration, login, account and card journey, use [Customer banking](customer-banking.md). Structured credentials never enter chat or the LLM. Both action buttons and natural language use the same banking workflows. The earlier examples below describe the original card-only demo.
+
 The current runnable demo uses [React and the independent HTTP services](http-stack.md).
 Private details now use the secure form and masked picker, with
 [minimal model context](model-privacy.md); the earlier free-text collection examples

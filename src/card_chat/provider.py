@@ -55,12 +55,16 @@ class AnthropicModel:
                 tools=list(tools.values()),
                 tool_choice={'type': 'auto', 'disable_parallel_tool_use': True})
         except Exception:
-            logger.warning('model_usage %s', json.dumps({'model_calls': 1, 'outcome': 'failed', 'tokens_reported': False}))
+            metrics = {'model_calls': 1, 'outcome': 'failed', 'tokens_reported': False}
+            logger.warning('model_usage %s', json.dumps(metrics),
+                           extra={'telemetry_event': 'model_usage', 'telemetry_fields': metrics})
             raise
         usage = getattr(response, 'usage', None)
         self.last_usage = {key: int(getattr(usage, key, 0) or 0) for key in (
             'input_tokens', 'output_tokens', 'cache_read_input_tokens', 'cache_creation_input_tokens')}
-        logger.warning('model_usage %s', json.dumps({'model_calls': 1, **self.last_usage}, sort_keys=True))
+        metrics = {'model_calls': 1, **self.last_usage}
+        logger.warning('model_usage %s', json.dumps(metrics, sort_keys=True),
+                       extra={'telemetry_event': 'model_usage', 'telemetry_fields': metrics})
         calls = [block for block in response.content if block.type == 'tool_use']
         if len(calls) > 1:
             return CustomerReply('Please choose one action to handle first.')
@@ -88,6 +92,25 @@ class StubModel:
     async def turn(self, history, collected, tools):
         if collected.get('tool') in tools and collected.get('arguments'):
             return ProposedToolCall(collected['tool'], collected['arguments'])
+        text = next((t['content'].lower() for t in reversed(history) if t.get('role') == 'user'), '')
+        candidates = []
+        if any(word in text for word in ('logout', 'log out', 'log me out', 'sign out')):
+            candidates = ['logout']
+        elif any(word in text for word in ('register', 'sign up', 'signup')):
+            candidates = ['register']
+        elif any(word in text for word in ('login', 'log in', 'log me in', 'sign in')):
+            candidates = ['login']
+        elif 'account' in text and any(word in text for word in ('create', 'open', 'new')):
+            candidates = ['create_account']
+        elif 'card' in text and any(word in text for word in ('issue', 'new', 'want', 'additional', 'another')):
+            candidates = ['issue_card', 'create_card']
+        elif 'account' in text:
+            candidates = ['view_accounts']
+        elif 'card' in text:
+            candidates = ['view_cards']
+        for name in candidates:
+            if name in tools:
+                return ProposedToolCall(name, {})
         return CustomerReply('Choose an action in the secure form, enter synthetic details and review it before confirming.')
 
     async def close(self):

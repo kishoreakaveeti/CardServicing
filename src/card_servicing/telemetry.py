@@ -36,6 +36,9 @@ EVENT_FIELDS = frozenset({
     'trace_id', 'span_id', 'method', 'route', 'status_code', 'duration_ms',
     'level', 'error_type', 'dependency', 'card_id', 'status',
     'account_number_hash', 'account_hash_key_version',
+    'service', 'tool', 'model_calls', 'input_tokens', 'output_tokens',
+    'cache_read_input_tokens', 'cache_creation_input_tokens', 'completed_actions',
+    'outcome', 'tokens_reported',
 })
 
 

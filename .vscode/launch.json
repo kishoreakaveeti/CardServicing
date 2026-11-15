@@ -2,6 +2,18 @@
   "version": "0.2.0",
   "compounds": [
     {
+      "name": "Debug Full Stack (Local)",
+      "preLaunchTask": "Prepare Local Stack",
+      "configurations": [
+        "Debug Local Experience API",
+        "Debug Local Agent API",
+        "Debug Local MCP Server",
+        "Debug Local Cards API",
+        "Debug Local Frontend"
+      ],
+      "stopAll": true
+    },
+    {
       "name": "Debug Full Stack",
       "preLaunchTask": "Start Full Debug Stack",
       "configurations": [
@@ -22,18 +34,6 @@
         "Attach to Agent API",
         "Attach to MCP Server",
         "Attach to Cards API"
-      ],
-      "stopAll": true
-    },
-    {
-      "name": "Debug Full Stack (Local)",
-      "preLaunchTask": "Prepare Local Stack",
-      "configurations": [
-        "Debug Local Experience API",
-        "Debug Local Agent API",
-        "Debug Local MCP Server",
-        "Debug Local Cards API",
-        "Debug Local Frontend"
       ],
       "stopAll": true
     }
@@ -186,7 +186,10 @@
       "url": "http://localhost:8080",
       "webRoot": "${workspaceFolder}/frontend",
       "sourceMaps": true,
-      "preLaunchTask": "Wait for Local HTTP"
+      "preLaunchTask": "Wait for Local HTTP",
+      "presentation": {
+        "hidden": true
+      }
     }
   ]
 }

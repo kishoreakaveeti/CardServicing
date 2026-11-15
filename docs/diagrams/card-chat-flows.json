@@ -432,7 +432,7 @@
           "references": [
             {
               "path": "src/card_servicing/cards.py",
-              "anchor": "card, replayed = store.create_idempotent"
+              "anchor": "result, replayed = store.issue_idempotent"
             }
           ]
         }
@@ -526,7 +526,7 @@
           "kind": "call",
           "from": "api",
           "to": "storage",
-          "label": "create_idempotent(body, key)"
+          "label": "issue_idempotent(body, key, additional flag)"
         },
         {
           "kind": "return",
@@ -613,7 +613,7 @@
             },
             {
               "path": "src/card_servicing/persistence.py",
-              "anchor": "def create_idempotent"
+              "anchor": "def issue_idempotent"
             },
             {
               "path": "src/card_servicing/persistence.py",
@@ -689,7 +689,7 @@
           "kind": "call",
           "from": "api",
           "to": "storage",
-          "label": "Insert cards + card_idempotency; commit"
+          "label": "Create only when eligible; persist original and issuance-decision snapshots; commit"
         },
         {
           "kind": "return",
@@ -892,7 +892,7 @@
           "kind": "call",
           "from": "workflow",
           "to": "storage",
-          "label": "CardStorePort.create_idempotent(validated body, key)"
+          "label": "CardStorePort.issue_idempotent(validated body, key, additional choice)"
         },
         {
           "kind": "return",
@@ -1368,6 +1368,155 @@
         {
           "kind": "note",
           "label": "Confirmation, duplicate clicks and eligible retries make zero Claude calls. Raw tool results never enter model context. Optional ephemeral caching marks only the stable system prefix after eligible tool schemas; conversation content is uncached."
+        }
+      ]
+    },
+    {
+      "file": "08-customer-banking.svg",
+      "title": "08 / Customer registration and banking",
+      "subtitle": "One chat interface, two interaction paths, shared banking services and database ownership.",
+      "participants": [
+        {
+          "id": "browser",
+          "label": "React chat and forms"
+        },
+        {
+          "id": "experience",
+          "label": "Experience BFF"
+        },
+        {
+          "id": "workflow",
+          "label": "Agent and provider"
+        },
+        {
+          "id": "mcp",
+          "label": "Remote MCP"
+        },
+        {
+          "id": "api",
+          "label": "Cards BankingService"
+        },
+        {
+          "id": "storage",
+          "label": "SQLite cards DB"
+        }
+      ],
+      "steps": [
+        {
+          "owner": "api",
+          "title": "Credentials and customer ownership",
+          "body": [
+            "Scrypt password verification and database ownership stay outside the model."
+          ],
+          "references": [
+            {
+              "path": "src/card_servicing/banking.py",
+              "anchor": "class BankingService"
+            },
+            {
+              "path": "src/card_chat/experience.py",
+              "anchor": "async def credentials"
+            }
+          ]
+        },
+        {
+          "owner": "workflow",
+          "title": "Shared reviewed workflow",
+          "body": [
+            "Direct selection and model intent reuse structured input and explicit confirmation."
+          ],
+          "references": [
+            {
+              "path": "src/card_chat/main.py",
+              "anchor": "async def structured"
+            },
+            {
+              "path": "src/card_chat/main.py",
+              "anchor": "async def execute"
+            }
+          ]
+        }
+      ],
+      "messages": [
+        {
+          "kind": "call",
+          "from": "browser",
+          "to": "workflow",
+          "label": "Optional pre-login intent via BFF: open registration or login form"
+        },
+        {
+          "kind": "call",
+          "from": "browser",
+          "to": "experience",
+          "label": "Secure registration/login form: credentials never enter chat"
+        },
+        {
+          "kind": "call",
+          "from": "experience",
+          "to": "api",
+          "label": "Service-authenticated credential request"
+        },
+        {
+          "kind": "call",
+          "from": "api",
+          "to": "storage",
+          "label": "Unique customer UUID, case-insensitive username, salted scrypt hash"
+        },
+        {
+          "kind": "return",
+          "from": "experience",
+          "to": "browser",
+          "label": "Rotated HttpOnly cookie and CSRF token"
+        },
+        {
+          "kind": "section",
+          "label": "Direct action buttons bypass the model; chat intent opens the same form"
+        },
+        {
+          "kind": "call",
+          "from": "experience",
+          "to": "api",
+          "label": "Refresh current owned accounts before agent requests"
+        },
+        {
+          "kind": "call",
+          "from": "browser",
+          "to": "workflow",
+          "label": "Select action or describe intent, then submit structured form via BFF"
+        },
+        {
+          "kind": "return",
+          "from": "workflow",
+          "to": "browser",
+          "label": "Review account creation or card issuance; confirm explicitly"
+        },
+        {
+          "kind": "call",
+          "from": "workflow",
+          "to": "mcp",
+          "label": "Execute validated snapshot and original idempotency key"
+        },
+        {
+          "kind": "call",
+          "from": "mcp",
+          "to": "api",
+          "label": "Existing HTTP execution adapter and signed customer assertion"
+        },
+        {
+          "kind": "call",
+          "from": "api",
+          "to": "storage",
+          "label": "Enforce customer ownership; persist account or reuse card origination"
+        },
+        {
+          "kind": "return",
+          "from": "api",
+          "to": "browser",
+          "label": "Read results and simulated card references via MCP, Agent and BFF"
+        },
+        {
+          "kind": "note",
+          "label": "Account creation and optional issuance use durable linked retry keys. Restart preserves accounts/cards. Logout deletes the BFF session; subsequent customer requests require login."
         }
       ]
     }

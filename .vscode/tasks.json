@@ -94,7 +94,24 @@
       "options": {
         "cwd": "${workspaceFolder}"
       },
-      "problemMatcher": []
+      "problemMatcher": {
+        "owner": "local-http",
+        "pattern": {
+          "regexp": "^(NEVER_MATCH_HTTP_ERROR)$",
+          "message": 1
+        },
+        "background": {
+          "activeOnStart": true,
+          "beginsPattern": "^LOCAL_HTTP_WAITING:",
+          "endsPattern": "^LOCAL_HTTP_READY:"
+        }
+      },
+      "isBackground": true,
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated",
+        "clear": true
+      }
     }
   ]
 }

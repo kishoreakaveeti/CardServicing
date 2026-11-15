@@ -1,5 +1,9 @@
 # Card servicing chat: end-to-end flow
 
+For an existing card, confirmed ordinary issuance now reports that no new card was created. Select the additional-card choice explicitly to create another; see [card issuance](card-issuance.md).
+
+The [Customer banking extension](customer-banking.md) adds pre-login form-opening intent, secure registration/login, account creation and owned card reads/issuance. Account/card reads return `Reply.data` for React only; tool results stay out of model context. Existing review, confirmation and durable retry behavior applies to all banking writes.
+
 This is the current catalogue-driven implementation. Claude proposes an action
 before confirmation. The workflow validates and reviews it, then executes the
 stored snapshot without another model call. The previous fixed intent enum and
