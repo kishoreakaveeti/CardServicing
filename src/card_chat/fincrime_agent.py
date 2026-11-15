@@ -58,18 +58,20 @@ class RemoteFinCrimeAgent:
 
 def create_app(model=None, *, config=None):
     config = settings() if config is None else config
-    m = model or make_model(config)
-    agent_inst = FinCrimeAgent(m)
 
     @asynccontextmanager
     async def lifespan(app):
-        app.state.model = m
-        app.state.agent = agent_inst
+        try:
+            app.state.model = model or make_model(config)
+            app.state.agent = FinCrimeAgent(app.state.model)
+        except Exception as e:
+            logger.warning("FinCrimeAgent model initialization failed: %s; falling back to stub", e)
+            from card_chat.provider import StubModel
+            app.state.model = StubModel()
+            app.state.agent = FinCrimeAgent(app.state.model)
         yield
 
     app = FastAPI(title="FinCrime Agent Service", version="1.0", lifespan=lifespan)
-    app.state.model = m
-    app.state.agent = agent_inst
     if config.get("OIDC_ISSUER") and config.get("ALLOW_INSECURE_LOCAL") != "1":
         try:
             protect(app, config, "agent", "agent:invoke", "agent-service", customer=False)
