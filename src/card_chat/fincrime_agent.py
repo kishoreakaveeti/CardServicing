@@ -24,22 +24,33 @@ class TurnRequest(BaseModel):
 class RemoteFinCrimeAgent:
     """Client for delegating to a remote FinCrime Agent microservice over HTTP."""
 
-    def __init__(self, base_url: str, fallback_agent=None, allow_fallback: bool = False):
+    def __init__(self, base_url: str, fallback_agent=None, allow_fallback: bool = False, headers_fn=None):
         self.base_url = base_url.rstrip("/")
         self.fallback_agent = fallback_agent
         self.allow_fallback = allow_fallback
+        self.headers_fn = headers_fn
         self.name = "fincrime_agent"
 
     async def interpret_turn(self, history: list, collected: dict, allowed_tools: dict):
         import httpx
+        import inspect
         payload = {
             "history": history or [],
             "collected": collected or {},
             "allowed_tools": allowed_tools or {}
         }
+        headers = {}
+        if self.headers_fn:
+            try:
+                if inspect.iscoroutinefunction(self.headers_fn):
+                    headers = await self.headers_fn()
+                else:
+                    headers = self.headers_fn()
+            except Exception as e:
+                logger.error("Failed to generate service headers for RemoteFinCrimeAgent: %s", e)
         try:
             async with httpx.AsyncClient(timeout=15.0) as http:
-                resp = await http.post(f"{self.base_url}/turn", json=payload)
+                resp = await http.post(f"{self.base_url}/turn", json=payload, headers=headers)
                 if resp.status_code == 200:
                     data = resp.json()
                     kind = data.get("kind")
@@ -75,7 +86,7 @@ def create_app(model=None, *, config=None):
     app = FastAPI(title="FinCrime Agent Service", version="1.0", lifespan=lifespan)
     if config.get("OIDC_ISSUER") and config.get("ALLOW_INSECURE_LOCAL") != "1":
         try:
-            protect(app, config, "agent", "agent:invoke", "agent-service", customer=False)
+            protect(app, config, ["agent", "mcp"], ["agent:invoke", "tools:execute"], "agent-service", customer=False)
         except Exception as e:
             logger.warning("Could not enable security protection on fincrime-agent: %s", e)
 

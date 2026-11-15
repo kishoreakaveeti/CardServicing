@@ -65,7 +65,18 @@ def create_app(model=None, gateway=None, *, config=None):
         fincrime_agent_url = config.get('FINCRIME_AGENT_URL')
         if fincrime_agent_url:
             from card_chat.fincrime_agent import RemoteFinCrimeAgent
-            fincrime_agent = RemoteFinCrimeAgent(fincrime_agent_url, fallback_agent=local_fincrime)
+
+            async def get_fincrime_service_headers():
+                sec = getattr(app.state, 'security', None)
+                if sec and hasattr(sec, 'headers'):
+                    return await sec.headers()
+                return {}
+
+            fincrime_agent = RemoteFinCrimeAgent(
+                fincrime_agent_url,
+                fallback_agent=local_fincrime,
+                headers_fn=get_fincrime_service_headers,
+            )
         else:
             fincrime_agent = local_fincrime
         from card_chat.orchestration.persistence import DurableSqliteSaver

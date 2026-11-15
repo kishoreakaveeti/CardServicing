@@ -31,10 +31,15 @@ class Security:
             claims = jwt.decode(token, key, algorithms=['RS256'], audience=audience,
                                 issuer=self.config['OIDC_ISSUER'],
                                 options={'require': ['exp', 'iat', 'sub', 'iss', 'aud']})
-            if client and claims.get('azp') != client:
-                raise HTTPException(403, 'Service identity not permitted')
-            if permission and permission not in claims.get('scope', '').split():
-                raise HTTPException(403, 'Permission required')
+            if client:
+                allowed_clients = {client} if isinstance(client, str) else set(client)
+                if claims.get('azp') not in allowed_clients:
+                    raise HTTPException(403, 'Service identity not permitted')
+            if permission:
+                scopes = set(claims.get('scope', '').split())
+                required_scopes = {permission} if isinstance(permission, str) else set(permission)
+                if not required_scopes.intersection(scopes):
+                    raise HTTPException(403, 'Permission required')
             return claims
         except (jwt.PyJWTError, ValueError, TypeError):
             raise HTTPException(401, 'Invalid credentials') from None
