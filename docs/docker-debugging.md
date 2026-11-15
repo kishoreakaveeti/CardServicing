@@ -1,10 +1,19 @@
 # Run and debug the API in Docker
 
+For the current five-component application use [HTTP stack debugging](http-stack.md#debug-one-component-or-all-components).
+`Debug Full Stack` and the individual attach configurations replace the old
+host/chat launches. The older API-only walkthrough below is retained as context;
+its `-DebugApi` switch is superseded by `stack.ps1 -DebugComponent Cards`.
+
 The API has its own image. MongoDB, Redis, and RabbitMQ keep their separate images;
 Compose connects them. SQLite is mounted from `./data` to `/data`, so DB Browser
 still opens `data/cards.db` on Windows. Stop the host **Debug API** session before
 switching to container development to avoid running different code versions against
 the same database. Keep Docker Desktop running.
+
+For the simpler full application setup, use [the README](../README.md): the
+**Debug Chat + API** compound launches both host processes. This Docker guide is
+an alternative API execution mode, not an additional API to start alongside it.
 
 ## Start the container and attach VS Code
 
@@ -18,6 +27,12 @@ The script finds Docker even when it is not on PATH, builds the image, starts th
 API and its MongoDB dependency, and waits for health checks. Run
 `scripts/setup-infra.ps1` first if `.env` does not exist. Existing Redis/RabbitMQ
 containers can stay running; card processing does not use them yet.
+
+For stdout telemetry without Mongo dependencies, select
+`scripts/start-docker-api.ps1 -Standalone -DebugApi -Build` and set
+`TELEMETRY_SINK=stdout`; see [adapter configuration](infrastructure-adapters.md).
+If `.env` already exists from the stdout quick start, infrastructure setup preserves
+it: replace `GENERATE_ME` passwords before using the default Mongo mode.
 
 1. Open `src/card_servicing/cards.py` and set a breakpoint on
    `card, replayed = store.create_idempotent(instruction, idempotency_key)`.
@@ -40,6 +55,24 @@ The browser waits while VS Code pauses. Inspect `instruction` and
 `idempotency_key`. **F11** steps into the SQLite store, **F10** steps over a line,
 and **F5** continues so Swagger receives the response. Reusing the same key
 exercises replay. Disconnecting VS Code leaves the container running.
+
+## Debug chat against the container API
+
+1. Install the host chat dependencies from the README and configure the model/key
+   in ignored `.env`.
+2. Set `CARD_API_BASE_URL=http://127.0.0.1:8011` there.
+3. Start the debug container as above, then **Attach to Docker API**.
+4. Start **Debug Chat** as a second debugger session and wait for startup.
+5. Open `http://127.0.0.1:8020`, answer the questions and confirm the action.
+6. Chat breakpoints handle each message; the attached API breakpoint fires after
+   confirmation. Use CALL STACK to select either session.
+
+Do not select **Debug Chat + API** for this container mode: it also starts a host
+API on 8010 using the same SQLite file. That compound is for the host-only path.
+Stop **Debug Chat** with its red Stop button. Disconnect the container debugger,
+then run `docker compose stop api` to stop the API container. Closing the browser
+does not stop either application. Set the destination back to 8010 and stop the
+container before returning to the host compound.
 
 | Connection | Address |
 | --- | --- |

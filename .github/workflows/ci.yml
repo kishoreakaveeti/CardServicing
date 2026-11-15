@@ -16,3 +16,10 @@ jobs:
       - run: python -m pytest
       - run: python scripts/export_cards_openapi.py --check
       - run: python scripts/render_chat_diagrams.py --check
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: npm ci && npm run typecheck && npm run build
+        working-directory: frontend

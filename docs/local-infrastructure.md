@@ -1,5 +1,15 @@
 # Local infrastructure
 
+The current application uses [the HTTP stack](http-stack.md) in `compose.yaml`.
+The earlier infrastructure configuration described below is preserved in
+`compose.infra.yaml`; include `-f compose.infra.yaml` in its Compose commands.
+The HTTP stack uses its own project name and volumes, preserving legacy data.
+
+For a first full chat/API run, use [the README quick start](../README.md) and the
+VS Code **Debug Chat + API** compound. `TELEMETRY_SINK=stdout` works without these
+Docker services. This guide covers the optional Mongo/Redis/RabbitMQ setup and
+data viewers; it is not a prerequisite for that stdout quick start.
+
 The API now selects its telemetry sink at startup. The existing Mongo setup is
 the default. For stdout/none with Mongo stopped, use the
 [adapter-switching guide](infrastructure-adapters.md) and `compose.api.yaml`
@@ -40,6 +50,13 @@ Redis write/read/delete with expiry, and a confirmed RabbitMQ publish/consume/ac
 It removes its test documents, keys, and queue. The smoke check does not create or
 migrate card tables; the API initializes that schema at startup. It can create
 the SQLite file if missing, and leaves any existing card data intact.
+
+If you already copied `.env.example` for the stdout quick start, replace any
+`GENERATE_ME` Mongo/RabbitMQ password and account-hash placeholders before starting
+this infrastructure. The script preserves an existing file and will not regenerate
+those existing placeholder values. Preserve your model key/settings. Existing
+Mongo/RabbitMQ volumes retain their original credentials; editing `.env` does not
+rotate database users.
 
 | Component | Host connection | Notes |
 | --- | --- | --- |
@@ -114,7 +131,7 @@ press **F5**. Wait for Uvicorn to start, then open
 <http://127.0.0.1:8010/docs> in your browser. Alternatively, from the project root:
 
 ```powershell
-.\.venv\Scripts\python.exe -m uvicorn card_servicing.main:app --reload
+.\.venv\Scripts\python.exe -m uvicorn card_servicing.main:app --host 127.0.0.1 --port 8010
 ```
 
 Expand an endpoint, select **Try it out**, enter the request, and select
@@ -123,6 +140,11 @@ Start only one host API instance on port 8010. `setup-infra.ps1` starts only
 infrastructure; `start-docker-api.ps1` starts the API and its MongoDB dependency,
 not Redis or RabbitMQ. Avoid running different host/container code versions
 against the shared SQLite file at the same time.
+
+To debug the full host chat flow instead of Swagger alone, stop the manual API,
+select **Debug Chat + API**, and open `http://127.0.0.1:8020` after both sessions
+start. Keep `CARD_API_BASE_URL=http://127.0.0.1:8010` for that mode. See
+[chat debugging](chat-demo.md#vs-code-debugging).
 
 ### RabbitMQ management
 

@@ -1,64 +1,16 @@
 {
   "version": "0.2.0",
-  "compounds": [
-    {
-      "name": "Debug Chat + API",
-      "configurations": ["Debug API", "Debug Chat"],
-      "stopAll": true
-    }
-  ],
+  "compounds": [{
+    "name": "Debug Full Stack",
+    "preLaunchTask": "Start Full Debug Stack",
+    "configurations": ["Debug Frontend", "Attach to Experience API", "Attach to Agent API", "Attach to MCP Server", "Attach to Cards API"],
+    "stopAll": true
+  }],
   "configurations": [
-    {
-      "name": "Attach to Docker API",
-      "type": "debugpy",
-      "request": "attach",
-      "connect": {
-        "host": "127.0.0.1",
-        "port": 5679
-      },
-      "pathMappings": [
-        {
-          "localRoot": "${workspaceFolder}/src",
-          "remoteRoot": "/app/src"
-        }
-      ],
-      "justMyCode": true
-    },
-    {
-      "name": "Debug API",
-      "type": "debugpy",
-      "request": "launch",
-      "python": "${workspaceFolder}/.venv/Scripts/python.exe",
-      "module": "uvicorn",
-      "args": [
-        "card_servicing.main:app",
-        "--host",
-        "127.0.0.1",
-        "--port",
-        "8010"
-      ],
-      "cwd": "${workspaceFolder}",
-      "console": "integratedTerminal",
-      "justMyCode": true
-    },
-    {
-      "name": "Debug Chat",
-      "type": "debugpy",
-      "request": "launch",
-      "python": "${workspaceFolder}/.venv/Scripts/python.exe",
-      "module": "uvicorn",
-      "args": [
-        "card_chat.main:app",
-        "--host",
-        "127.0.0.1",
-        "--port",
-        "8020"
-      ],
-      "cwd": "${workspaceFolder}",
-      "envFile": "${workspaceFolder}/.env",
-      "console": "integratedTerminal",
-      "justMyCode": true,
-      "subProcess": false
-    }
+    {"name": "Debug Frontend", "type": "chrome", "request": "launch", "url": "http://localhost:8080", "webRoot": "${workspaceFolder}/frontend", "sourceMaps": true},
+    {"name": "Attach to Experience API", "type": "debugpy", "request": "attach", "connect": {"host": "127.0.0.1", "port": 5681}, "pathMappings": [{"localRoot": "${workspaceFolder}/src", "remoteRoot": "/app/src"}], "justMyCode": true},
+    {"name": "Attach to Agent API", "type": "debugpy", "request": "attach", "connect": {"host": "127.0.0.1", "port": 5682}, "pathMappings": [{"localRoot": "${workspaceFolder}/src", "remoteRoot": "/app/src"}], "justMyCode": true},
+    {"name": "Attach to MCP Server", "type": "debugpy", "request": "attach", "connect": {"host": "127.0.0.1", "port": 5683}, "pathMappings": [{"localRoot": "${workspaceFolder}/src", "remoteRoot": "/app/src"}], "justMyCode": true},
+    {"name": "Attach to Cards API", "type": "debugpy", "request": "attach", "connect": {"host": "127.0.0.1", "port": 5684}, "pathMappings": [{"localRoot": "${workspaceFolder}/src", "remoteRoot": "/app/src"}], "justMyCode": true}
   ]
 }

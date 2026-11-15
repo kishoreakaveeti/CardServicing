@@ -47,7 +47,7 @@
           "owner": "workflow",
           "title": "Discover and verify",
           "body": [
-            "Launch child, handshake and list every tool; validate against catalogue."
+            "Connect to configured HTTP endpoint, initialize and discover tools; verify the compiled catalogue."
           ],
           "references": [
             {
@@ -56,7 +56,7 @@
             },
             {
               "path": "src/card_chat/gateway.py",
-              "anchor": "tools = (await session.list_tools()).tools"
+              "anchor": "tools = (await connected.list_tools()).tools"
             }
           ]
         }
@@ -64,7 +64,7 @@
       "participants": [
         {
           "id": "workflow",
-          "label": "Chat backend"
+          "label": "Agent API"
         },
         {
           "id": "agent",
@@ -72,7 +72,7 @@
         },
         {
           "id": "mcp",
-          "label": "MCP child"
+          "label": "MCP HTTP service"
         },
         {
           "id": "claude",
@@ -96,7 +96,7 @@
           "kind": "call",
           "from": "workflow",
           "to": "mcp",
-          "label": "Start python -m card_chat.mcp_server over stdio"
+          "label": "Connect to MCP_URL over Streamable HTTP with destination bearer token"
         },
         {
           "kind": "call",
@@ -132,7 +132,7 @@
           "kind": "call",
           "from": "workflow",
           "to": "claude",
-          "label": "Each customer turn: all eligible tools; tool_choice=auto"
+          "label": "Shared allowlist builder: recent sanitised turns, opaque verified draft facts, stable eligible tool schemas; optional static-prefix cache"
         },
         {
           "kind": "return",
@@ -151,7 +151,7 @@
     {
       "file": "02-conversation-and-context.svg",
       "title": "02 / Each message and the question loop",
-      "subtitle": "Model-driven questions and action proposals; workflow validates before showing a generic review.",
+      "subtitle": "Bounded sanitised context and eligible schemas reach Claude; private values stay in caller-bound server state.",
       "steps": [
         {
           "owner": "workflow",
@@ -200,7 +200,7 @@
             },
             {
               "path": "src/card_chat/main.py",
-              "anchor": "partial = spec.validate"
+              "anchor": "partial = resolve"
             },
             {
               "path": "src/card_chat/main.py",
@@ -213,6 +213,10 @@
         {
           "id": "browser",
           "label": "Browser"
+        },
+        {
+          "id": "experience",
+          "label": "Experience API"
         },
         {
           "id": "workflow",
@@ -229,16 +233,36 @@
       ],
       "messages": [
         {
+          "kind": "note",
+          "label": "Private inputs bypass chat: the secure form and masked account picker produce a review with zero model calls. Only scoped opaque references enter verified draft facts. Private pastes and ambiguous older references trigger deterministic clarification."
+        },
+        {
+          "kind": "note",
+          "label": "React calls only Experience. OIDC session + CSRF at the browser boundary; separate bearer identities internally. Agent journals jobs and reviewed submissions in SQLite before execution."
+        },
+        {
           "kind": "call",
           "from": "browser",
-          "to": "workflow",
+          "to": "experience",
           "label": "POST /conversations"
+        },
+        {
+          "kind": "call",
+          "from": "experience",
+          "to": "workflow",
+          "label": "Typed HTTP contract; service token + signed customer assertion"
         },
         {
           "kind": "return",
           "from": "workflow",
-          "to": "browser",
+          "to": "experience",
           "label": "cid + fixed greeting"
+        },
+        {
+          "kind": "return",
+          "from": "experience",
+          "to": "browser",
+          "label": "UI-ready reply or accepted operation and BFF polling URL"
         },
         {
           "kind": "section",
@@ -249,8 +273,14 @@
         {
           "kind": "call",
           "from": "browser",
-          "to": "workflow",
+          "to": "experience",
           "label": "POST /conversations/{cid}/messages {text}"
+        },
+        {
+          "kind": "call",
+          "from": "experience",
+          "to": "workflow",
+          "label": "Typed HTTP contract; service token + signed customer assertion"
         },
         {
           "kind": "call",
@@ -268,7 +298,7 @@
           "kind": "call",
           "from": "agent",
           "to": "claude",
-          "label": "Messages with tool descriptions/schemas; automatic selection"
+          "label": "Shared allowlist builder: recent sanitised turns, opaque verified draft facts, stable eligible tool schemas; optional static-prefix cache"
         },
         {
           "kind": "section",
@@ -291,8 +321,14 @@
         {
           "kind": "return",
           "from": "workflow",
-          "to": "browser",
+          "to": "experience",
           "label": "Display reply; next answer retains same cid/context"
+        },
+        {
+          "kind": "return",
+          "from": "experience",
+          "to": "browser",
+          "label": "UI-ready reply or accepted operation and BFF polling URL"
         },
         {
           "kind": "section",
@@ -333,8 +369,14 @@
         {
           "kind": "return",
           "from": "workflow",
-          "to": "browser",
+          "to": "experience",
           "label": "Generic action review and catalogue-labelled confirmation button"
+        },
+        {
+          "kind": "return",
+          "from": "experience",
+          "to": "browser",
+          "label": "UI-ready reply or accepted operation and BFF polling URL"
         }
       ]
     },
@@ -356,7 +398,7 @@
             },
             {
               "path": "src/card_chat/main.py",
-              "anchor": "async def execute(c)"
+              "anchor": "async def execute(cid, c)"
             }
           ]
         },
@@ -401,12 +443,16 @@
           "label": "Browser"
         },
         {
+          "id": "experience",
+          "label": "Experience API"
+        },
+        {
           "id": "workflow",
           "label": "Chat workflow"
         },
         {
           "id": "mcp",
-          "label": "MCP child"
+          "label": "MCP HTTP service"
         },
         {
           "id": "api",
@@ -420,6 +466,10 @@
       "messages": [
         {
           "kind": "note",
+          "label": "React calls only Experience. OIDC session + CSRF at the browser boundary; separate bearer identities internally. Agent journals jobs and reviewed submissions in SQLite before execution."
+        },
+        {
+          "kind": "note",
           "from": "",
           "to": "",
           "label": "Before this sequence, Claude has already selected an action and the workflow has validated its review."
@@ -427,8 +477,14 @@
         {
           "kind": "call",
           "from": "browser",
-          "to": "workflow",
+          "to": "experience",
           "label": "Click action button: POST /confirm {review}"
+        },
+        {
+          "kind": "call",
+          "from": "experience",
+          "to": "workflow",
+          "label": "Typed HTTP contract; service token + signed customer assertion"
         },
         {
           "kind": "call",
@@ -505,8 +561,14 @@
         {
           "kind": "return",
           "from": "workflow",
-          "to": "browser",
+          "to": "experience",
           "label": "Actual simulated reference; duplicate click uses cached result"
+        },
+        {
+          "kind": "return",
+          "from": "experience",
+          "to": "browser",
+          "label": "UI-ready reply or accepted operation and BFF polling URL"
         },
         {
           "kind": "note",
@@ -566,6 +628,10 @@
           "label": "Browser"
         },
         {
+          "id": "experience",
+          "label": "Experience API"
+        },
+        {
           "id": "workflow",
           "label": "Chat workflow"
         },
@@ -580,10 +646,20 @@
       ],
       "messages": [
         {
+          "kind": "note",
+          "label": "React calls only Experience. OIDC session + CSRF at the browser boundary; separate bearer identities internally. Agent journals jobs and reviewed submissions in SQLite before execution."
+        },
+        {
           "kind": "call",
           "from": "browser",
-          "to": "workflow",
+          "to": "experience",
           "label": "First valid confirmation"
+        },
+        {
+          "kind": "call",
+          "from": "experience",
+          "to": "workflow",
+          "label": "Typed HTTP contract; service token + signed customer assertion"
         },
         {
           "kind": "call",
@@ -660,8 +736,14 @@
         {
           "kind": "return",
           "from": "workflow",
-          "to": "browser",
+          "to": "experience",
           "label": "Same identifier"
+        },
+        {
+          "kind": "return",
+          "from": "experience",
+          "to": "browser",
+          "label": "UI-ready reply or accepted operation and BFF polling URL"
         },
         {
           "kind": "section",
@@ -672,14 +754,26 @@
         {
           "kind": "call",
           "from": "browser",
-          "to": "workflow",
+          "to": "experience",
           "label": "Click same confirmation again"
+        },
+        {
+          "kind": "call",
+          "from": "experience",
+          "to": "workflow",
+          "label": "Typed HTTP contract; service token + signed customer assertion"
         },
         {
           "kind": "return",
           "from": "workflow",
-          "to": "browser",
+          "to": "experience",
           "label": "Cached success; no model, MCP or HTTP call"
+        },
+        {
+          "kind": "return",
+          "from": "experience",
+          "to": "browser",
+          "label": "UI-ready reply or accepted operation and BFF polling URL"
         },
         {
           "kind": "section",
@@ -902,6 +996,374 @@
               "anchor": "except StorageUnavailable as exc:"
             }
           ]
+        }
+      ]
+    },
+    {
+      "file": "06-http-auth-and-jobs.svg",
+      "title": "06 / HTTP identity, durable jobs and confirmed execution",
+      "subtitle": "Separate processes and service identities; browser contracts stay independent of the model and MCP implementation.",
+      "participants": [
+        {
+          "id": "browser",
+          "label": "React / browser"
+        },
+        {
+          "id": "experience",
+          "label": "Experience API"
+        },
+        {
+          "id": "identity",
+          "label": "Keycloak"
+        },
+        {
+          "id": "workflow",
+          "label": "Agent API"
+        },
+        {
+          "id": "claude",
+          "label": "Claude / stub"
+        },
+        {
+          "id": "mcp",
+          "label": "MCP HTTP"
+        },
+        {
+          "id": "api",
+          "label": "Cards API"
+        },
+        {
+          "id": "storage",
+          "label": "SQLite journals"
+        }
+      ],
+      "steps": [
+        {
+          "references": [
+            {
+              "path": "src/card_chat/experience.py",
+              "anchor": "async def forward"
+            },
+            {
+              "path": "src/card_chat/security.py",
+              "anchor": "def protect"
+            },
+            {
+              "path": "src/card_chat/main.py",
+              "anchor": "async def run_operation"
+            },
+            {
+              "path": "src/card_chat/main.py",
+              "anchor": "save(cid, c)"
+            },
+            {
+              "path": "src/card_servicing/cards.py",
+              "anchor": "customer = principal.get()"
+            }
+          ]
+        }
+      ],
+      "messages": [
+        {
+          "kind": "note",
+          "label": "Five application containers plus Keycloak. Each internal receiver validates its destination bearer token. Customer identity is a separately signed BFF assertion, never a browser user-ID header."
+        },
+        {
+          "kind": "call",
+          "from": "browser",
+          "to": "experience",
+          "label": "OIDC sign-in and callback"
+        },
+        {
+          "kind": "call",
+          "from": "experience",
+          "to": "identity",
+          "label": "Authorization code + PKCE exchange; verify state, nonce and signed ID token"
+        },
+        {
+          "kind": "return",
+          "from": "experience",
+          "to": "browser",
+          "label": "Opaque HttpOnly server-side session + CSRF token"
+        },
+        {
+          "kind": "call",
+          "from": "browser",
+          "to": "experience",
+          "label": "Message with session, CSRF and submission key"
+        },
+        {
+          "kind": "call",
+          "from": "experience",
+          "to": "workflow",
+          "label": "Typed request, Agent audience token, signed customer assertion and correlation ID"
+        },
+        {
+          "kind": "call",
+          "from": "workflow",
+          "to": "storage",
+          "label": "Durably accept caller-owned operation; 202 mode can return now"
+        },
+        {
+          "kind": "call",
+          "from": "workflow",
+          "to": "claude",
+          "label": "Shared allowlist builder: recent sanitised turns, opaque verified draft facts, stable eligible tool schemas; optional static-prefix cache"
+        },
+        {
+          "kind": "return",
+          "from": "claude",
+          "to": "workflow",
+          "label": "Propose one tool and arguments, follow-up, or reply"
+        },
+        {
+          "kind": "return",
+          "from": "workflow",
+          "to": "experience",
+          "label": "Masked review bound to exact proposal; synchronous reply or poll result"
+        },
+        {
+          "kind": "call",
+          "from": "browser",
+          "to": "experience",
+          "label": "Confirm the current review"
+        },
+        {
+          "kind": "call",
+          "from": "experience",
+          "to": "workflow",
+          "label": "Forward authenticated typed confirmation"
+        },
+        {
+          "kind": "call",
+          "from": "workflow",
+          "to": "storage",
+          "label": "Persist reviewed snapshot and execution key before any write"
+        },
+        {
+          "kind": "call",
+          "from": "workflow",
+          "to": "mcp",
+          "label": "Streamable HTTP tools/call with MCP-specific bearer token"
+        },
+        {
+          "kind": "call",
+          "from": "mcp",
+          "to": "api",
+          "label": "Registered REST destination; Cards-specific bearer, verified customer assertion, Idempotency-Key"
+        },
+        {
+          "kind": "call",
+          "from": "api",
+          "to": "storage",
+          "label": "Authorize account; atomically save card and replay response"
+        },
+        {
+          "kind": "return",
+          "from": "api",
+          "to": "mcp",
+          "label": "Validated structured Cards result"
+        },
+        {
+          "kind": "return",
+          "from": "mcp",
+          "to": "workflow",
+          "label": "Structured tool result"
+        },
+        {
+          "kind": "call",
+          "from": "workflow",
+          "to": "storage",
+          "label": "Commit conversation + completed operation result together"
+        },
+        {
+          "kind": "return",
+          "from": "workflow",
+          "to": "experience",
+          "label": "Stable UI-ready result"
+        },
+        {
+          "kind": "return",
+          "from": "experience",
+          "to": "browser",
+          "label": "Result via response or authenticated BFF polling"
+        },
+        {
+          "kind": "note",
+          "label": "Storage lifelines represent separate Agent, Experience and Cards SQLite databases/volumes, not a shared database. Running jobs recover on restart. Uncertain supported writes reuse the original downstream key; non-idempotent writes are never replayed automatically."
+        }
+      ]
+    },
+    {
+      "file": "07-private-inputs-and-model-context.svg",
+      "title": "07 / Private inputs and minimal model context",
+      "subtitle": "Exact values, pending proposals and execution keys remain in durable application state; Claude receives no raw identifiers.",
+      "participants": [
+        {
+          "id": "browser",
+          "label": "React secure form"
+        },
+        {
+          "id": "experience",
+          "label": "Experience API"
+        },
+        {
+          "id": "workflow",
+          "label": "Agent API"
+        },
+        {
+          "id": "storage",
+          "label": "Private SQLite state"
+        },
+        {
+          "id": "claude",
+          "label": "Claude Messages"
+        },
+        {
+          "id": "mcp",
+          "label": "Remote MCP / Cards"
+        }
+      ],
+      "steps": [
+        {
+          "references": [
+            {
+              "path": "src/card_chat/model_context.py",
+              "anchor": "def build_context"
+            },
+            {
+              "path": "src/card_chat/private_inputs.py",
+              "anchor": "def resolve"
+            },
+            {
+              "path": "src/card_chat/main.py",
+              "anchor": "async def structured"
+            },
+            {
+              "path": "src/card_chat/provider.py",
+              "anchor": "cache_enabled"
+            },
+            {
+              "path": "src/card_chat/main.py",
+              "anchor": "authorise(spec, proposal.arguments, caller())"
+            }
+          ]
+        }
+      ],
+      "messages": [
+        {
+          "kind": "call",
+          "from": "browser",
+          "to": "experience",
+          "label": "Get conversation-scoped action form"
+        },
+        {
+          "kind": "call",
+          "from": "experience",
+          "to": "workflow",
+          "label": "Authenticated options request"
+        },
+        {
+          "kind": "call",
+          "from": "workflow",
+          "to": "storage",
+          "label": "Bind opaque account references to verified owner, conversation and field"
+        },
+        {
+          "kind": "return",
+          "from": "workflow",
+          "to": "browser",
+          "label": "Masked account labels and references; raw account and username absent"
+        },
+        {
+          "kind": "call",
+          "from": "browser",
+          "to": "workflow",
+          "label": "Structured fields + selected reference via Experience"
+        },
+        {
+          "kind": "call",
+          "from": "workflow",
+          "to": "storage",
+          "label": "Resolve and authorize; save exact proposal + review nonce"
+        },
+        {
+          "kind": "return",
+          "from": "workflow",
+          "to": "browser",
+          "label": "Masked review; zero Claude calls"
+        },
+        {
+          "kind": "section",
+          "label": "Optional open-ended message or safe correction"
+        },
+        {
+          "kind": "call",
+          "from": "browser",
+          "to": "workflow",
+          "label": "Free-text intent via Experience"
+        },
+        {
+          "kind": "call",
+          "from": "workflow",
+          "to": "workflow",
+          "label": "Reject private pastes; clarify ambiguous old references; filter permissions and workflow constraints"
+        },
+        {
+          "kind": "call",
+          "from": "workflow",
+          "to": "claude",
+          "label": "Allowlisted recent context and opaque draft facts; stable tools + instructions before dynamic content"
+        },
+        {
+          "kind": "return",
+          "from": "claude",
+          "to": "workflow",
+          "label": "Proposed tool with scoped references or a friendly reply"
+        },
+        {
+          "kind": "call",
+          "from": "workflow",
+          "to": "storage",
+          "label": "Resolve only caller/conversation-bound references; store exact reviewed values"
+        },
+        {
+          "kind": "section",
+          "label": "Confirmed execution, retries and result rendering"
+        },
+        {
+          "kind": "call",
+          "from": "browser",
+          "to": "workflow",
+          "label": "Confirm stored review via Experience, sync or submit-and-poll"
+        },
+        {
+          "kind": "call",
+          "from": "workflow",
+          "to": "storage",
+          "label": "Recheck permissions/account ownership; commit exact payload and key"
+        },
+        {
+          "kind": "call",
+          "from": "workflow",
+          "to": "mcp",
+          "label": "Execute through MCP with original values; retry with the same execution key"
+        },
+        {
+          "kind": "return",
+          "from": "mcp",
+          "to": "workflow",
+          "label": "Verified structured result"
+        },
+        {
+          "kind": "return",
+          "from": "workflow",
+          "to": "browser",
+          "label": "Catalogue-rendered actual simulated card reference; usage counters"
+        },
+        {
+          "kind": "note",
+          "label": "Confirmation, duplicate clicks and eligible retries make zero Claude calls. Raw tool results never enter model context. Optional ephemeral caching marks only the stable system prefix after eligible tool schemas; conversation content is uncached."
         }
       ]
     }

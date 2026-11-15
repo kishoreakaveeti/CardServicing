@@ -12,7 +12,7 @@ import textwrap
 ROOT = Path(__file__).resolve().parents[1]
 DIRECTORY = ROOT / 'docs' / 'diagrams'
 SOURCE = DIRECTORY / 'card-chat-flows.json'
-COLORS = {'browser': '#155e75', 'workflow': '#1d4ed8', 'agent': '#6d28d9',
+COLORS = {'browser': '#155e75', 'experience': '#0369a1', 'identity': '#92400e', 'workflow': '#1d4ed8', 'agent': '#6d28d9',
           'claude': '#9a3412', 'mcp': '#047857', 'api': '#0f766e', 'storage': '#334155'}
 
 

@@ -39,6 +39,12 @@ def create_card(
     store: Annotated[CardStorePort, Depends(get_card_store)],
     settings: Annotated[CardSettings, Depends(get_card_settings)],
 ) -> Card:
+    from card_chat.security import principal
+    customer = principal.get()
+    if request.app.state.security.enabled:
+        if (not customer or instruction.account_number not in customer['accounts']
+                or instruction.user_name != customer['username']):
+            raise HTTPException(403, 'Account is not authorized for this customer')
     trace_id = request.state.trace_id
     telemetry = request.app.state.telemetry
     account_fields = telemetry.account_fields(instruction) if hasattr(telemetry, 'account_fields') else {}

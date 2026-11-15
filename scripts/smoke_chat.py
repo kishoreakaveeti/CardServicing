@@ -1,4 +1,4 @@
-"""Exercise chat endpoints -> real MCP stdio -> a separately running Cards API.
+"""Exercise chat endpoints -> remote HTTP MCP -> a separately running Cards API.
 
 Default: stub model, no cloud calls. --live uses configured Anthropic credentials.
 --lose-first-response verifies retry after the API has committed a creation.
@@ -21,6 +21,7 @@ from card_chat.turns import ProposedToolCall
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--api-url', required=True)
+    parser.add_argument('--mcp-url', default='http://127.0.0.1:8030/mcp')
     parser.add_argument('--live', action='store_true')
     parser.add_argument('--lose-first-response', action='store_true')
     args = parser.parse_args()
@@ -31,7 +32,7 @@ def main():
         sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'tests'))
         from test_chat import StubModel, BODY
         model = StubModel()
-        model.outputs = [ProposedToolCall('create_card', BODY)]
+        model.outputs = []
     original = Gateway.execute
     calls, results = [], []
 
@@ -45,12 +46,17 @@ def main():
 
     Gateway.execute = capture
     try:
-        with TestClient(create_app(model=model)) as client:
+        with TestClient(create_app(model=model, config={**settings(), 'MCP_URL': args.mcp_url,
+            'LOCAL_CUSTOMER': {'sub': 'isolated-test', 'username': 'alex.synthetic',
+                               'accounts': ['0012345678'], 'permissions': ['tools:execute']}})) as client:
             start = client.post('/conversations').json()
             path = '/conversations/' + start['id']
-            review = client.post(path + '/messages', json={'text':
-                'Create a new simulated card for my existing account. My given name is Alex, '
-                'my user name is alex.synthetic, and my account number is the string 0012345678.'}).json()
+            options = client.get(path + '/inputs').json()
+            ref = next(field['options'][0]['ref'] for field in options['tools'][0]['fields'] if field.get('options'))
+            review = client.post(path + '/inputs', json={'tool': 'create_card', 'fields': {'given_name': 'Alex'},
+                                'selections': {'account_number': ref}}).json()
+            if args.live:
+                review = client.post(path + '/messages', json={'text': 'Create the card using the selected details.'}).json()
             if not review.get('review'):
                 raise RuntimeError('No complete review returned; inspect model configuration and chat response locally')
             assert not calls, 'MCP must not execute before confirmation'

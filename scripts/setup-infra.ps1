@@ -24,6 +24,6 @@ if (-not (Test-Path -LiteralPath '.env')) {
 if (-not (Select-String -LiteralPath '.env' -Pattern '^ACCOUNT_HASH_KEY=' -Quiet)) {
     Add-Content -LiteralPath '.env' -Value "`nACCOUNT_HASH_KEY=$([guid]::NewGuid().ToString('N'))$([guid]::NewGuid().ToString('N'))`nACCOUNT_HASH_KEY_VERSION=v1" -Encoding ascii
 }
-& $dockerPath compose up -d --wait --wait-timeout 180
+& $dockerPath compose -f compose.infra.yaml up -d --wait --wait-timeout 180
 if ($LASTEXITCODE -ne 0) { throw 'Infrastructure startup failed. Check Docker Desktop and compose logs.' }
-& $dockerPath compose ps
+& $dockerPath compose -f compose.infra.yaml ps

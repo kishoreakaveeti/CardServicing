@@ -85,6 +85,6 @@
 <a href="../../src/card_servicing/main.py"><text x="40" y="1856" font-size="16" fill="#1d4ed8">src/card_servicing/main.py:53</text></a>
 <a href="../../src/card_servicing/telemetry.py"><text x="40" y="1881" font-size="16" fill="#1d4ed8">src/card_servicing/telemetry.py:64</text></a>
 <a href="../../src/card_servicing/telemetry.py"><text x="40" y="1906" font-size="16" fill="#1d4ed8">src/card_servicing/telemetry.py:80</text></a>
-<a href="../../src/card_servicing/cards.py"><text x="40" y="1931" font-size="16" fill="#1d4ed8">src/card_servicing/cards.py:51</text></a>
+<a href="../../src/card_servicing/cards.py"><text x="40" y="1931" font-size="16" fill="#1d4ed8">src/card_servicing/cards.py:57</text></a>
 <text x="40" y="1999" font-size="15" fill="#475569">Source: card-chat-flows.json | Regenerate: python scripts/render_chat_diagrams.py</text>
 </svg>

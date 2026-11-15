@@ -34,7 +34,7 @@ def configured_adapters(card_store, telemetry):
 
 def create_app(card_settings: CardSettings | None = None, *,
                card_store: CardStorePort | None = None, telemetry: TelemetryPort | None = None,
-               local_infrastructure: bool = False) -> FastAPI:
+               local_infrastructure: bool = False, security_config=None) -> FastAPI:
     injected_adapters = card_store, telemetry
     if not local_infrastructure:
         card_store = card_store if card_store is not None else CardStore()
@@ -69,10 +69,15 @@ def create_app(card_settings: CardSettings | None = None, *,
     application.state.started = False
     application.state.card_settings = card_settings or CardSettings()
     application.include_router(cards_router)
+    from card_chat.security import protect
+    protect(application, security_config if security_config is not None else
+            (load_config() if local_infrastructure else {}),
+            'cards', 'cards:write', 'mcp-service')
 
     @application.middleware('http')
     async def trace_request(request, call_next):
-        trace_id = uuid4().hex
+        supplied = request.headers.get('X-Correlation-ID', '')
+        trace_id = supplied if len(supplied) == 32 and all(c in '0123456789abcdef' for c in supplied) else uuid4().hex
         request.state.trace_id = trace_id
         start = perf_counter()
         code = 500

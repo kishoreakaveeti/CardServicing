@@ -26,6 +26,9 @@ class Entry(BaseModel):
     result_labels: dict[str, str] = Field(default_factory=dict)
     sensitive_fields: list[str] = Field(default_factory=list)
     idempotency_header: Literal['Idempotency-Key'] | None = None
+    context_fields: list[str] = Field(default_factory=list)
+    trusted_fields: dict[str, Literal['account', 'username']] = Field(default_factory=dict)
+    permissions: list[str] = Field(default_factory=lambda: ['tools:execute'])
 
 
 class Catalogue(BaseModel):
@@ -119,7 +122,10 @@ class ToolSpec:
         result = {}
         for key, value in arguments.items():
             prop = self.input_schema['properties'][key]
-            if key in sensitive or prop.get('x-sensitive') or 'account' in key.lower():
+            credential = any(word in key.lower() for word in ('cvv', 'cvc', 'pin', 'password', 'secret', 'credential', 'token'))
+            if credential:
+                value = '[private]'
+            elif key in sensitive or prop.get('x-sensitive') or any(word in key.lower() for word in ('account', 'card_number', 'user_name')):
                 text = str(value)
                 value = '*' * max(4, len(text) - 4) + (text[-4:] if len(text) > 4 else '')
             result[self.entry.field_labels.get(key, prop.get('title', key))] = value
@@ -184,6 +190,15 @@ def compile_entry(entry, document):
         properties.update(schema['properties'])
         required.extend(schema.get('required', []))
     schema = flat_object({'type': 'object', 'properties': properties, 'required': required})
+    if (set(entry.context_fields) | set(entry.trusted_fields)) - set(properties):
+        raise CatalogueError(entry.name + ': context/trusted fields must name declared inputs')
+    if set(entry.context_fields) & (set(entry.trusted_fields) | set(entry.sensitive_fields)):
+        raise CatalogueError(entry.name + ': private fields cannot be model-visible')
+    if any(properties[k].get('x-sensitive') or k.lower().endswith('_id') or any(word in k.lower() for word in
+            ('account', 'card', 'pin', 'cvv', 'cvc', 'password', 'secret', 'token', 'user', 'name', 'credential',
+             'customer', 'email', 'phone', 'identifier', 'ssn', 'pan'))
+           for k in entry.context_fields):
+        raise CatalogueError(entry.name + ': identifiers and credentials cannot be model-visible')
     responses = {}
     for code, response in operation.get('responses', {}).items():
         if str(code).isdigit() and 200 <= int(code) < 300:

@@ -1,12 +1,11 @@
 from contextlib import asynccontextmanager
-import os
-import sys
-
-from mcp import ClientSession, StdioServerParameters
-from mcp.client.stdio import stdio_client
+import httpx
+from mcp import ClientSession
+from mcp.client.streamable_http import streamable_http_client
 
 from card_chat.catalogue import load_catalogue
 from card_chat.config import settings
+from card_chat.security import Security
 
 
 class Gateway:
@@ -31,18 +30,27 @@ class Gateway:
 
 
 @asynccontextmanager
-async def connect():
-    config = settings()
+async def connect(config=None):
+    config = settings() if config is None else config
     catalogue = load_catalogue(config)
-    # Only the chat adapter needs the model credential, not the MCP child.
-    env = {k: v for k, v in os.environ.items() if k != 'ANTHROPIC_API_KEY'}
-    for key in ('TOOL_CATALOGUE_PATH', 'CARD_API_BASE_URL'):
-        if config.get(key):
-            env[key] = config[key]
-    params = StdioServerParameters(command=sys.executable,
-                                  args=['-m', 'card_chat.mcp_server'], env=env)
-    async with stdio_client(params) as (read, write):
-        async with ClientSession(read, write) as session:
-            await session.initialize()
-            tools = (await session.list_tools()).tools
-            yield Gateway(session, tools, catalogue)
+    security = Security(config)
+    url = config.get('MCP_URL', 'http://127.0.0.1:8030/mcp')
+
+    @asynccontextmanager
+    async def session():
+        async with httpx.AsyncClient(headers=await security.headers(), timeout=120) as client:
+            async with streamable_http_client(url, http_client=client) as (read, write, _):
+                async with ClientSession(read, write) as connected:
+                    await connected.initialize()
+                    yield connected
+
+    async with session() as connected:
+        tools = (await connected.list_tools()).tools
+
+    class RemoteGateway(Gateway):
+        async def execute(self, name, arguments, key=None):
+            # Fresh destination token and per-job delegation on every request.
+            async with session() as connected:
+                return await Gateway(connected, tools, catalogue).execute(name, arguments, key)
+
+    yield RemoteGateway(None, tools, catalogue)

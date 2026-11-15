@@ -1,91 +1,133 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="1400" height="2128" viewBox="0 0 1400 2128" role="img" aria-labelledby="title description">
+<svg xmlns="http://www.w3.org/2000/svg" width="1440" height="3087" viewBox="0 0 1440 3087" role="img" aria-labelledby="title description">
 <title id="title">02 / Each message and the question loop - sequence diagram</title>
-<desc id="description">Model-driven questions and action proposals; workflow validates before showing a generic review. Read interactions from top to bottom. Dashed arrows are replies.</desc>
+<desc id="description">Bounded sanitised context and eligible schemas reach Claude; private values stay in caller-bound server state. Read interactions from top to bottom. Dashed arrows are replies.</desc>
 <defs><marker id="arrow" markerWidth="9" markerHeight="9" refX="8" refY="4.5" orient="auto"><path d="M0 0 L9 4.5 L0 9" fill="#334155"/></marker></defs>
 <style>text{font-family:Consolas,"Liberation Mono",monospace}.heading{font-family:Arial,sans-serif;font-weight:700}</style>
-<rect width="1400" height="2128" fill="#fff"/>
+<rect width="1440" height="3087" fill="#fff"/>
 <text x="40" y="55" class="heading" font-size="32" fill="#0f172a">02 / Each message and the question loop</text>
-<text x="40" y="90" font-size="18" fill="#475569">Model-driven questions and action proposals; workflow validates before showing a generic review.</text>
+<text x="40" y="90" font-size="18" fill="#475569">Bounded sanitised context and eligible schemas reach Claude; private values stay in caller-bound server state.</text>
 <text x="40" y="120" font-size="16" fill="#475569">Time flows downward | Solid arrow: call | Dashed arrow: reply | Yellow: explanation</text>
-<path d="M130.0 207 V1818" stroke="#94a3b8" stroke-width="2" stroke-dasharray="6 6"/>
+<path d="M130.0 207 V2777" stroke="#94a3b8" stroke-width="2" stroke-dasharray="6 6"/>
 <rect x="19.0" y="155" width="222" height="52" rx="7" fill="#155e75"/>
 <text x="130.0" y="187" text-anchor="middle" class="heading" font-size="19" fill="white">Browser</text>
-<path d="M510.0 207 V1818" stroke="#94a3b8" stroke-width="2" stroke-dasharray="6 6"/>
-<rect x="399.0" y="155" width="222" height="52" rx="7" fill="#1d4ed8"/>
-<text x="510.0" y="187" text-anchor="middle" class="heading" font-size="19" fill="white">Chat workflow</text>
-<path d="M890.0 207 V1818" stroke="#94a3b8" stroke-width="2" stroke-dasharray="6 6"/>
-<rect x="779.0" y="155" width="222" height="52" rx="7" fill="#6d28d9"/>
-<text x="890.0" y="187" text-anchor="middle" class="heading" font-size="19" fill="white">Agent / adapter</text>
-<path d="M1270.0 207 V1818" stroke="#94a3b8" stroke-width="2" stroke-dasharray="6 6"/>
-<rect x="1159.0" y="155" width="222" height="52" rx="7" fill="#9a3412"/>
-<text x="1270.0" y="187" text-anchor="middle" class="heading" font-size="19" fill="white">Hosted Claude</text>
-<rect x="221.75" y="240" width="196.5" height="31" fill="white"/>
-<text x="320.0" y="260" text-anchor="middle" font-size="16" fill="#0f172a">POST /conversations</text>
-<path d="M130.0 278 H510.0" fill="none" stroke="#334155" stroke-width="2" marker-end="url(#arrow)"/>
-<rect x="217.0" y="311" width="206.0" height="31" fill="white"/>
-<text x="320.0" y="331" text-anchor="middle" font-size="16" fill="#0f172a">cid + fixed greeting</text>
-<path d="M510.0 349 H130.0" fill="none" stroke="#334155" stroke-width="2" stroke-dasharray="7 5" marker-end="url(#arrow)"/>
-<rect x="35" y="387" width="1330" height="49" rx="5" fill="#e0e7ff" stroke="#cbd5e1"/>
-<text x="55" y="412" font-size="17" fill="#1e293b">For each customer message</text>
-<rect x="150.5" y="443" width="339.0" height="55" fill="white"/>
-<text x="320.0" y="463" text-anchor="middle" font-size="16" fill="#0f172a">POST /conversations/{cid}/messages</text>
-<text x="320.0" y="487" text-anchor="middle" font-size="16" fill="#0f172a">{text}</text>
-<path d="M130.0 505 H510.0" fill="none" stroke="#334155" stroke-width="2" marker-end="url(#arrow)"/>
-<rect x="520.0" y="538" width="320.0" height="55" fill="white"/>
-<text x="680.0" y="558" text-anchor="middle" font-size="16" fill="#0f172a">Lock; append history; invalidate</text>
-<text x="680.0" y="582" text-anchor="middle" font-size="16" fill="#0f172a">previous review</text>
-<path d="M510.0 600 H575.0 V622 H510.0" fill="none" stroke="#334155" stroke-width="2" marker-end="url(#arrow)"/>
-<rect x="535.25" y="658" width="329.5" height="55" fill="white"/>
-<text x="700.0" y="678" text-anchor="middle" font-size="16" fill="#0f172a">interpret_turn(history, collected</text>
-<text x="700.0" y="702" text-anchor="middle" font-size="16" fill="#0f172a">details, discovered tools)</text>
-<path d="M510.0 720 H890.0" fill="none" stroke="#334155" stroke-width="2" marker-end="url(#arrow)"/>
-<rect x="924.75" y="753" width="310.5" height="79" fill="white"/>
-<text x="1080.0" y="773" text-anchor="middle" font-size="16" fill="#0f172a">Messages with tool</text>
-<text x="1080.0" y="797" text-anchor="middle" font-size="16" fill="#0f172a">descriptions/schemas; automatic</text>
-<text x="1080.0" y="821" text-anchor="middle" font-size="16" fill="#0f172a">selection</text>
-<path d="M890.0 839 H1270.0" fill="none" stroke="#334155" stroke-width="2" marker-end="url(#arrow)"/>
-<rect x="35" y="877" width="1330" height="49" rx="5" fill="#e0e7ff" stroke="#cbd5e1"/>
-<text x="55" y="902" font-size="17" fill="#1e293b">Missing information, ambiguous request or unsupported action</text>
-<rect x="915.25" y="933" width="329.5" height="55" fill="white"/>
-<text x="1080.0" y="953" text-anchor="middle" font-size="16" fill="#0f172a">One clarifying question or normal</text>
-<text x="1080.0" y="977" text-anchor="middle" font-size="16" fill="#0f172a">reply</text>
-<path d="M1270.0 995 H890.0" fill="none" stroke="#334155" stroke-width="2" stroke-dasharray="7 5" marker-end="url(#arrow)"/>
-<rect x="630.25" y="1028" width="139.5" height="31" fill="white"/>
-<text x="700.0" y="1048" text-anchor="middle" font-size="16" fill="#0f172a">CustomerReply</text>
-<path d="M890.0 1066 H510.0" fill="none" stroke="#334155" stroke-width="2" stroke-dasharray="7 5" marker-end="url(#arrow)"/>
-<rect x="150.5" y="1099" width="339.0" height="55" fill="white"/>
-<text x="320.0" y="1119" text-anchor="middle" font-size="16" fill="#0f172a">Display reply; next answer retains</text>
-<text x="320.0" y="1143" text-anchor="middle" font-size="16" fill="#0f172a">same cid/context</text>
-<path d="M510.0 1161 H130.0" fill="none" stroke="#334155" stroke-width="2" stroke-dasharray="7 5" marker-end="url(#arrow)"/>
-<rect x="35" y="1199" width="1330" height="49" rx="5" fill="#e0e7ff" stroke="#cbd5e1"/>
-<text x="55" y="1224" font-size="17" fill="#1e293b">Claude proposes one action</text>
-<rect x="953.25" y="1255" width="253.5" height="31" fill="white"/>
-<text x="1080.0" y="1275" text-anchor="middle" font-size="16" fill="#0f172a">tool_use(name, arguments)</text>
-<path d="M1270.0 1293 H890.0" fill="none" stroke="#334155" stroke-width="2" stroke-dasharray="7 5" marker-end="url(#arrow)"/>
-<rect x="616.0" y="1326" width="168.0" height="31" fill="white"/>
-<text x="700.0" y="1346" text-anchor="middle" font-size="16" fill="#0f172a">ProposedToolCall</text>
-<path d="M890.0 1364 H510.0" fill="none" stroke="#334155" stroke-width="2" stroke-dasharray="7 5" marker-end="url(#arrow)"/>
-<rect x="529.5" y="1397" width="301.0" height="55" fill="white"/>
-<text x="680.0" y="1417" text-anchor="middle" font-size="16" fill="#0f172a">Reject unknown tool; validate</text>
-<text x="680.0" y="1441" text-anchor="middle" font-size="16" fill="#0f172a">arguments with compiled schema</text>
-<path d="M510.0 1459 H575.0 V1481 H510.0" fill="none" stroke="#334155" stroke-width="2" marker-end="url(#arrow)"/>
-<rect x="35" y="1522" width="1330" height="49" rx="5" fill="#fef3c7" stroke="#cbd5e1"/>
-<text x="55" y="1547" font-size="17" fill="#1e293b">Incomplete proposal: save valid partial details and ask for missing field. Invalid values: no review/write.</text>
-<rect x="534.25" y="1578" width="291.5" height="55" fill="white"/>
-<text x="680.0" y="1598" text-anchor="middle" font-size="16" fill="#0f172a">Store complete snapshot; mask</text>
-<text x="680.0" y="1622" text-anchor="middle" font-size="16" fill="#0f172a">account; new review token</text>
-<path d="M510.0 1640 H575.0 V1662 H510.0" fill="none" stroke="#334155" stroke-width="2" marker-end="url(#arrow)"/>
-<rect x="141.0" y="1698" width="358.0" height="55" fill="white"/>
-<text x="320.0" y="1718" text-anchor="middle" font-size="16" fill="#0f172a">Generic action review and catalogue-</text>
-<text x="320.0" y="1742" text-anchor="middle" font-size="16" fill="#0f172a">labelled confirmation button</text>
-<path d="M510.0 1760 H130.0" fill="none" stroke="#334155" stroke-width="2" stroke-dasharray="7 5" marker-end="url(#arrow)"/>
-<text x="40" y="1860" class="heading" font-size="20" fill="#0f172a">Traceable code references</text>
-<a href="../../src/card_chat/main.py"><text x="40" y="1885" font-size="16" fill="#1d4ed8">src/card_chat/main.py:118</text></a>
-<a href="../../src/card_chat/main.py"><text x="40" y="1910" font-size="16" fill="#1d4ed8">src/card_chat/main.py:19</text></a>
-<a href="../../src/card_chat/provider.py"><text x="40" y="1935" font-size="16" fill="#1d4ed8">src/card_chat/provider.py:11</text></a>
-<a href="../../src/card_chat/agent.py"><text x="40" y="1960" font-size="16" fill="#1d4ed8">src/card_chat/agent.py:12</text></a>
-<a href="../../src/card_chat/catalogue.py"><text x="40" y="1985" font-size="16" fill="#1d4ed8">src/card_chat/catalogue.py:98</text></a>
-<a href="../../src/card_chat/main.py"><text x="40" y="2010" font-size="16" fill="#1d4ed8">src/card_chat/main.py:134</text></a>
-<a href="../../src/card_chat/main.py"><text x="40" y="2035" font-size="16" fill="#1d4ed8">src/card_chat/main.py:151</text></a>
-<text x="40" y="2103" font-size="15" fill="#475569">Source: card-chat-flows.json | Regenerate: python scripts/render_chat_diagrams.py</text>
+<path d="M425.0 207 V2777" stroke="#94a3b8" stroke-width="2" stroke-dasharray="6 6"/>
+<rect x="314.0" y="155" width="222" height="52" rx="7" fill="#0369a1"/>
+<text x="425.0" y="187" text-anchor="middle" class="heading" font-size="19" fill="white">Experience API</text>
+<path d="M720.0 207 V2777" stroke="#94a3b8" stroke-width="2" stroke-dasharray="6 6"/>
+<rect x="609.0" y="155" width="222" height="52" rx="7" fill="#1d4ed8"/>
+<text x="720.0" y="187" text-anchor="middle" class="heading" font-size="19" fill="white">Chat workflow</text>
+<path d="M1015.0 207 V2777" stroke="#94a3b8" stroke-width="2" stroke-dasharray="6 6"/>
+<rect x="904.0" y="155" width="222" height="52" rx="7" fill="#6d28d9"/>
+<text x="1015.0" y="187" text-anchor="middle" class="heading" font-size="19" fill="white">Agent / adapter</text>
+<path d="M1310.0 207 V2777" stroke="#94a3b8" stroke-width="2" stroke-dasharray="6 6"/>
+<rect x="1199.0" y="155" width="222" height="52" rx="7" fill="#9a3412"/>
+<text x="1310.0" y="187" text-anchor="middle" class="heading" font-size="19" fill="white">Hosted Claude</text>
+<rect x="35" y="245" width="1370" height="74" rx="5" fill="#fef3c7" stroke="#cbd5e1"/>
+<text x="55" y="270" font-size="17" fill="#1e293b">Private inputs bypass chat: the secure form and masked account picker produce a review with zero model calls. Only scoped opaque</text>
+<text x="55" y="295" font-size="17" fill="#1e293b">references enter verified draft facts. Private pastes and ambiguous older references trigger deterministic clarification.</text>
+<rect x="35" y="331" width="1370" height="74" rx="5" fill="#fef3c7" stroke="#cbd5e1"/>
+<text x="55" y="356" font-size="17" fill="#1e293b">React calls only Experience. OIDC session + CSRF at the browser boundary; separate bearer identities internally. Agent journals</text>
+<text x="55" y="381" font-size="17" fill="#1e293b">jobs and reviewed submissions in SQLite before execution.</text>
+<rect x="179.25" y="412" width="196.5" height="31" fill="white"/>
+<text x="277.5" y="432" text-anchor="middle" font-size="16" fill="#0f172a">POST /conversations</text>
+<path d="M130.0 450 H425.0" fill="none" stroke="#334155" stroke-width="2" marker-end="url(#arrow)"/>
+<rect x="431.5" y="483" width="282.0" height="79" fill="white"/>
+<text x="572.5" y="503" text-anchor="middle" font-size="16" fill="#0f172a">Typed HTTP contract; service</text>
+<text x="572.5" y="527" text-anchor="middle" font-size="16" fill="#0f172a">token + signed customer</text>
+<text x="572.5" y="551" text-anchor="middle" font-size="16" fill="#0f172a">assertion</text>
+<path d="M425.0 569 H720.0" fill="none" stroke="#334155" stroke-width="2" marker-end="url(#arrow)"/>
+<rect x="469.5" y="602" width="206.0" height="31" fill="white"/>
+<text x="572.5" y="622" text-anchor="middle" font-size="16" fill="#0f172a">cid + fixed greeting</text>
+<path d="M720.0 640 H425.0" fill="none" stroke="#334155" stroke-width="2" stroke-dasharray="7 5" marker-end="url(#arrow)"/>
+<rect x="146.0" y="673" width="263.0" height="79" fill="white"/>
+<text x="277.5" y="693" text-anchor="middle" font-size="16" fill="#0f172a">UI-ready reply or accepted</text>
+<text x="277.5" y="717" text-anchor="middle" font-size="16" fill="#0f172a">operation and BFF polling</text>
+<text x="277.5" y="741" text-anchor="middle" font-size="16" fill="#0f172a">URL</text>
+<path d="M425.0 759 H130.0" fill="none" stroke="#334155" stroke-width="2" stroke-dasharray="7 5" marker-end="url(#arrow)"/>
+<rect x="35" y="797" width="1370" height="49" rx="5" fill="#e0e7ff" stroke="#cbd5e1"/>
+<text x="55" y="822" font-size="17" fill="#1e293b">For each customer message</text>
+<rect x="136.5" y="853" width="282.0" height="55" fill="white"/>
+<text x="277.5" y="873" text-anchor="middle" font-size="16" fill="#0f172a">POST /conversations/{cid}/me</text>
+<text x="277.5" y="897" text-anchor="middle" font-size="16" fill="#0f172a">ssages {text}</text>
+<path d="M130.0 915 H425.0" fill="none" stroke="#334155" stroke-width="2" marker-end="url(#arrow)"/>
+<rect x="431.5" y="948" width="282.0" height="79" fill="white"/>
+<text x="572.5" y="968" text-anchor="middle" font-size="16" fill="#0f172a">Typed HTTP contract; service</text>
+<text x="572.5" y="992" text-anchor="middle" font-size="16" fill="#0f172a">token + signed customer</text>
+<text x="572.5" y="1016" text-anchor="middle" font-size="16" fill="#0f172a">assertion</text>
+<path d="M425.0 1034 H720.0" fill="none" stroke="#334155" stroke-width="2" marker-end="url(#arrow)"/>
+<rect x="739.75" y="1067" width="215.5" height="79" fill="white"/>
+<text x="847.5" y="1087" text-anchor="middle" font-size="16" fill="#0f172a">Lock; append history;</text>
+<text x="847.5" y="1111" text-anchor="middle" font-size="16" fill="#0f172a">invalidate previous</text>
+<text x="847.5" y="1135" text-anchor="middle" font-size="16" fill="#0f172a">review</text>
+<path d="M720.0 1153 H785.0 V1175 H720.0" fill="none" stroke="#334155" stroke-width="2" marker-end="url(#arrow)"/>
+<rect x="750.25" y="1211" width="234.5" height="79" fill="white"/>
+<text x="867.5" y="1231" text-anchor="middle" font-size="16" fill="#0f172a">interpret_turn(history,</text>
+<text x="867.5" y="1255" text-anchor="middle" font-size="16" fill="#0f172a">collected details,</text>
+<text x="867.5" y="1279" text-anchor="middle" font-size="16" fill="#0f172a">discovered tools)</text>
+<path d="M720.0 1297 H1015.0" fill="none" stroke="#334155" stroke-width="2" marker-end="url(#arrow)"/>
+<rect x="1021.5" y="1330" width="282.0" height="151" fill="white"/>
+<text x="1162.5" y="1350" text-anchor="middle" font-size="16" fill="#0f172a">Shared allowlist builder:</text>
+<text x="1162.5" y="1374" text-anchor="middle" font-size="16" fill="#0f172a">recent sanitised turns,</text>
+<text x="1162.5" y="1398" text-anchor="middle" font-size="16" fill="#0f172a">opaque verified draft facts,</text>
+<text x="1162.5" y="1422" text-anchor="middle" font-size="16" fill="#0f172a">stable eligible tool</text>
+<text x="1162.5" y="1446" text-anchor="middle" font-size="16" fill="#0f172a">schemas; optional static-</text>
+<text x="1162.5" y="1470" text-anchor="middle" font-size="16" fill="#0f172a">prefix cache</text>
+<path d="M1015.0 1488 H1310.0" fill="none" stroke="#334155" stroke-width="2" marker-end="url(#arrow)"/>
+<rect x="35" y="1526" width="1370" height="49" rx="5" fill="#e0e7ff" stroke="#cbd5e1"/>
+<text x="55" y="1551" font-size="17" fill="#1e293b">Missing information, ambiguous request or unsupported action</text>
+<rect x="1031.0" y="1582" width="263.0" height="55" fill="white"/>
+<text x="1162.5" y="1602" text-anchor="middle" font-size="16" fill="#0f172a">One clarifying question or</text>
+<text x="1162.5" y="1626" text-anchor="middle" font-size="16" fill="#0f172a">normal reply</text>
+<path d="M1310.0 1644 H1015.0" fill="none" stroke="#334155" stroke-width="2" stroke-dasharray="7 5" marker-end="url(#arrow)"/>
+<rect x="797.75" y="1677" width="139.5" height="31" fill="white"/>
+<text x="867.5" y="1697" text-anchor="middle" font-size="16" fill="#0f172a">CustomerReply</text>
+<path d="M1015.0 1715 H720.0" fill="none" stroke="#334155" stroke-width="2" stroke-dasharray="7 5" marker-end="url(#arrow)"/>
+<rect x="441.0" y="1748" width="263.0" height="55" fill="white"/>
+<text x="572.5" y="1768" text-anchor="middle" font-size="16" fill="#0f172a">Display reply; next answer</text>
+<text x="572.5" y="1792" text-anchor="middle" font-size="16" fill="#0f172a">retains same cid/context</text>
+<path d="M720.0 1810 H425.0" fill="none" stroke="#334155" stroke-width="2" stroke-dasharray="7 5" marker-end="url(#arrow)"/>
+<rect x="146.0" y="1843" width="263.0" height="79" fill="white"/>
+<text x="277.5" y="1863" text-anchor="middle" font-size="16" fill="#0f172a">UI-ready reply or accepted</text>
+<text x="277.5" y="1887" text-anchor="middle" font-size="16" fill="#0f172a">operation and BFF polling</text>
+<text x="277.5" y="1911" text-anchor="middle" font-size="16" fill="#0f172a">URL</text>
+<path d="M425.0 1929 H130.0" fill="none" stroke="#334155" stroke-width="2" stroke-dasharray="7 5" marker-end="url(#arrow)"/>
+<rect x="35" y="1967" width="1370" height="49" rx="5" fill="#e0e7ff" stroke="#cbd5e1"/>
+<text x="55" y="1992" font-size="17" fill="#1e293b">Claude proposes one action</text>
+<rect x="1035.75" y="2023" width="253.5" height="31" fill="white"/>
+<text x="1162.5" y="2043" text-anchor="middle" font-size="16" fill="#0f172a">tool_use(name, arguments)</text>
+<path d="M1310.0 2061 H1015.0" fill="none" stroke="#334155" stroke-width="2" stroke-dasharray="7 5" marker-end="url(#arrow)"/>
+<rect x="783.5" y="2094" width="168.0" height="31" fill="white"/>
+<text x="867.5" y="2114" text-anchor="middle" font-size="16" fill="#0f172a">ProposedToolCall</text>
+<path d="M1015.0 2132 H720.0" fill="none" stroke="#334155" stroke-width="2" stroke-dasharray="7 5" marker-end="url(#arrow)"/>
+<rect x="730.25" y="2165" width="234.5" height="79" fill="white"/>
+<text x="847.5" y="2185" text-anchor="middle" font-size="16" fill="#0f172a">Reject unknown tool;</text>
+<text x="847.5" y="2209" text-anchor="middle" font-size="16" fill="#0f172a">validate arguments with</text>
+<text x="847.5" y="2233" text-anchor="middle" font-size="16" fill="#0f172a">compiled schema</text>
+<path d="M720.0 2251 H785.0 V2273 H720.0" fill="none" stroke="#334155" stroke-width="2" marker-end="url(#arrow)"/>
+<rect x="35" y="2314" width="1370" height="49" rx="5" fill="#fef3c7" stroke="#cbd5e1"/>
+<text x="55" y="2339" font-size="17" fill="#1e293b">Incomplete proposal: save valid partial details and ask for missing field. Invalid values: no review/write.</text>
+<rect x="725.5" y="2370" width="244.0" height="79" fill="white"/>
+<text x="847.5" y="2390" text-anchor="middle" font-size="16" fill="#0f172a">Store complete snapshot;</text>
+<text x="847.5" y="2414" text-anchor="middle" font-size="16" fill="#0f172a">mask account; new review</text>
+<text x="847.5" y="2438" text-anchor="middle" font-size="16" fill="#0f172a">token</text>
+<path d="M720.0 2456 H785.0 V2478 H720.0" fill="none" stroke="#334155" stroke-width="2" marker-end="url(#arrow)"/>
+<rect x="445.75" y="2514" width="253.5" height="79" fill="white"/>
+<text x="572.5" y="2534" text-anchor="middle" font-size="16" fill="#0f172a">Generic action review and</text>
+<text x="572.5" y="2558" text-anchor="middle" font-size="16" fill="#0f172a">catalogue-labelled</text>
+<text x="572.5" y="2582" text-anchor="middle" font-size="16" fill="#0f172a">confirmation button</text>
+<path d="M720.0 2600 H425.0" fill="none" stroke="#334155" stroke-width="2" stroke-dasharray="7 5" marker-end="url(#arrow)"/>
+<rect x="146.0" y="2633" width="263.0" height="79" fill="white"/>
+<text x="277.5" y="2653" text-anchor="middle" font-size="16" fill="#0f172a">UI-ready reply or accepted</text>
+<text x="277.5" y="2677" text-anchor="middle" font-size="16" fill="#0f172a">operation and BFF polling</text>
+<text x="277.5" y="2701" text-anchor="middle" font-size="16" fill="#0f172a">URL</text>
+<path d="M425.0 2719 H130.0" fill="none" stroke="#334155" stroke-width="2" stroke-dasharray="7 5" marker-end="url(#arrow)"/>
+<text x="40" y="2819" class="heading" font-size="20" fill="#0f172a">Traceable code references</text>
+<a href="../../src/card_chat/main.py"><text x="40" y="2844" font-size="16" fill="#1d4ed8">src/card_chat/main.py:196</text></a>
+<a href="../../src/card_chat/main.py"><text x="40" y="2869" font-size="16" fill="#1d4ed8">src/card_chat/main.py:33</text></a>
+<a href="../../src/card_chat/provider.py"><text x="40" y="2894" font-size="16" fill="#1d4ed8">src/card_chat/provider.py:15</text></a>
+<a href="../../src/card_chat/agent.py"><text x="40" y="2919" font-size="16" fill="#1d4ed8">src/card_chat/agent.py:11</text></a>
+<a href="../../src/card_chat/catalogue.py"><text x="40" y="2944" font-size="16" fill="#1d4ed8">src/card_chat/catalogue.py:101</text></a>
+<a href="../../src/card_chat/main.py"><text x="40" y="2969" font-size="16" fill="#1d4ed8">src/card_chat/main.py:237</text></a>
+<a href="../../src/card_chat/main.py"><text x="40" y="2994" font-size="16" fill="#1d4ed8">src/card_chat/main.py:255</text></a>
+<text x="40" y="3062" font-size="15" fill="#475569">Source: card-chat-flows.json | Regenerate: python scripts/render_chat_diagrams.py</text>
 </svg>

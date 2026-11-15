@@ -1,0 +1,7 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {"label": "Start Full Debug Stack", "type": "shell", "command": "powershell", "args": ["-NoProfile", "-ExecutionPolicy", "Bypass", "-File", "${workspaceFolder}/scripts/stack.ps1", "-DebugComponent", "All", "-Build"], "problemMatcher": []},
+    {"label": "Stop Debug Stack", "type": "shell", "command": "powershell", "args": ["-NoProfile", "-ExecutionPolicy", "Bypass", "-File", "${workspaceFolder}/scripts/stack.ps1", "-Stop"], "problemMatcher": []}
+  ]
+}

@@ -5,6 +5,10 @@
 !README.md
 !src/
 !src/**
+!docs/
+!docs/cards.openapi.json
+!scripts/
+!scripts/service_entrypoint.py
 **/__pycache__/**
 **/*.pyc
 **/*.egg-info/**

@@ -1,5 +1,14 @@
 # Architecture and technology stack
 
+Current application architecture: [Independent HTTP stack](http-stack.md).
+Model data isolation and optional caching: [Private model context](model-privacy.md)
+and [sequence diagram](diagrams/07-private-inputs-and-model-context.svg).
+React, Experience, Agent, remote MCP and Cards now run separately with Keycloak,
+durable Agent jobs and caller-bound confirmation. The generated
+[sequence diagrams](diagrams/01-startup-and-discovery.svg) trace that flow.
+The earlier adapter/infrastructure notes below are retained; run/debug commands
+for the current stack are in the linked guide.
+
 API startup validates configuration and selects its adapters. `CARD_STORE=sqlite`
 and `TELEMETRY_SINK=mongo` preserve defaults; stdout/none telemetry need no Mongo.
 HTTP code consumes `CardStorePort` and `StorageUnavailable`, while SQLite owns
@@ -132,6 +141,13 @@ and local resource requirements.
 
 ## Run, debug, and test the implemented application
 
+For a new checkout, start with [the README](../README.md). Install
+`.[dev,infra,chat]`, configure ignored `.env`, and choose **Debug Chat + API** in
+VS Code. The compound starts the host API on 8010 and chat on 8020. Wait for both
+startup messages and open `http://127.0.0.1:8020`. With `TELEMETRY_SINK=stdout`, no
+Docker services are required. Configurations live in `.vscode/launch.json`.
+Use the separate modes below when you want only the API or a container API.
+
 For Docker, run `scripts/start-docker-api.ps1 -DebugApi -Build`, attach using
 **Attach to Docker API**, and open <http://127.0.0.1:8011/docs>. Rebuild after source
 changes because the image contains a snapshot; restarting alone does not update
@@ -157,7 +173,10 @@ Run the existing automated tests without starting a server:
 
 Automated tests already use temporary SQLite files and injected/mocked telemetry
 without requiring Docker. They cover validation, restart persistence, idempotency
-conflicts/concurrency/rollback, telemetry failures, and readiness.
+conflicts/concurrency/rollback, telemetry failures, readiness, catalogue validation,
+model-proposed actions and real MCP/HTTP dispatch with a stub model. CI also checks
+`scripts/export_cards_openapi.py --check` and
+`scripts/render_chat_diagrams.py --check`. These checks do not rewrite documents.
 `scripts/check_infra.py` separately exercises real local services. Automated
 business-event delivery and Redis cache integration tests belong to future increments.
 

@@ -9,7 +9,7 @@ import httpx
 import pytest
 
 from card_chat.catalogue import CatalogueError, load_catalogue
-from card_chat.main import create_app
+from test_chat import create_app, prepare_review
 from card_chat.gateway import Gateway, connect
 from card_chat.turns import CustomerReply, ProposedToolCall
 from test_chat import StubModel, running_api
@@ -44,10 +44,10 @@ def test_config_only_second_operation_real_mcp_http(monkeypatch, lose_result):
             assert set(client.app.state.gateway.tools) == {'create_card', 'block_card'}
             path = '/conversations/' + client.post('/conversations').json()['id']
             assert client.post(path + '/messages', json={'text': 'block my card'}).json()['review'] is None
-            review = client.post(path + '/messages', json={'text': '000042, customer requested'}).json()
+            review = prepare_review(client, path.rsplit('/', 1)[1], {'card_id': '000042', 'reason': 'customer requested'}, 'block_card').json()
             assert review['confirmation_label'] == 'Block this card'
             assert httpx.get(url + '/test-stats').json()['writes'] == 0
-            fresh = client.post(path + '/messages', json={'text': 'change reason to updated reason'}).json()
+            fresh = prepare_review(client, path.rsplit('/', 1)[1], {'card_id': '000042', 'reason': 'updated reason'}, 'block_card').json()
             assert client.post(path + '/confirm', json={'review': review['review']}).status_code == 409
             assert httpx.get(url + '/test-stats').json()['writes'] == 0
             for definitions in model.seen_tools:
@@ -64,7 +64,7 @@ def test_config_only_second_operation_real_mcp_http(monkeypatch, lose_result):
                 assert '000042' in response['message']
             duplicate = client.post(path + '/confirm', json=confirmation).json()
             assert duplicate['message'] == response['message'] if not lose_result else 'cannot be safely retried' in duplicate['message']
-            assert len(tool_calls) == 1 and len(model.seen_tools) == 3
+            assert len(tool_calls) == 1 and len(model.seen_tools) == 1
             assert httpx.get(url + '/test-stats').json() == {'writes': 1, 'card_id': '000042', 'reason': 'updated reason'}
 
 

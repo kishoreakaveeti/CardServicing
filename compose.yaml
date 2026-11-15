@@ -1,74 +1,117 @@
-name: card-servicing
+name: card-servicing-http
+x-python: &python
+  build: {context: ., target: runtime}
+  command: [python, scripts/service_entrypoint.py]
+  restart: unless-stopped
+  healthcheck:
+    test: [CMD, python, -c, "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=3)"]
+    interval: 5s
+    timeout: 4s
+    retries: 30
+    start_period: 15s
+x-oidc: &oidc
+  OIDC_ISSUER: http://localhost:8081/realms/cards
+  OIDC_JWKS_URL: http://identity:8080/realms/cards/protocol/openid-connect/certs
+  OIDC_TOKEN_URL: http://identity:8080/realms/cards/protocol/openid-connect/token
+  DELEGATION_PUBLIC_KEY: /keys/delegation-public.pem
 services:
-  api:
-    profiles: [api]
-    image: card-servicing:${API_IMAGE_TAG:-local}
-    build:
-      context: .
-    env_file: .env
-    environment:
-      CARD_STORE: ${CARD_STORE:-sqlite}
-      TELEMETRY_SINK: ${TELEMETRY_SINK:-mongo}
-      SQLITE_PATH: /data/cards.db
-      MONGODB_HOST: mongodb
-      MONGODB_PORT: "27017"
-      REDIS_URL: redis://redis:6379/0
-    ports:
-      - "127.0.0.1:${API_PORT:-8011}:8000"
-    volumes:
-      - ./data:/data
+  frontend:
+    build: {context: ./frontend, target: runtime}
+    ports: ["127.0.0.1:8080:8080"]
     depends_on:
-      mongodb:
-        condition: service_started
+      experience: {condition: service_healthy}
+    healthcheck:
+      test: [CMD, wget, -q, --spider, http://127.0.0.1:8080/health]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+  experience:
+    <<: *python
+    environment:
+      <<: *oidc
+      APP_MODULE: card_chat.experience:app
+      AGENT_URL: http://agent:8000
+      PUBLIC_ORIGIN: http://localhost:8080
+      OIDC_AUTHORIZE_URL: http://localhost:8081/realms/cards/protocol/openid-connect/auth
+      SERVICE_CLIENT_ID: experience-service
+      SERVICE_CLIENT_SECRET: ${EXPERIENCE_SECRET:?Run scripts/setup-stack.ps1}
+      BROWSER_CLIENT_SECRET: ${BROWSER_SECRET:?Run scripts/setup-stack.ps1}
+      DELEGATION_PRIVATE_KEY: /keys/delegation-private.pem
+      SESSION_DB: /data/sessions.db
+    volumes:
+      - experience_data:/data
+      - ./data/identity/delegation-private.pem:/keys/delegation-private.pem:ro
+    depends_on:
+      agent: {condition: service_healthy}
+  agent:
+    <<: *python
+    environment:
+      <<: *oidc
+      APP_MODULE: card_chat.main:app
+      MCP_URL: http://mcp:8000/mcp
+      MODEL_PROVIDER: ${STACK_MODEL_PROVIDER:-stub}
+      MODEL_ID: ${MODEL_ID:-}
+      ANTHROPIC_PROMPT_CACHE: ${ANTHROPIC_PROMPT_CACHE:-false}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      SERVICE_CLIENT_ID: agent-service
+      SERVICE_CLIENT_SECRET: ${AGENT_SECRET:?Run scripts/setup-stack.ps1}
+      AGENT_DB: /data/agent.db
+    volumes:
+      - agent_data:/data
+      - ./data/identity/delegation-public.pem:/keys/delegation-public.pem:ro
+    depends_on:
+      mcp: {condition: service_healthy}
+  mcp:
+    <<: *python
+    environment:
+      <<: *oidc
+      APP_MODULE: card_chat.mcp_server:app
+      CARD_API_BASE_URL: http://cards:8000
+      MCP_RESOURCE: http://mcp:8000/mcp
+      SERVICE_CLIENT_ID: mcp-service
+      SERVICE_CLIENT_SECRET: ${MCP_SECRET:?Run scripts/setup-stack.ps1}
+    volumes:
+      - ./data/identity/delegation-public.pem:/keys/delegation-public.pem:ro
+    depends_on:
+      cards: {condition: service_healthy}
+      identity: {condition: service_healthy}
+  cards:
+    <<: *python
+    environment:
+      <<: *oidc
+      APP_MODULE: card_servicing.main:app
+      CARD_STORE: sqlite
+      SQLITE_PATH: /data/cards.db
+      TELEMETRY_SINK: none
+    volumes:
+      - cards_data:/data
+      - ./data/identity/delegation-public.pem:/keys/delegation-public.pem:ro
     healthcheck:
       test: [CMD, python, -c, "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health/ready', timeout=3)"]
-      interval: 10s
-      timeout: 5s
-      retries: 6
-      start_period: 15s
-    stop_grace_period: 10s
-  mongodb:
-    image: mongo:8.0
+      interval: 5s
+      timeout: 4s
+      retries: 20
+  identity:
+    image: quay.io/keycloak/keycloak:26.4.7
+    command: [start-dev, --import-realm]
     environment:
-      MONGO_INITDB_ROOT_USERNAME: ${MONGO_USER:?Run setup-infra.ps1 first}
-      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_PASSWORD:?Run setup-infra.ps1 first}
-    ports:
-      - "127.0.0.1:27018:27017"
+      KC_HOSTNAME: http://localhost:8081
+      KC_HOSTNAME_BACKCHANNEL_DYNAMIC: "true"
+      KC_HEALTH_ENABLED: "true"
+      KC_BOOTSTRAP_ADMIN_USERNAME: admin
+      KC_BOOTSTRAP_ADMIN_PASSWORD: ${IDENTITY_ADMIN_PASSWORD:?Run scripts/setup-stack.ps1}
+    ports: ["127.0.0.1:8081:8080"]
     volumes:
-      - mongodb_data:/data/db
+      - ./data/identity/realm.json:/opt/keycloak/data/import/realm.json:ro
+      - identity_data:/opt/keycloak/data
     healthcheck:
-      test: [CMD, mongosh, --quiet, --eval, "quit(db.adminCommand('ping').ok ? 0 : 1)"]
-      interval: 10s
+      test: [CMD, bash, -c, "exec 3<>/dev/tcp/127.0.0.1/9000; printf 'GET /health/ready HTTP/1.0\r\n\r\n' >&3; grep -q '200 OK' <&3"]
+      interval: 5s
       timeout: 5s
-      retries: 12
-      start_period: 20s
-  redis:
-    image: redis:8-alpine
-    command: [redis-server, --save, "", --appendonly, "no", --maxmemory, 128mb, --maxmemory-policy, allkeys-lru]
-    ports:
-      - "127.0.0.1:6380:6379"
-    healthcheck:
-      test: [CMD, redis-cli, ping]
-      interval: 10s
-      timeout: 5s
-      retries: 6
-  rabbitmq:
-    image: rabbitmq:4-management
-    hostname: card-servicing-rabbitmq
-    environment:
-      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER:?Run setup-infra.ps1 first}
-      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD:?Run setup-infra.ps1 first}
-    ports:
-      - "127.0.0.1:5673:5672"
-      - "127.0.0.1:15673:15672"
-    volumes:
-      - rabbitmq_data:/var/lib/rabbitmq
-    healthcheck:
-      test: [CMD, rabbitmq-diagnostics, -q, check_running]
-      interval: 10s
-      timeout: 10s
-      retries: 12
+      retries: 60
       start_period: 30s
 volumes:
-  mongodb_data:
-  rabbitmq_data:
+  agent_data:
+  experience_data:
+  cards_data:
+  identity_data:

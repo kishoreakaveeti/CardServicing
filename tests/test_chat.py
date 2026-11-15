@@ -15,10 +15,33 @@ from fastapi.testclient import TestClient
 
 from card_chat.catalogue import load_catalogue
 from card_chat.gateway import connect
-from card_chat.main import create_app
+from card_chat.main import create_app as agent_app
 from card_chat.turns import CustomerReply, ProposedToolCall
 
 BODY = {'given_name': 'Alex', 'user_name': 'alex.synthetic', 'account_number': '0012345678'}
+LOCAL_CUSTOMER = {'sub': 'isolated-test', 'username': 'alex.synthetic', 'accounts': ['0012345678'],
+                  'permissions': ['tools:execute']}
+
+
+def create_app(model=None, gateway=None, *, config=None):
+    from card_chat.config import settings
+    return agent_app(model, gateway, config={'LOCAL_CUSTOMER': LOCAL_CUSTOMER, **(settings() if config is None else config)})
+
+
+def prepare_review(client, cid, body=None, tool='create_card', headers=None):
+    body = BODY if body is None else body
+    headers = headers or {}
+    options = client.get(f'/conversations/{cid}/inputs', headers=headers).json()
+    definition = next(item for item in options['tools'] if item['name'] == tool)
+    fields, selections = {}, {}
+    for field in definition['fields']:
+        if field.get('options'):
+            if field['name'] in body:
+                selections[field['name']] = field['options'][0]['ref']
+        elif field['name'] in body:
+            fields[field['name']] = body[field['name']]
+    return client.post(f'/conversations/{cid}/inputs', json={'tool': tool, 'fields': fields,
+                       'selections': selections}, headers=headers)
 
 
 class StubModel:
@@ -50,6 +73,8 @@ def running_api(*, runtime_env=None, stdout=None, app_target=None):
                                stdout=stdout if stdout is not None else subprocess.DEVNULL,
                                stderr=subprocess.DEVNULL)
     url = f'http://127.0.0.1:{port}'
+    mcp_process = None
+    previous_mcp = os.environ.get('MCP_URL')
     try:
         for _ in range(100):
             try:
@@ -60,8 +85,33 @@ def running_api(*, runtime_env=None, stdout=None, app_target=None):
             time.sleep(.1)
         else:
             raise RuntimeError('REST process did not start')
+        # Integration harness starts two independent HTTP services. Production
+        # Gateway never creates a process or selects a stdio transport.
+        with socket.socket() as sock:
+            sock.bind(('127.0.0.1', 0))
+            mcp_port = sock.getsockname()[1]
+        os.environ['MCP_URL'] = f'http://127.0.0.1:{mcp_port}/mcp'
+        mcp_process = subprocess.Popen([sys.executable, '-m', 'uvicorn',
+            'card_chat.mcp_server:app', '--port', str(mcp_port)],
+            env={**os.environ, 'CARD_API_BASE_URL': url, 'ALLOW_INSECURE_LOCAL': '1'}, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        for _ in range(100):
+            try:
+                if httpx.get(f'http://127.0.0.1:{mcp_port}/health', timeout=.2).status_code == 200:
+                    break
+            except httpx.RequestError:
+                pass
+            time.sleep(.1)
+        else:
+            raise RuntimeError('MCP HTTP service did not start')
         yield url
     finally:
+        if mcp_process:
+            mcp_process.terminate()
+            mcp_process.wait(timeout=10)
+        if previous_mcp is None:
+            os.environ.pop('MCP_URL', None)
+        else:
+            os.environ['MCP_URL'] = previous_mcp
         process.terminate()
         process.wait(timeout=10)
 
@@ -107,7 +157,7 @@ def test_full_chat_real_mcp_retry_after_commit(monkeypatch, tmp_path, runtime_si
         with TestClient(create_app(model=model)) as client:
             cid = client.post('/conversations').json()['id']
             path = f'/conversations/{cid}'
-            review = client.post(path + '/messages', json={'text': 'synthetic details'}).json()['review']
+            review = prepare_review(client, cid).json()['review']
             assert calls == []
             confirmation = {'review': review}
             assert 'retry' in client.post(path + '/confirm', json=confirmation).json()['message']
@@ -116,7 +166,7 @@ def test_full_chat_real_mcp_retry_after_commit(monkeypatch, tmp_path, runtime_si
             assert len(calls) == 2
             assert calls[0] == calls[1]
             assert results[0] == results[1] and results[0]['ok'] is True
-            assert len(model.seen_tools) == 1  # No model invocation at confirmation/retry.
+            assert len(model.seen_tools) == 0  # Structured review, confirmation and retry bypass the model.
     if runtime is not None:
         import sqlite3
         from contextlib import closing
@@ -152,13 +202,13 @@ def test_conversation_confirmation_and_retry():
             return client.post(path + '/messages', json={'text': text}).json()
         assert 'creating' in say(CustomerReply('This demo supports creating a card, not freezing it.'))['message']
         assert 'given name' in say(CustomerReply('What is your given name?'))['message']
-        partial = say(ProposedToolCall('create_card', {'given_name': 'Alex', 'user_name': 'alex.synthetic'}))
-        assert partial['review'] is None and 'Account number' in partial['message']
-        review = say(ProposedToolCall('create_card', BODY))
+        partial = prepare_review(client, data['id'], {'given_name': 'Alex'}).json()
+        assert partial['review'] is None and 'required fields' in partial['message']
+        review = prepare_review(client, data['id']).json()
         assert '0012345678' not in review['message'] and '******5678' in review['message']
         assert review['confirmation_label'] == 'Create card'
         assert gateway.calls == []
-        fresh = say(ProposedToolCall('create_card', {**BODY, 'given_name': 'Sam'}))
+        fresh = prepare_review(client, data['id'], {**BODY, 'given_name': 'Sam'}).json()
         assert client.post(path + '/confirm', json={'review': review['review']}).status_code == 409
         count = len(model.seen_tools)
         gateway.fail = True
@@ -170,7 +220,7 @@ def test_conversation_confirmation_and_retry():
         assert gateway.calls[0][1]['account_number'] == '0012345678'
         client.post(path + '/confirm', json=confirmation)
         assert len(gateway.calls) == 2 and len(model.seen_tools) == count
-        assert model.seen_context[-1][1]['arguments'] == BODY
+        assert '0012345678' not in str(model.seen_context)
 
 
 @pytest.mark.parametrize('fields', [{'account_number': 123}, {'given_name': 'x' * 101}, {'extra': 'x'}, {'account_number': 'x\x00'}])
@@ -178,9 +228,11 @@ def test_invalid_arguments_never_write(fields):
     model, gateway = StubModel(), Gateway()
     with TestClient(create_app(model, gateway)) as client:
         cid = client.post('/conversations').json()['id']
-        model.outputs.append(ProposedToolCall('create_card', {**BODY, **fields}))
-        response = client.post(f'/conversations/{cid}/messages', json={'text': 'synthetic'})
-        assert response.json()['review'] is None
+        option = client.get(f'/conversations/{cid}/inputs').json()['tools'][0]['fields']
+        ref = next(field['options'][0]['ref'] for field in option if field.get('options'))
+        response = client.post(f'/conversations/{cid}/inputs', json={'tool': 'create_card',
+            'fields': {'given_name': 'Alex', **fields}, 'selections': {'account_number': ref}})
+        assert response.status_code == 422
         assert gateway.calls == []
 
 
@@ -188,8 +240,8 @@ def test_unknown_tool_and_plain_reply_invalidate_review():
     model, gateway = StubModel(), Gateway()
     with TestClient(create_app(model, gateway)) as client:
         path = '/conversations/' + client.post('/conversations').json()['id']
-        model.outputs = [ProposedToolCall('create_card', BODY), ProposedToolCall('unknown_tool', BODY), CustomerReply('Please clarify your request.')]
-        review = client.post(path + '/messages', json={'text': 'new card'}).json()['review']
+        model.outputs = [ProposedToolCall('unknown_tool', {}), CustomerReply('Please clarify your request.')]
+        review = prepare_review(client, path.rsplit('/', 1)[1]).json()['review']
         assert client.post(path + '/messages', json={'text': 'different action'}).json()['review'] is None
         assert client.post(path + '/confirm', json={'review': review}).status_code == 409
         assert client.post(path + '/messages', json={'text': 'unclear'}).json()['review'] is None
@@ -206,7 +258,8 @@ def test_anthropic_adapter_uses_automatic_tool_selection():
             tools = Gateway().tools
             reply = await adapter.turn([{'role': 'user', 'content': 'new card'}], {}, tools)
             assert isinstance(reply, CustomerReply)
-            assert create.call_args.kwargs['tools'] == list(tools.values())
+            assert {t['name'] for t in create.call_args.kwargs['tools']} == set(tools)
+            assert create.call_args.kwargs['tools'][0]['input_schema']['properties']['account_number']['x-model-input'] == 'reference'
             assert create.call_args.kwargs['tool_choice']['type'] == 'auto'
             assert 'idempotency_key' not in str(create.call_args.kwargs)
             create.return_value = SimpleNamespace(stop_reason='tool_use', content=[SimpleNamespace(type='tool_use', name='create_card', input=BODY)])

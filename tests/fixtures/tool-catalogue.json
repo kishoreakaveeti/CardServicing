@@ -10,6 +10,7 @@
       "label": "Create card",
       "idempotency_header": "Idempotency-Key",
       "sensitive_fields": ["account_number"],
+      "trusted_fields": {"account_number": "account", "user_name": "username"},
       "result_labels": {"card_number": "Simulated card", "id": "Reference"}
     },
     {
@@ -19,6 +20,8 @@
       "confirmation": "required",
       "label": "Block card",
       "confirmation_label": "Block this card",
+      "context_fields": ["reason"],
+      "sensitive_fields": ["card_id"],
       "field_labels": {"card_id": "Card reference", "reason": "Reason"},
       "result_labels": {"card_id": "Card reference", "status": "Status"}
     }

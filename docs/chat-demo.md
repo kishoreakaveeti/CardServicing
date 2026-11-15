@@ -1,5 +1,13 @@
 # Local card chat demo
 
+The current runnable demo uses [React and the independent HTTP services](http-stack.md).
+Private details now use the secure form and masked picker, with
+[minimal model context](model-privacy.md); the earlier free-text collection examples
+below describe the superseded flow.
+Agent connects to MCP over Streamable HTTP; it no longer launches an MCP child.
+The detailed earlier workflow explanation below is retained, but use the linked
+guide for current authentication, startup and debugging commands.
+
 For the detailed code trace and downloadable vector diagrams, see
 [the end-to-end walkthrough](chat-end-to-end.md) and
 [offline diagram viewer](diagrams/index.html).
@@ -26,6 +34,13 @@ MCP execution stay in `main.py`. There is no fixed intent or question mapping.
 
 ## Install and run in PowerShell
 
+For a fresh clone, follow [the README quick start](../README.md)
+first: create the virtual environment, install the chat extra, and configure
+ignored `.env`. The primary debugging path is **Debug Chat + API**, which starts
+both host applications together. The terminal commands below are an alternative;
+do not run them alongside that compound on the same ports. Use
+`TELEMETRY_SINK=stdout` to run locally without Docker or MongoDB.
+
 Use the existing virtual environment, from the repository root:
 
 ```powershell
@@ -34,8 +49,7 @@ python -m pip install -e ".[dev,infra,chat]"
 python -m pytest -q
 ```
 
-Terminal 1, start the existing host API (uses the existing `.env` infrastructure
-configuration, SQLite and best-effort Mongo telemetry):
+Terminal 1, start the host API (uses the selected `.env` telemetry sink and SQLite):
 
 ```powershell
 .\.venv\Scripts\Activate.ps1
@@ -73,16 +87,16 @@ MCP startup is needed. Use a single chat worker without reload for this demo.
 
 ## Live Anthropic smoke steps
 
-A live hosted-model smoke test was not run during implementation; no cloud
-credential was supplied for the initial chat implementation. During the later
-[adapter refactor](infrastructure-adapters.md), live Anthropic -> MCP -> HTTP
-smoke flows passed for Mongo and stdout, including a lost-response retry. To
-perform the visual browser smoke after the commands above:
+Automated tests use a stub model, not cloud credentials. Separate live Claude
+checks have exercised multi-turn questions, review, creation and replay; see the
+[catalogue verification record](tool-catalogue.md#verification). To repeat the
+browser flow after startup, use the steps below. Wording and question order are
+model-generated and can vary.
 
 1. Confirm the exact greeting: “Hi! What would you like help with?”
 2. Enter “Freeze my card”. Expect an explanation that creation is supported.
 3. Enter “card servicing”. Expect a question about creating a card for an existing account.
-4. Enter “Yes, create a new card”. Expect one question for the given name.
+4. Enter “Yes, create a new card”. Expect a question for missing customer details.
 5. Enter “My given name is Alex and my user name is alex.synthetic”. Expect the account question.
 6. Enter “0012345678”. Expect a masked account review with a Create card button.
 7. Enter “Change my given name to Sam”. Expect a fresh review. No REST write has occurred.
@@ -121,12 +135,20 @@ by native app access approval timing out. Run this harness to finish that check.
 
 ## VS Code debugging
 
-1. Select `.venv/Scripts/python.exe` with **Python: Select Interpreter**.
-2. Start **Debug API** (8010), or start Docker and **Attach to Docker API** (5679).
-3. Set the chat environment using the PowerShell commands above in the integrated
-   terminal. Choose **Python Debugger: Debug using launch.json** → **Debug Chat**,
-   or use **Debug Chat** directly after putting local secrets in ignored `.env`.
-   The launch configuration loads `.env`; don't put the key in `launch.json`.
+1. Select `.venv/Scripts/python.exe` with **Python: Select Interpreter**. Put live
+   model settings in the root ignored `.env`; do not put keys in `launch.json`.
+2. Stop old host/container APIs sharing the database and any manual chat server.
+   Choose **Debug Chat + API** in Run and Debug and press **F5**. This starts host
+   **Debug API** (8010) and **Debug Chat** (8020) together. Wait for both startup
+   messages, then open `http://127.0.0.1:8020` and start a fresh conversation.
+3. The labels and compound are defined in [launch.json](../.vscode/launch.json).
+   Both sessions appear under CALL STACK. The compound's `stopAll:true` stops both
+   sessions when either is stopped. Terminal-only runs need Ctrl+C in each terminal.
+   For Docker instead, set `CARD_API_BASE_URL=http://127.0.0.1:8011`, start the
+   debug container, then start **Attach to Docker API** and **Debug Chat** separately.
+   Do not select the host compound for that mode. Variables set only in an
+   integrated terminal are not guaranteed to configure a launch started by VS Code;
+   use `.env` or explicit launch configuration for debugger sessions.
 4. Set breakpoints in `main.py` at `message`, `confirm`, and
    `gateway.execute`. `Debug Chat` uses `subProcess: false` to keep automatic
    debugger attachment out of the MCP stdio child startup. The compound
