@@ -80,7 +80,8 @@ def main():
         wait_for(dependency)
     print(f'{args.component}: starting HTTP on http://127.0.0.1:{port}', flush=True)
     import uvicorn
-    uvicorn.run(module, host='127.0.0.1', port=port, access_log=False)
+    # Keep the startup message stable for VS Code's serverReadyAction trigger.
+    uvicorn.run(module, host='127.0.0.1', port=port, access_log=False, use_colors=False)
 
 
 if __name__ == '__main__':

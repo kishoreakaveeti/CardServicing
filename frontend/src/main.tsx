@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import './style.css';
+import { readSessionResponse } from './http';
 
 type Reply = { id?: string; message: string; review: string | null; can_confirm: boolean; confirmation_label: string | null; input_tool?: string | null; data?: {accounts?: {account_number:string;account_type:string}[];cards?: {id:string;account_number:string;card_number:string}[]} };
 type Session = { name: string; csrf: string };
@@ -27,7 +28,7 @@ function App() {
   const [authAction, setAuthAction] = useState('');
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
-  useEffect(() => { fetch('/api/session').then(r => r.ok ? r.json() : null).then(setSession).catch(() => setError('Session unavailable. Refresh to try again.')); }, []);
+  useEffect(() => { fetch('/api/session').then(r => r.ok ? readSessionResponse(r) : null).then(setSession).catch(() => setError('Session unavailable. Refresh to try again.')); }, []);
   useEffect(() => {
     let active = true;
     setValues({}); setTools([]); setTool(''); setShowInputs(false);
@@ -117,8 +118,7 @@ function App() {
     try {
       const response = await fetch(authAction === 'register' ? '/auth/register' : '/auth/password-login', {
         method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({username,password:secret})});
-      const data = await response.json();
-      if (!response.ok) throw new Error(data.detail || 'Sign-in failed');
+      const data = await readSessionResponse(response);
       setSession(data); setAuthAction(''); setUsername(''); setCid(''); setReply(null); setPending(null);
       setMessages(['Welcome. Start a conversation to view accounts, create an account or issue a card.']);
     } catch(e) {setError(e instanceof Error ? e.message : 'Sign-in unavailable');}

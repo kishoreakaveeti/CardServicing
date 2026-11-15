@@ -318,13 +318,13 @@ Wait for startup, then open **http://localhost:8080**. No debugger is attached. 
 2. Open the repository root; select `.venv/Scripts/python.exe` with **Python: Select Interpreter**.
 3. Select **Debug Full Stack (Local)** in **Run and Debug** and press **F5**.
 4. Preparation starts missing local infrastructure, validates prerequisites/free ports and starts Vite.
-5. VS Code launches four native Python debuggers; the dependency chain is Cards → MCP → Agent → Experience.
-6. **Wait for Local HTTP** checks readiness alongside those launches. Chrome opens at `http://localhost:8080` when endpoints are ready.
+5. VS Code launches four native Python debuggers in separately named service consoles; the dependency chain is Cards → MCP → Agent → Experience.
+6. Experience startup reports its listening address to VS Code. A `serverReadyAction` then launches the browser debugger at `http://localhost:8080`. There is no separate blocking HTTP-wait pre-launch task; the four Python debuggers can start independently.
 7. Set breakpoints in local source and trigger an action. For model-provider breakpoints, select Anthropic and send a chat intent; direct buttons/forms intentionally bypass the model.
 
 Individual **Debug Local Experience API**, **Debug Local Agent API**, **Debug Local MCP Server** and **Debug Local Cards API** profiles launch only that process; dependencies must already run. The browser-only **Debug Local Frontend** profile is hidden from the normal picker because it does not start the app. Use local launch profiles, not Docker **Attach to...** profiles, for native execution.
 
-Do not choose **Debug Anyway** after a failed prerequisite: it only skips the check and can open a browser against an unavailable server. Inspect the named task/service terminal. `KeyboardInterrupt` means a wait/process was interrupted; the startup message immediately before it identifies the awaited dependency. Loopback readiness requests bypass HTTP proxies.
+Do not choose **Debug Anyway** after a failed prerequisite: it only skips the check and can open a browser against an unavailable server. Inspect the named task/service terminal. If an older debug session still shows **Wait for Local HTTP**, stop that session and its Vite task before starting the updated local profile. `KeyboardInterrupt` means a wait/process was interrupted; the startup message immediately before it identifies the awaited dependency. Loopback readiness requests bypass HTTP proxies.
 
 ### Ports, persistence and shutdown
 
@@ -370,6 +370,7 @@ Automated checks from the repository root need no running Docker stack:
 .\.venv\Scripts\python.exe scripts/render_chat_diagrams.py --check
 Push-Location frontend
 npm.cmd ci
+npm.cmd test
 npm.cmd run build
 Pop-Location
 ```
@@ -383,7 +384,7 @@ Verification scope: automated tests cover authentication, ownership, direct/conv
 | Symptom | Action |
 | --- | --- |
 | UI cannot be reached | Check the selected full-stack profile, frontend and Identity health. npm alone does not start the app. Use 8080, not internal 8000 or BFF 8020 |
-| Waiting for local HTTP | Inspect **Start Local Infrastructure**, **Check Local Prerequisites**, **Start Local Frontend** and the Python terminals; continue startup breakpoints. Do not skip failures with Debug Anyway |
+| Browser has not opened | The browser waits for Experience to report that it is listening. Inspect **Start Local Infrastructure**, **Check Local Prerequisites**, **Start Local Frontend** and the Python terminals; continue startup breakpoints. The old HTTP-wait pre-launch task has been removed |
 | `KeyboardInterrupt` connecting | The process was stopped while waiting. Read the preceding awaited URL and start/check that dependency |
 | npm missing | Install host Node/npm and fully restart VS Code. Verify `node --version`, `npm.cmd --version`; Docker's Node does not supply host npm |
 | PowerShell blocks npm | Use `npm.cmd`. For repository `.ps1` scripts, follow your machine's policy; Python equivalents such as `scripts/setup_stack.py` are available |
@@ -405,3 +406,7 @@ Verification scope: automated tests cover authentication, ownership, direct/conv
 - [Docker debugging](docker-debugging.md), [diagram viewer](diagrams/index.html)
 
 Use `compose.yaml` plus optional `compose.debug.yaml` for the current application. `compose.infra.yaml`, `compose.api.yaml` and [legacy host setup](legacy-host-setup.md) describe earlier API-only learning configurations. Redis/RabbitMQ from that earlier stack are not required by the current banking flow. Do not infer current VS Code profile names from historical guides.
+
+Authentication forms report a clear service-unavailable error for empty/non-JSON proxy responses. `npm.cmd run dev:local` targets native Experience on 8020 by default; `EXPERIENCE_PROXY_TARGET` remains an optional override.
+
+Each native Python profile has a unique `consoleName` to prevent simultaneous debug launches from sharing the generic Python Debug Console. Experience output is also redirected to the Debug Console so the server-ready browser trigger can observe its listening message.

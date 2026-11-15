@@ -42,16 +42,26 @@ def test_browser_readiness_signals_only_when_every_service_is_ready(monkeypatch,
     assert 'LOCAL_HTTP_READY:' not in capsys.readouterr().out
 
 
-def test_local_browser_wait_has_a_background_readiness_matcher():
+def test_local_browser_starts_only_after_experience_is_listening():
     import json
+    import re
     tasks = json.loads((ROOT / '.vscode/tasks.json').read_text())['tasks']
-    wait = next(t for t in tasks if t['label'] == 'Wait for Local HTTP')
-    assert wait['isBackground']
-    assert wait['problemMatcher']['background']['endsPattern'] == '^LOCAL_HTTP_READY:'
+    assert not any(t['label'] == 'Wait for Local HTTP' for t in tasks)
     launch = json.loads((ROOT / '.vscode/launch.json').read_text())
     local = next(c for c in launch['compounds'] if c['name'] == 'Debug Full Stack (Local)')
     assert local['preLaunchTask'] == 'Prepare Local Stack'
-    assert len(local['configurations']) == 5
+    assert len(local['configurations']) == 4
+    assert 'Debug Local Frontend' not in local['configurations']
+    experience = next(c for c in launch['configurations'] if c['name'] == 'Debug Local Experience API')
+    ready = experience['serverReadyAction']
+    assert ready['action'] == 'startDebugging' and ready['name'] == 'Debug Local Frontend'
+    assert ready['killOnServerStop'] and experience['redirectOutput']
+    assert re.search(ready['pattern'], 'INFO: Uvicorn running on http://127.0.0.1:8020 (Press CTRL+C to quit)')
+    browser = next(c for c in launch['configurations'] if c['name'] == ready['name'])
+    assert 'preLaunchTask' not in browser
+    # Simultaneous services must not share/reuse the generic Python debug terminal.
+    launches = [c for c in launch['configurations'] if c['name'] in local['configurations']]
+    assert len({c['consoleName'] for c in launches}) == 4
     prepare = next(t for t in tasks if t['label'] == 'Prepare Local Stack')
     assert prepare['dependsOn'] == ['Start Local Infrastructure', 'Check Local Prerequisites', 'Start Local Frontend']
 

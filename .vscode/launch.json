@@ -8,8 +8,7 @@
         "Debug Local Experience API",
         "Debug Local Agent API",
         "Debug Local MCP Server",
-        "Debug Local Cards API",
-        "Debug Local Frontend"
+        "Debug Local Cards API"
       ],
       "stopAll": true
     },
@@ -126,7 +125,15 @@
       },
       "console": "integratedTerminal",
       "justMyCode": true,
-      "subProcess": false
+      "subProcess": false,
+      "redirectOutput": true,
+      "serverReadyAction": {
+        "pattern": "Uvicorn running on http://127\\.0\\.0\\.1:8020",
+        "action": "startDebugging",
+        "name": "Debug Local Frontend",
+        "killOnServerStop": true
+      },
+      "consoleName": "Local Experience API"
     },
     {
       "name": "Debug Local Agent API",
@@ -143,7 +150,8 @@
       },
       "console": "integratedTerminal",
       "justMyCode": true,
-      "subProcess": false
+      "subProcess": false,
+      "consoleName": "Local Agent API"
     },
     {
       "name": "Debug Local MCP Server",
@@ -160,7 +168,8 @@
       },
       "console": "integratedTerminal",
       "justMyCode": true,
-      "subProcess": false
+      "subProcess": false,
+      "consoleName": "Local MCP Server"
     },
     {
       "name": "Debug Local Cards API",
@@ -177,7 +186,8 @@
       },
       "console": "integratedTerminal",
       "justMyCode": true,
-      "subProcess": false
+      "subProcess": false,
+      "consoleName": "Local Cards API"
     },
     {
       "name": "Debug Local Frontend",
@@ -186,7 +196,6 @@
       "url": "http://localhost:8080",
       "webRoot": "${workspaceFolder}/frontend",
       "sourceMaps": true,
-      "preLaunchTask": "Wait for Local HTTP",
       "presentation": {
         "hidden": true
       }

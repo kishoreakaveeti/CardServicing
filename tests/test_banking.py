@@ -211,3 +211,18 @@ def test_credentials_are_redacted_and_auth_attempts_are_limited(identity, tmp_pa
         for _ in range(20):
             assert client.post('/auth/password-login',headers=origin,json={'username':'alex','password':'incorrect password'}).status_code == 401
         assert client.post('/auth/password-login',headers=origin,json={'username':'alex','password':'incorrect password'}).status_code == 429
+
+
+def test_identity_token_failure_returns_safe_json_for_login(identity, monkeypatch):
+    config, _ = identity
+    async def failed_headers(self):
+        request = httpx.Request('POST','https://identity.test/token')
+        response = httpx.Response(401,request=request,json={'detail':'private upstream data'})
+        raise httpx.HTTPStatusError('private upstream data',request=request,response=response)
+    monkeypatch.setattr(Security,'headers',failed_headers)
+    with TestClient(experience_app({**config,'PUBLIC_ORIGIN':'http://testserver'})) as client:
+        result = client.post('/auth/password-login',headers={'Origin':'http://testserver'},
+                             json={'username':'alex','password':'synthetic password'})
+        assert result.status_code==503
+        assert result.json()=={'detail':'Banking service unavailable'}
+        assert 'private upstream data' not in result.text

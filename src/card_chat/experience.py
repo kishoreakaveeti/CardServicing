@@ -154,7 +154,7 @@ def create_app(config=None):
                 details = {401: 'Invalid username or password', 409: 'Username is already registered'}
                 raise HTTPException(response.status_code, details.get(response.status_code, 'Banking request rejected'))
             return response.json()
-        except (httpx.RequestError, ValueError):
+        except (httpx.HTTPError, ValueError):
             raise HTTPException(503, 'Banking service unavailable') from None
         finally:
             delegation.reset(dt)
