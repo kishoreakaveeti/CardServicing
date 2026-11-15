@@ -57,6 +57,8 @@ def create_app(model=None, gateway=None, *, config=None):
             raise RuntimeError('Configure OIDC before starting Agent; isolated local tests must opt into ALLOW_INSECURE_LOCAL=1')
         app.state.token_vault = InMemoryTokenVault()
         app.state.pii_gateway = PIIGateway(vault=app.state.token_vault)
+        from card_chat.pii.gateway import set_default_pii_gateway
+        set_default_pii_gateway(app.state.pii_gateway)
         app.state.model = model or make_model(config)
         cards_agent = CardServicingAgent(app.state.model)
         local_fincrime = FinCrimeAgent(app.state.model)
@@ -66,10 +68,13 @@ def create_app(model=None, gateway=None, *, config=None):
             fincrime_agent = RemoteFinCrimeAgent(fincrime_agent_url, fallback_agent=local_fincrime)
         else:
             fincrime_agent = local_fincrime
+        from card_chat.orchestration.persistence import DurableSqliteSaver
+        checkpointer = DurableSqliteSaver(config.get('AGENT_DB', ':memory:'))
         app.state.orchestrator = AgentOrchestrator(
             app.state.model, cards_agent, fincrime_agent,
             check_blocked_fn=check_account_has_blocked,
-            agent_tools_policy=get_agent_tools_policy(config)
+            agent_tools_policy=get_agent_tools_policy(config),
+            checkpointer=checkpointer,
         )
         app.state.agent = app.state.orchestrator
         try:
@@ -88,6 +93,8 @@ def create_app(model=None, gateway=None, *, config=None):
             await asyncio.gather(*tasks, return_exceptions=True)
             await app.state.model.close()
             journal.close()
+            if hasattr(checkpointer, 'close'):
+                checkpointer.close()
 
     app = FastAPI(title='Card Agent API', version='1.0', lifespan=lifespan)
     protect(app, config, 'agent', 'agent:invoke', 'experience-service')
@@ -242,14 +249,17 @@ def create_app(model=None, gateway=None, *, config=None):
     async def entry_message(body: Message):
         pii_res = app.state.pii_gateway.sanitize_input(body.text, owner="entry", session_id="entry") if hasattr(app.state, "pii_gateway") else None
         safe = sanitise(pii_res.text) if pii_res else sanitise(body.text)
-        if (pii_res and pii_res.secrets_detected) or safe == PRIVATE_PASTE or safe != body.text:
+        if (pii_res and pii_res.secrets_detected) or safe == PRIVATE_PASTE or (not pii_res and safe != body.text):
             return Reply(message=PRIVATE_NOTICE)
         tools = {name: {'name': name, 'description': description,
                  'input_schema': {'type': 'object', 'properties': {}, 'additionalProperties': False}}
                  for name, description in [('register', 'Open the customer registration form.'),
                                             ('login', 'Open the customer login form.')]}
         try:
-            turn = await app.state.agent.interpret_turn([{'role': 'user', 'content': safe}], {}, tools)
+            turn = await app.state.agent.interpret_turn(
+                [{'role': 'user', 'content': safe}], {}, tools,
+                thread_id="entry:entry", owner="entry", session_id="entry"
+            )
         except Exception:
             raise HTTPException(503, 'Language service unavailable. Choose Register or Login.') from None
         if isinstance(turn, ProposedToolCall):
@@ -277,7 +287,7 @@ def create_app(model=None, gateway=None, *, config=None):
                         prefix = 'account' if 'account' in tok else 'input'
                         c.bindings[tok] = {'cid': cid, 'owner': owner(), 'tool': c.draft.get('tool', ''), 'field': prefix, 'value': raw_val}
                 safe_text = sanitise(pii_res.text, private_values(c))
-                if pii_res.secrets_detected or safe_text == PRIVATE_PASTE or safe_text != body.text:
+                if pii_res.secrets_detected or safe_text == PRIVATE_PASTE or (not pii_res and safe_text != body.text):
                     c.history.append({'role': 'user', 'content': PRIVATE_PASTE, 'kind': 'chat'})
                     return reply(c, PRIVATE_NOTICE)
             else:
@@ -308,7 +318,10 @@ def create_app(model=None, gateway=None, *, config=None):
                 verified_draft, model_tools, private_values=private_values(c))
             c.usage['model_calls'] = c.usage.get('model_calls', 0) + 1
             try:
-                turn = await app.state.agent.interpret_turn(history, draft, tools)
+                turn = await app.state.agent.interpret_turn(
+                    history, draft, tools,
+                    thread_id=f"{owner()}:{cid}", owner=owner(), session_id=cid
+                )
             except Exception as exc:
                 logger.exception("Language service / interpret_turn failed: %s", exc)
                 return reply(c, 'The language service is unavailable or proposed an invalid action. Please try again.')

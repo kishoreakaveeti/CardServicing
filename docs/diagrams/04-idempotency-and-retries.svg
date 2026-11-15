@@ -115,7 +115,7 @@
 <text x="55" y="2492" font-size="17" fill="#1e293b">Same key + different body returns 409. Chat state is memory-only; a new key is a new operation.</text>
 <text x="40" y="2590" class="heading" font-size="20" fill="#0f172a">Traceable code references</text>
 <a href="../../src/card_chat/catalogue.py"><text x="40" y="2615" font-size="16" fill="#1d4ed8">src/card_chat/catalogue.py:136</text></a>
-<a href="../../src/card_chat/main.py"><text x="40" y="2640" font-size="16" fill="#1d4ed8">src/card_chat/main.py:176</text></a>
+<a href="../../src/card_chat/main.py"><text x="40" y="2640" font-size="16" fill="#1d4ed8">src/card_chat/main.py:187</text></a>
 <a href="../../src/card_servicing/idempotency.py"><text x="40" y="2665" font-size="16" fill="#1d4ed8">src/card_servicing/idempotency.py:12</text></a>
 <a href="../../src/card_servicing/persistence.py"><text x="40" y="2690" font-size="16" fill="#1d4ed8">src/card_servicing/persistence.py:130</text></a>
 <a href="../../src/card_servicing/persistence.py"><text x="40" y="2715" font-size="16" fill="#1d4ed8">src/card_servicing/persistence.py:117</text></a>

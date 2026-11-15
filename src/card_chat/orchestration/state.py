@@ -19,7 +19,7 @@ class BankingWorkflowState(TypedDict, total=False):
 
     # Active delegation and minimal-context contracts
     current_handoff: AgentHandoff | None
-    handoff_history: Annotated[list[HandoffResult], operator.add]
+    handoff_history: list[HandoffResult]
     active_agent: str | None
     next_step: str | None  # 'cards_agent' | 'fincrime_agent' | 'supervisor' | 'human_confirmation' | 'respond'
 

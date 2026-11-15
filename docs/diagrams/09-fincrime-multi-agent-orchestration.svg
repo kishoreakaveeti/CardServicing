@@ -199,8 +199,8 @@
 <text x="405.55555555555554" y="4089" text-anchor="middle" font-size="16" fill="#0f172a">reactivated.&#x27;</text>
 <path d="M681.1111111111111 4107 H130.0" fill="none" stroke="#334155" stroke-width="2" stroke-dasharray="7 5" marker-end="url(#arrow)"/>
 <text x="40" y="4207" class="heading" font-size="20" fill="#0f172a">Traceable code references</text>
-<a href="../../src/card_chat/agent.py"><text x="40" y="4232" font-size="16" fill="#1d4ed8">src/card_chat/agent.py:47</text></a>
-<a href="../../src/card_chat/agent.py"><text x="40" y="4257" font-size="16" fill="#1d4ed8">src/card_chat/agent.py:59</text></a>
+<a href="../../src/card_chat/agent.py"><text x="40" y="4232" font-size="16" fill="#1d4ed8">src/card_chat/agent.py:63</text></a>
+<a href="../../src/card_chat/agent.py"><text x="40" y="4257" font-size="16" fill="#1d4ed8">src/card_chat/agent.py:86</text></a>
 <a href="../../src/card_chat/fincrime_agent.py"><text x="40" y="4282" font-size="16" fill="#1d4ed8">src/card_chat/fincrime_agent.py:24</text></a>
 <a href="../../src/card_chat/mcp_server.py"><text x="40" y="4307" font-size="16" fill="#1d4ed8">src/card_chat/mcp_server.py:32</text></a>
 <a href="../../src/card_chat/mcp_server.py"><text x="40" y="4332" font-size="16" fill="#1d4ed8">src/card_chat/mcp_server.py:118</text></a>

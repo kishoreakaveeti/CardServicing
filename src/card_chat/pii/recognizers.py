@@ -8,7 +8,7 @@ from presidio_analyzer.nlp_engine import NlpArtifacts
 
 def validate_australian_tfn(tfn_str: str) -> bool:
     """Validate an Australian Tax File Number using official ATO modulo 11 algorithm."""
-    clean = re.sub(r"[-\s]", "", tfn_str)
+    clean = "".join(c for c in tfn_str if c.isdigit())
     if not clean.isdigit():
         return False
 
@@ -25,7 +25,7 @@ def validate_australian_tfn(tfn_str: str) -> bool:
 
 def validate_australian_medicare(medicare_str: str) -> bool:
     """Validate an Australian Medicare number (10 digits)."""
-    clean = re.sub(r"[-\s]", "", medicare_str)
+    clean = "".join(c for c in medicare_str if c.isdigit())
     if not clean.isdigit() or len(clean) != 10:
         return False
     # First digit must be 2, 3, 4, 5, or 6

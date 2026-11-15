@@ -21,6 +21,10 @@ class CardServicingAgent:
     async def interpret_turn(self, history: list, collected: dict,
                              allowed_tools: dict) -> CustomerReply | ProposedToolCall:
         history, collected, tools = build_context(history, collected, allowed_tools)
+        from card_chat.pii.gateway import get_default_pii_gateway
+        gateway = get_default_pii_gateway()
+        if gateway:
+            gateway.verify_outbound(str(history) + " " + str(collected))
         turn = await self.model.turn(history, collected, tools)
         if isinstance(turn, ProposedToolCall):
             if turn.name not in tools:
@@ -41,6 +45,10 @@ class FinCrimeAgent:
     async def interpret_turn(self, history: list, collected: dict,
                              allowed_tools: dict) -> CustomerReply | ProposedToolCall:
         history, collected, tools = build_context(history, collected, allowed_tools)
+        from card_chat.pii.gateway import get_default_pii_gateway
+        gateway = get_default_pii_gateway()
+        if gateway:
+            gateway.verify_outbound(str(history) + " " + str(collected))
         turn = await self.model.turn(history, collected, tools)
         if isinstance(turn, ProposedToolCall):
             if turn.name not in tools:
@@ -58,17 +66,20 @@ class AgentOrchestrator:
     def __init__(self, model: Model, cards_agent: CardServicingAgent | None = None,
                  fincrime_agent: FinCrimeAgent | None = None,
                  check_blocked_fn=None,
-                 agent_tools_policy: dict | None = None):
+                 agent_tools_policy: dict | None = None,
+                 checkpointer=None):
         self.model = model
         self.cards_agent = cards_agent or CardServicingAgent(model)
         self.fincrime_agent = fincrime_agent or FinCrimeAgent(model)
         self.check_blocked_fn = check_blocked_fn
         self.agent_tools_policy = agent_tools_policy
         self.supervisor = SupervisorAgent(model)
+        self.checkpointer = checkpointer
         self.workflow = create_banking_workflow(
             self.supervisor,
             self.cards_agent,
             self.fincrime_agent,
+            checkpointer=checkpointer,
             policy=self.agent_tools_policy,
         )
 
@@ -98,8 +109,16 @@ class AgentOrchestrator:
             return 'cards_agent', [collected['tool']], None
         return 'cards_agent', ['view_accounts'], None
 
-    async def interpret_turn(self, history: list, collected: dict,
-                             allowed_tools: dict) -> CustomerReply | ProposedToolCall:
+    async def interpret_turn(
+        self,
+        history: list,
+        collected: dict,
+        allowed_tools: dict,
+        thread_id: str | None = None,
+        workflow_id: str | None = None,
+        session_id: str | None = None,
+        owner: str | None = None,
+    ) -> CustomerReply | ProposedToolCall:
         """Execute a LangGraph multi-agent reasoning turn."""
         policy = self.agent_tools_policy
         if policy is None:
@@ -109,8 +128,13 @@ class AgentOrchestrator:
             except Exception:
                 policy = None
 
+        stable_thread = thread_id or f"{owner or 'cust'}:{session_id or uuid4().hex}"
+
         # Build initial LangGraph workflow state
         initial_state = {
+            "owner": owner or "customer",
+            "session_id": session_id or "default",
+            "workflow_id": workflow_id or stable_thread,
             "messages": history,
             "verified_draft": collected,
             "allowed_tools": allowed_tools,
@@ -118,8 +142,8 @@ class AgentOrchestrator:
             "iteration_count": 0,
         }
 
-        # Run compiled LangGraph StateGraph with turn-scoped checkpoint thread
-        config = {"configurable": {"thread_id": uuid4().hex}}
+        # Run compiled LangGraph StateGraph with durable customer-scoped thread
+        config = {"configurable": {"thread_id": stable_thread}}
         final_state = await self.workflow.ainvoke(initial_state, config=config)
 
         # Check if the workflow produced a tool proposal

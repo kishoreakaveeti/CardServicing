@@ -21,6 +21,20 @@ from card_chat.model_context import PRIVATE_PASTE, PRIVATE_NOTICE, REFERENCE
 
 logger = logging.getLogger(__name__)
 
+_default_pii_gateway: "PIIGateway | None" = None
+
+
+def get_default_pii_gateway() -> "PIIGateway | None":
+    """Return the currently configured default PII gateway instance."""
+    return _default_pii_gateway
+
+
+def set_default_pii_gateway(gateway: "PIIGateway | None") -> None:
+    """Set the default PII gateway instance for application-wide verification."""
+    global _default_pii_gateway
+    _default_pii_gateway = gateway
+
+
 
 class PIILeakageError(RuntimeError):
     """Raised when an outbound payload fails the privacy-preserving fail-closed check."""
@@ -139,6 +153,19 @@ class PIIGateway:
             entities_found.append(entity_type)
             start, end = result.start, result.end
             raw_fragment = text[start:end]
+
+            if entity_type == "AU_ACCOUNT_NUMBER":
+                digit_match = re.search(r"\d{6,10}", raw_fragment)
+                if digit_match:
+                    start = start + digit_match.start()
+                    end = start + len(digit_match.group(0))
+                    raw_fragment = digit_match.group(0)
+            elif entity_type == "AU_BSB":
+                digit_match = re.search(r"\d{3}[-\s]?\d{3}", raw_fragment)
+                if digit_match:
+                    start = start + digit_match.start()
+                    end = start + len(digit_match.group(0))
+                    raw_fragment = digit_match.group(0)
 
             if entity_type in self.REVERSIBLE_ENTITIES:
                 # Replace with reversible token

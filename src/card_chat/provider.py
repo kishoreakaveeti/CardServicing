@@ -47,11 +47,16 @@ class AnthropicModel:
             system[-1]['cache_control'] = {'type': 'ephemeral'}
         if not tools:
             return CustomerReply('No eligible actions are available. Please clarify your request.')
+        payload_content = json.dumps({'conversation': history, 'collected_details': collected})
+        from card_chat.pii.gateway import get_default_pii_gateway
+        gateway = getattr(self, 'pii_gateway', None) or get_default_pii_gateway()
+        if gateway:
+            gateway.verify_outbound(payload_content)
         try:
             response = await self.client.messages.create(
                 model=self.model, max_tokens=1200,
                 system=system,
-                messages=[{'role': 'user', 'content': json.dumps({'conversation': history, 'collected_details': collected})}],
+                messages=[{'role': 'user', 'content': payload_content}],
                 tools=list(tools.values()),
                 tool_choice={'type': 'auto', 'disable_parallel_tool_use': True})
         except Exception:

@@ -97,6 +97,15 @@ flowchart TD
 
 ---
 
+## 3.1 Durable SQLite Checkpointing (`DurableSqliteSaver`)
+
+Unlike ephemeral in-memory savers, this system implements [`DurableSqliteSaver`](file:///a:/PrincipalEngineer/CardServicing/src/card_chat/orchestration/persistence.py) backed by SQLite (`agent.db`):
+- **Thread Scoping**: Uses stable customer-scoped thread identifiers: `thread_id = f"{owner}:{cid}"`.
+- **Fault-Tolerant Resumption**: Interrupted multi-agent workflows, pending tool calls, and human confirmation checkpoints survive process restarts and container redeployments.
+- **Idempotent Recovery**: Checkpoints commit atomically, preventing duplicate tool proposals or re-execution of previously executed operations during retries.
+
+---
+
 ## 4. Shared Workflow State Schema
 
 Defined in [`src/card_chat/orchestration/state.py`](file:///a:/PrincipalEngineer/CardServicing/src/card_chat/orchestration/state.py):

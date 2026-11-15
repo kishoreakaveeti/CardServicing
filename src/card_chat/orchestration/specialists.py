@@ -56,6 +56,12 @@ class CardsSpecialistNode:
 
         draft = {"tool": intent, "arguments": context_arguments} if intent else verified_draft
 
+        # Fail-closed outbound PII verification before specialist invocation
+        from card_chat.pii.gateway import get_default_pii_gateway
+        gateway = get_default_pii_gateway()
+        if gateway:
+            gateway.verify_outbound(str(messages) + " " + str(draft))
+
         try:
             turn = await self.agent.interpret_turn(messages, draft, cards_tools)
         except Exception as e:
@@ -73,26 +79,42 @@ class CardsSpecialistNode:
                 status="success",
                 message=turn.text,
             )
+            history = list(state.get("handoff_history", [])) + [result]
             return {
-                "handoff_history": [result],
+                "handoff_history": history,
+                "active_agent": self.name,
                 "final_response": turn.text,
                 "next_step": "supervisor",
             }
         elif isinstance(turn, ProposedToolCall):
+            # Strict domain boundary verification
+            if turn.name not in cards_tools:
+                logger.error("Cards specialist attempted unauthorized tool: %s", turn.name)
+                result = HandoffResult(
+                    source_agent=self.name,
+                    status="failed",
+                    message=f"Unauthorized tool {turn.name} blocked by specialist policy.",
+                )
+                history = list(state.get("handoff_history", [])) + [result]
+                return {"handoff_history": history, "active_agent": self.name, "next_step": "supervisor"}
+
             result = HandoffResult(
                 source_agent=self.name,
                 status="requires_confirmation",
                 message=f"I have prepared {turn.name} for your review.",
                 tool_proposal={"name": turn.name, "arguments": turn.arguments},
             )
+            history = list(state.get("handoff_history", [])) + [result]
             return {
-                "handoff_history": [result],
+                "handoff_history": history,
+                "active_agent": self.name,
                 "proposed_tool": {"name": turn.name, "arguments": turn.arguments},
                 "next_step": "supervisor",
             }
 
         result = HandoffResult(source_agent=self.name, status="failed", message="Unknown turn response")
-        return {"handoff_history": [result], "next_step": "supervisor"}
+        history = list(state.get("handoff_history", [])) + [result]
+        return {"handoff_history": history, "active_agent": self.name, "next_step": "supervisor"}
 
 
 class FinCrimeSpecialistNode:
@@ -121,6 +143,12 @@ class FinCrimeSpecialistNode:
 
         draft = {"tool": intent, "arguments": context_arguments} if intent else verified_draft
 
+        # Fail-closed outbound PII verification before specialist invocation
+        from card_chat.pii.gateway import get_default_pii_gateway
+        gateway = get_default_pii_gateway()
+        if gateway:
+            gateway.verify_outbound(str(messages) + " " + str(draft))
+
         try:
             turn = await self.agent.interpret_turn(messages, draft, fincrime_tools)
         except Exception as e:
@@ -138,23 +166,39 @@ class FinCrimeSpecialistNode:
                 status="success",
                 message=turn.text,
             )
+            history = list(state.get("handoff_history", [])) + [result]
             return {
-                "handoff_history": [result],
+                "handoff_history": history,
+                "active_agent": self.name,
                 "final_response": turn.text,
                 "next_step": "supervisor",
             }
         elif isinstance(turn, ProposedToolCall):
+            # Strict domain boundary verification
+            if turn.name not in fincrime_tools:
+                logger.error("FinCrime specialist attempted unauthorized tool: %s", turn.name)
+                result = HandoffResult(
+                    source_agent=self.name,
+                    status="failed",
+                    message=f"Unauthorized tool {turn.name} blocked by specialist policy.",
+                )
+                history = list(state.get("handoff_history", [])) + [result]
+                return {"handoff_history": history, "active_agent": self.name, "next_step": "supervisor"}
+
             result = HandoffResult(
                 source_agent=self.name,
                 status="requires_confirmation",
                 message=f"I have prepared {turn.name} for your review.",
                 tool_proposal={"name": turn.name, "arguments": turn.arguments},
             )
+            history = list(state.get("handoff_history", [])) + [result]
             return {
-                "handoff_history": [result],
+                "handoff_history": history,
+                "active_agent": self.name,
                 "proposed_tool": {"name": turn.name, "arguments": turn.arguments},
                 "next_step": "supervisor",
             }
 
         result = HandoffResult(source_agent=self.name, status="failed", message="Unknown turn response")
-        return {"handoff_history": [result], "next_step": "supervisor"}
+        history = list(state.get("handoff_history", [])) + [result]
+        return {"handoff_history": history, "active_agent": self.name, "next_step": "supervisor"}

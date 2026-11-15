@@ -66,6 +66,11 @@ class FinCrimeService:
                 raise HTTPException(400, "Only blocked cards can be unblocked")
             account_number = card.account_number
 
+        # Security Policy: Permanently blocked or compromised cards can NEVER be unblocked
+        existing_block = self.store.get_blocked_card(card_id)
+        if existing_block and any(term in (existing_block.reason or "").lower() for term in ("lost", "stolen", "fraud", "compromised", "destroyed")):
+            raise HTTPException(400, "Permanently blocked or compromised cards cannot be unblocked for security reasons. Please order a replacement card.")
+
         result, replayed = self.store.unblock_card_idempotent(
             customer_id=customer_id,
             card_id=card_id,
@@ -148,6 +153,22 @@ class FinCrimeService:
 
     def is_account_blocked(self, account_number: str) -> bool:
         return self.store.is_account_blocked(account_number)
+
+    def has_temporary_freeze(self, account_number: str) -> bool:
+        """Check if an account has cards blocked due to a temporary customer freeze (can be unblocked)."""
+        blocked = self.store.get_blocked_cards_for_account(account_number)
+        return any(
+            not any(term in (b.reason or "").lower() for term in ("lost", "stolen", "fraud", "compromised", "destroyed"))
+            for b in blocked
+        )
+
+    def has_compromised_cards(self, account_number: str) -> bool:
+        """Check if an account has cards permanently blocked due to compromise/loss/theft."""
+        blocked = self.store.get_blocked_cards_for_account(account_number)
+        return any(
+            any(term in (b.reason or "").lower() for term in ("lost", "stolen", "fraud", "compromised", "destroyed"))
+            for b in blocked
+        )
 
     def get_account_status(self, account_number: str) -> AccountStatusResult:
         blocked = self.store.get_blocked_cards_for_account(account_number)

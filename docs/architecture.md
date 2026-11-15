@@ -125,36 +125,31 @@ sequenceDiagram
 ### Roles and Responsibilities
 
 1. **LangGraph Supervisor Agent (`card_chat.orchestration.SupervisorAgent`)**:
-   - Replaces hardcoded regex routing with dynamic LLM intent classification and compound workflow planning.
-   - Dispatches explicit, structured `AgentHandoff` contracts without passing full conversation transcripts.
-   - Dynamically resumes the workflow when receiving a specialist's `HandoffResult` to execute subsequent compound steps.
-   - Enforces iteration limits (safety caps) to prevent unbounded reasoning loops.
+   - Replaces hardcoded keyword routing with LLM-based intent classification, dynamic delegation, and compound workflow planning.
+   - Dispatches explicit, structured, minimal-context `AgentHandoff` contracts without forwarding entire chat transcripts.
+   - Resumes execution dynamically when receiving specialist `HandoffResult` contracts to complete subsequent compound steps.
+   - Implements bounded reasoning loops (`MAX_SUPERVISOR_ITERATIONS`) to prevent runaway execution.
 2. **Card Servicing Agent (`card_chat.agent.CardServicingAgent` / `CardsSpecialistNode`)**:
-   - Independent reasoning specialist handling account opening, viewing accounts and cards, and card issuance.
-   - Enforces declarative MCP tool access policies (`tools.json`).
+   - Specialist handling customer account lifecycle, viewing accounts and cards, and card issuance.
+   - Strictly enforces declarative MCP tool access policies (`tools.json`).
 3. **FinCrime Agent (`card_chat.agent.FinCrimeAgent` / `FinCrimeSpecialistNode`)**:
-   - Independent risk management specialist handling card lifecycle security (`block_card`, `unblock_card`).
-   - Runs locally or via a containerized microservice boundary on port 8022.
-4. **Presidio PII Gateway & Token Vault (`card_chat.pii`)**:
-   - Centralized boundary sanitizing text before external LLM calls.
-   - Custom recognizers for Australian BSB, Account Number, TFN (with ATO checksum), Medicare, Phone, and Credit Cards.
-   - `InMemoryTokenVault` with TTL expiry, session isolation, and customer-scoped partitions. Future `RedisTokenVault` support.
-   - Outbound fail-closed verification preventing credentials (CVVs, PINs, passwords, API keys) from ever reaching external LLMs.
-2. **Card Servicing Agent (`card_chat.agent.CardServicingAgent`)**:
-   - Focuses strictly on core banking journeys: account opening, viewing accounts and cards, and standard card issuance.
-3. **FinCrime Agent (`card_chat.agent.FinCrimeAgent`)**:
-   - Focuses on risk management, fraud protection, and card lifecycle security (`block_card`, `unblock_card`).
-   - Resolves card references from natural language expressions like "ending in 1234" against customer-delegated card holdings, validating that only blocked cards can be unblocked and only active cards can be blocked.
-4. **FinCrime Backend Service (`fincrime_servicing`)**:
-   - Completely independent domain and persistence layer storing card block and unblock records, customer audit logs, and idempotency keys in `fincrime.db`.
-   - Authorizes requests against customer delegation, records audit events, and synchronizes the card's status in the authoritative Cards database.
-5. **Cards Banking Service (`card_servicing`)**:
-   - Enforces the cross-agent rule at the database level: `issue_idempotent()` rejects new card creation on accounts containing a blocked card with HTTP 400 (`Cannot issue a new card while an existing card for this account is blocked.`). Replaying prior completed issuance keys remains safe and idempotent.
-6. **MCP Server Agent-Tool Access Policy (`card_chat.mcp_server`)**:
-   - Configuration-driven tool access control: tools configure their permitted agents in `tools.json` (`"agents": ["cards_agent"]` or `"agents": ["fincrime_agent"]`), configurable also via `MCP_AGENT_TOOLS`.
-   - Cards Agent has access exclusively to Card APIs (`create_card`, `issue_card`, `view_cards`, `view_accounts`, `create_account`).
-   - FinCrime Agent has access exclusively to FinCrime APIs (`block_card`, `unblock_card`).
-   - MCP Server exposes `GET /mcp/agents/{agent_name}/tools` and validates the calling agent identity passed via request context `meta['agent']`, rejecting unauthorized cross-agent tool calls with HTTP 403.
+   - Risk management and fraud mitigation specialist handling card lifecycle security (`block_card`, `unblock_card`).
+   - Runs locally or as an isolated microservice over HTTP (`RemoteFinCrimeAgent`) with explicit failure handling and no silent fallback.
+4. **LangGraph Workflow Persistence (`card_chat.orchestration.persistence.DurableSqliteSaver`)**:
+   - Custom `BaseCheckpointSaver` implementation storing workflow state and channel values in SQLite (`agent.db`).
+   - Uses stable, customer-scoped thread identifiers (`f"{owner}:{cid}"`) to persist multi-agent workflows, tool proposals, and human confirmation pauses across service restarts and multiple turns.
+5. **Presidio PII Gateway & Token Vault (`card_chat.pii`)**:
+   - Centralized privacy gateway intercepting customer input and tokenizing sensitive identifiers into opaque references (`selected_account_...`) before any external model call.
+   - Custom recognizers for Australian BSB, Account Number, TFN (with ATO modulo 11 algorithm), Medicare, and Credit Card numbers.
+   - `InMemoryTokenVault` providing session-isolated and owner-scoped reversible token resolution within the trusted backend layer.
+   - Enforces fail-closed outbound PII validation (`verify_outbound`) at all external LLM invocations, immediately blocking payloads if unmasked credentials or sensitive identifiers are detected.
+6. **Card Blocking & Replacement Policy**:
+   - Distinguishes **temporary customer freezes** (which can be unblocked by the customer) from **permanent compromises** (lost, stolen, fraud).
+   - Permanently compromised cards can never be unblocked; attempting to do so returns HTTP 400 with an explicit security notice.
+   - Accounts with permanently compromised cards remain eligible for replacement card issuance, while temporary freezes require resolution before new cards can be originated.
+7. **MCP Server Agent-Tool Access Policy (`card_chat.mcp_server`)**:
+   - Configuration-driven tool access control: tools configure permitted agents in `tools.json` (`"agents": ["cards_agent"]` or `"agents": ["fincrime_agent"]`).
+   - Validates calling agent identity passed via request context `meta['agent']`, rejecting unauthorized cross-agent tool calls with HTTP 403.
 
 ## Data and trusted decisions
 

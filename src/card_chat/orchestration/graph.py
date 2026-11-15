@@ -3,7 +3,7 @@ import logging
 from typing import Any
 
 from langgraph.graph import StateGraph, END
-from langgraph.checkpoint.memory import MemorySaver
+from card_chat.orchestration.persistence import DurableSqliteSaver
 
 from card_chat.orchestration.state import BankingWorkflowState
 from card_chat.orchestration.supervisor import SupervisorAgent
@@ -68,5 +68,5 @@ def create_banking_workflow(
     builder.add_edge("fincrime_agent", "supervisor")
     builder.add_edge("human_confirmation", END)
 
-    memory = checkpointer or MemorySaver()
+    memory = checkpointer or DurableSqliteSaver()
     return builder.compile(checkpointer=memory)

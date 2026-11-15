@@ -1,5 +1,11 @@
 """PII Protection Gateway and Reversible Token Vault package."""
-from card_chat.pii.gateway import PIIGateway, SanitizationResult, PIILeakageError
+from card_chat.pii.gateway import (
+    PIIGateway,
+    SanitizationResult,
+    PIILeakageError,
+    get_default_pii_gateway,
+    set_default_pii_gateway,
+)
 from card_chat.pii.vault import TokenVault, InMemoryTokenVault, RedisTokenVault
 from card_chat.pii.recognizers import (
     AustralianBSBRecognizer,

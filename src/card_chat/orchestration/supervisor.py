@@ -50,13 +50,15 @@ class SupervisorAgent:
             "",
         )
 
-        # Check if we are resuming after a specialist result
-        if handoff_history:
+        # Check if we are resuming after a specialist result in this execution cycle
+        active_agent = state.get("active_agent") or (handoff_history[-1].source_agent if handoff_history else None)
+        if handoff_history and active_agent:
             last_result = handoff_history[-1]
             if last_result.status == "requires_confirmation" and last_result.tool_proposal:
                 # If a specialist proposed a sensitive action needing confirmation, route to policy/human confirmation
                 return {
                     "iteration_count": iterations,
+                    "active_agent": None,
                     "next_step": "human_confirmation",
                     "proposed_tool": last_result.tool_proposal,
                     "final_response": last_result.message,
@@ -86,12 +88,14 @@ class SupervisorAgent:
                 else:
                     return {
                         "iteration_count": iterations,
+                        "active_agent": None,
                         "next_step": "respond",
                         "final_response": last_result.message,
                     }
             if last_result.status == "failed":
                 return {
                     "iteration_count": iterations,
+                    "active_agent": None,
                     "next_step": "respond",
                     "final_response": last_result.message,
                 }
@@ -151,18 +155,58 @@ class SupervisorAgent:
         allowed_tools: dict[str, Any],
         verified_draft: dict[str, Any],
     ) -> tuple[str, list[str], str | None]:
-        """Classify user intent and detect compound requests."""
-        # Check tool restriction overrides
+        """Classify user intent and detect compound requests using LLM first, with rule fallback."""
+        # 1. Deterministic security overrides
         non_flow = set(allowed_tools.keys()) - {"logout", "login", "register"}
         if non_flow and non_flow.issubset({"block_card", "unblock_card"}):
             return "fincrime_agent", ["block_card"], None
         if non_flow and not any(t in non_flow for t in ("block_card", "unblock_card")):
             return "cards_agent", ["view_accounts"], None
 
-        lower = user_text.lower()
+        # 2. LLM-based intent classification and compound-request planning
+        from card_chat.pii.gateway import get_default_pii_gateway
+        gateway = get_default_pii_gateway()
+        if gateway and user_text:
+            gateway.verify_outbound(user_text)
 
-        # Collect all intents across specialists for compound request detection
+        if (
+            hasattr(self.model, "client")
+            and hasattr(self.model.client, "messages")
+            and getattr(self.model, "model", "") not in ("synthetic-model", "stub")
+        ):
+            try:
+                system_prompt = (
+                    "You are a banking supervisor orchestrator. Analyze the customer's request and classify into "
+                    "one or more specialized banking intents in execution order: "
+                    "Specialist 'fincrime_agent' handles: block_card, unblock_card. "
+                    "Specialist 'cards_agent' handles: create_account, view_accounts, view_cards, issue_card, register, login. "
+                    "For compound requests (e.g. 'block my card and show my accounts'), list all intents in order. "
+                    "Respond with a JSON object: {\"target\": \"fincrime_agent\"|\"cards_agent\", "
+                    "\"intents\": [\"intent1\", ...], \"reply\": null|\"reply string\"}."
+                )
+                response = await self.model.client.messages.create(
+                    model=self.model.model,
+                    max_tokens=250,
+                    system=[{"type": "text", "text": system_prompt}],
+                    messages=[{"role": "user", "content": user_text}],
+                )
+                text = "".join(b.text for b in response.content if b.type == "text").strip()
+                data = json.loads(text)
+                target = data.get("target") or ("fincrime_agent" if data.get("intents", [""])[0] in ("block_card", "unblock_card") else "cards_agent")
+                intents = data.get("intents", [])
+                if intents:
+                    return target, intents, data.get("reply")
+            except Exception as e:
+                logger.info("Supervisor LLM intent classification failed or not JSON; falling back to semantic rules: %s", e)
+
+        # 3. Deterministic semantic rule fallback
+        lower = user_text.lower()
         intents = []
+        if any(w in lower for w in ("register", "sign up", "signup")) and "register" in allowed_tools:
+            intents.append("register")
+        elif any(w in lower for w in ("login", "sign in", "signin")) and "login" in allowed_tools:
+            intents.append("login")
+
         if any(w in lower for w in ("unblock", "un-block", "unfreeze", "un-freeze", "reactivate", "restore")):
             intents.append("unblock_card")
         elif any(w in lower for w in ("block", "freeze", "stop card", "lost", "stolen", "fraud", "compromised")):
@@ -182,38 +226,11 @@ class SupervisorAgent:
             target = "fincrime_agent" if first in ("block_card", "unblock_card") else "cards_agent"
             return target, intents, None
 
-        # Check existing draft facts
+        # Check existing draft facts if user did not specify a new intent
         if verified_draft.get("tool"):
             tool = verified_draft["tool"]
             target = "fincrime_agent" if tool in ("block_card", "unblock_card") else "cards_agent"
             return target, [tool], None
-
-        # For general or complex queries, use LLM if available and not a mock/test stub
-        if hasattr(self.model, "client") and hasattr(self.model.client, "messages") and getattr(self.model, "model", "") not in ("synthetic-model",):
-            try:
-                system_prompt = (
-                    "You are a banking supervisor orchestrator. Analyze the customer's request and classify into "
-                    "one or more specialized banking intents: "
-                    "Specialist 'fincrime_agent' handles: block_card, unblock_card, fraud mitigation. "
-                    "Specialist 'cards_agent' handles: create_account, view_accounts, view_cards, issue_card. "
-                    "Respond with a JSON object: {\"target\": \"fincrime_agent\"|\"cards_agent\"|\"direct\", "
-                    "\"intents\": [\"intent1\", ...], \"reply\": null|\"reply string\"}."
-                )
-                response = await self.model.client.messages.create(
-                    model=self.model.model,
-                    max_tokens=250,
-                    system=[{"type": "text", "text": system_prompt}],
-                    messages=[{"role": "user", "content": user_text}],
-                )
-                text = "".join(b.text for b in response.content if b.type == "text").strip()
-                data = json.loads(text)
-                return (
-                    data.get("target", "cards_agent"),
-                    data.get("intents", ["view_accounts"]),
-                    data.get("reply"),
-                )
-            except Exception as e:
-                logger.info("Supervisor LLM call failed or not JSON; falling back to semantic rules: %s", e)
 
         if any(w in lower for w in ("hello", "hi", "help", "hey")):
             return "cards_agent", ["view_accounts"], None

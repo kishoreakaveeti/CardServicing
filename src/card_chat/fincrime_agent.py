@@ -24,9 +24,10 @@ class TurnRequest(BaseModel):
 class RemoteFinCrimeAgent:
     """Client for delegating to a remote FinCrime Agent microservice over HTTP."""
 
-    def __init__(self, base_url: str, fallback_agent=None):
+    def __init__(self, base_url: str, fallback_agent=None, allow_fallback: bool = False):
         self.base_url = base_url.rstrip("/")
         self.fallback_agent = fallback_agent
+        self.allow_fallback = allow_fallback
         self.name = "fincrime_agent"
 
     async def interpret_turn(self, history: list, collected: dict, allowed_tools: dict):
@@ -46,14 +47,14 @@ class RemoteFinCrimeAgent:
                         return CustomerReply(data.get("text", ""))
                     elif kind == "proposal":
                         return ProposedToolCall(data.get("name"), data.get("arguments", {}))
-                else:
-                    logger.warning("Remote FinCrime Agent returned HTTP %s: %s", resp.status_code, resp.text)
+                logger.error("Remote FinCrime Agent returned HTTP %s: %s", resp.status_code, resp.text)
+                return CustomerReply("The financial crime service returned an unexpected response. Please try again.")
         except Exception as e:
-            logger.warning("Remote FinCrime Agent call failed: %s; falling back to in-process agent", e)
-
-        if self.fallback_agent:
-            return await self.fallback_agent.interpret_turn(history, collected, allowed_tools)
-        return CustomerReply("I'm having trouble connecting to the financial crime service. Please try again.")
+            logger.error("Remote FinCrime Agent call failed: %s", e)
+            if self.allow_fallback and self.fallback_agent:
+                logger.warning("Explicitly permitted fallback to in-process FinCrime agent activated")
+                return await self.fallback_agent.interpret_turn(history, collected, allowed_tools)
+            return CustomerReply("I'm having trouble connecting to the financial crime service. Please try again later.")
 
 
 def create_app(model=None, *, config=None):
