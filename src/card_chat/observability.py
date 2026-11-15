@@ -16,7 +16,9 @@ class DiagnosticHandler(logging.Handler):
     def __init__(self, sink, service):
         super().__init__()
         self.sink, self.service = sink, service
-        self.names = {'agent': {'card_chat.main', 'card_chat.provider'},
+        self.names = {'agent': {'card_chat.main', 'card_chat.provider', 'card_chat.agent',
+                                'card_chat.orchestration.supervisor', 'card_chat.orchestration.specialists',
+                                'card_chat.orchestration.graph', 'card_chat.pii.gateway'},
                       'mcp': {'card_chat.mcp_server'}}.get(service, set())
 
     def emit(self, record):
@@ -24,10 +26,32 @@ class DiagnosticHandler(logging.Handler):
             return
         event = getattr(record, 'telemetry_event', None)
         fields = getattr(record, 'telemetry_fields', None)
-        if event in ('model_usage', 'workflow_usage', 'tool_execution') and isinstance(fields, dict):
+        supported_events = (
+            'model_usage', 'workflow_usage', 'tool_execution',
+            'supervisor_decision', 'agent_handoff', 'workflow_transition', 'pii_sanitization'
+        )
+        if event in supported_events and isinstance(fields, dict):
             from card_chat.security import trace
             self.sink.emit('log', event, **{**fields, 'service': self.service,
                                           'level': record.levelname, 'trace_id': trace.get()})
+
+
+def emit_agent_trace(event: str, **fields):
+    """Safely log an agent telemetry event without exposing raw customer details."""
+    logger = logging.getLogger('card_chat.agent')
+    # Sanitize fields so no raw PII is exported
+    sanitized_fields = {}
+    for k, v in fields.items():
+        if isinstance(v, (str, int, float, bool)) or v is None:
+            sanitized_fields[k] = v
+        elif isinstance(v, (list, tuple)):
+            sanitized_fields[k] = [str(item) for item in v]
+        elif isinstance(v, dict):
+            sanitized_fields[k] = {str(dk): str(dv) for dk, dv in v.items()}
+    logger.info(
+        "Agent telemetry: %s", event,
+        extra={'telemetry_event': event, 'telemetry_fields': sanitized_fields}
+    )
 
 
 def instrument(app, config, service):

@@ -26,6 +26,8 @@ from fastapi.exceptions import RequestValidationError
 from card_chat.model_context import (PRIVATE_PASTE, PRIVATE_NOTICE, REFERENCE, sanitise, build_context,
                                      tools_for_model, ambiguous_old_reference)
 from card_chat.private_inputs import eligible, bind, resolve, authorise, form_options, mask
+from card_chat.pii.gateway import PIIGateway
+from card_chat.pii.vault import InMemoryTokenVault
 
 logger = logging.getLogger(__name__)
 
@@ -53,6 +55,8 @@ def create_app(model=None, gateway=None, *, config=None):
     async def lifespan(app):
         if model is None and gateway is None and not config.get('OIDC_ISSUER') and config.get('ALLOW_INSECURE_LOCAL') != '1':
             raise RuntimeError('Configure OIDC before starting Agent; isolated local tests must opt into ALLOW_INSECURE_LOCAL=1')
+        app.state.token_vault = InMemoryTokenVault()
+        app.state.pii_gateway = PIIGateway(vault=app.state.token_vault)
         app.state.model = model or make_model(config)
         cards_agent = CardServicingAgent(app.state.model)
         local_fincrime = FinCrimeAgent(app.state.model)
@@ -236,8 +240,9 @@ def create_app(model=None, gateway=None, *, config=None):
 
     @app.post('/entry/messages', response_model=Reply)
     async def entry_message(body: Message):
-        safe = sanitise(body.text)
-        if safe != body.text:
+        pii_res = app.state.pii_gateway.sanitize_input(body.text, owner="entry", session_id="entry") if hasattr(app.state, "pii_gateway") else None
+        safe = sanitise(pii_res.text) if pii_res else sanitise(body.text)
+        if (pii_res and pii_res.secrets_detected) or safe == PRIVATE_PASTE or safe != body.text:
             return Reply(message=PRIVATE_NOTICE)
         tools = {name: {'name': name, 'description': description,
                  'input_schema': {'type': 'object', 'properties': {}, 'additionalProperties': False}}
@@ -265,10 +270,22 @@ def create_app(model=None, gateway=None, *, config=None):
                 return reply(c, 'This submission is fixed. Use its confirmation button for a supported retry, or start a new conversation.')
             # Every new turn invalidates any previous review before interpreting updates.
             c.review, c.proposal = None, None
-            safe_text = sanitise(body.text, private_values(c))
+            if hasattr(app.state, 'pii_gateway'):
+                pii_res = app.state.pii_gateway.sanitize_input(body.text, owner=owner(), session_id=cid, private_values=tuple(private_values(c)))
+                for tok, raw_val in pii_res.tokens_created.items():
+                    if tok not in c.bindings:
+                        prefix = 'account' if 'account' in tok else 'input'
+                        c.bindings[tok] = {'cid': cid, 'owner': owner(), 'tool': c.draft.get('tool', ''), 'field': prefix, 'value': raw_val}
+                safe_text = sanitise(pii_res.text, private_values(c))
+                if pii_res.secrets_detected or safe_text == PRIVATE_PASTE or safe_text != body.text:
+                    c.history.append({'role': 'user', 'content': PRIVATE_PASTE, 'kind': 'chat'})
+                    return reply(c, PRIVATE_NOTICE)
+            else:
+                safe_text = sanitise(body.text, private_values(c))
+                if safe_text == PRIVATE_PASTE or safe_text != body.text:
+                    c.history.append({'role': 'user', 'content': safe_text, 'kind': 'chat'})
+                    return reply(c, PRIVATE_NOTICE)
             c.history.append({'role': 'user', 'content': safe_text, 'kind': 'chat'})
-            if safe_text == PRIVATE_PASTE or safe_text != body.text:
-                return reply(c, PRIVATE_NOTICE)
             if ambiguous_old_reference(safe_text):
                 return reply(c, 'Please select the intended account or details again in the secure form; I cannot safely infer an older selection.')
             catalogue = permitted()

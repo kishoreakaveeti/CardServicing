@@ -1,17 +1,34 @@
 # Card Servicing: Agentic Banking & FinCrime Platform
 
-A production-grade, chat-first banking simulation demonstrating **multi-agent orchestration**, **catalogue-driven Model Context Protocol (MCP)** integration, and **independent financial crime risk management (FinCrime Agent)**. Customers can seamlessly interact through conversational AI or direct-action UI workflows—both paths strictly enforce identical authorization, verification, and persistent business logic.
+A production-grade, chat-first banking simulation demonstrating **LangGraph + LangChain multi-agent orchestration**, **privacy-preserving LLM interactions via Microsoft Presidio**, **catalogue-driven Model Context Protocol (MCP)** integration, and **independent financial crime risk management (FinCrime Agent)**. Customers can seamlessly interact through conversational AI or direct-action UI workflows—both paths strictly enforce identical authorization, verification, and persistent business logic.
 
 ---
 
 ## Key Features
 
-- **Multi-Agent Orchestration:** 
-  - **`CardServicingAgent`**: Handles account creation, account overview, and new card issuance.
-  - **`FinCrimeAgent`**: Manages risk mitigation, card blocking, and card unblocking.
-  - **`AgentOrchestrator`**: Intelligent routing based on customer intent, enforcing cross-agent policies before model calls or database writes.
+- **LangGraph Multi-Agent Architecture:**
+  - **`SupervisorAgent` (LangGraph)**: LLM-powered supervisor dynamically routes intents, constructs minimal-context handoff contracts, schedules specialist consultations, and orchestrates compound multi-step workflows.
+  - **`CardServicingAgent` (LangGraph Specialist)**: Autonomous reasoning agent managing account creation, balance/account viewing, and new card issuance.
+  - **`FinCrimeAgent` (LangGraph Specialist)**: Independent risk management agent handling card blocking, unblocking, and fraud mitigation, retaining its separately hosted microservice boundary.
+  - **Compound Request Orchestration & Resumption**: Handles complex compound requests (e.g. *"Unblock my card and issue a new card"* or *"Block my card and show my accounts"*), resuming specialist execution after receiving intermediate handoff results.
+  - **Structured Minimal-Context Handoffs**: Exchanges explicit `AgentHandoff` and `HandoffResult` contracts containing only necessary domain facts rather than wholesale unstructured chat histories.
+  - **Bounded Reasoning Loops & Safety Limits**: Enforces iteration caps, retry backoffs, and deterministic policy enforcement.
+- **Privacy-Preserving LLM Interactions & Token Vault:**
+  - **Centralized Presidio PII Gateway**: Microsoft Presidio analyzer and anonymizer engine with custom recognizers for Australian financial identifiers:
+    - **Australian BSB Numbers** (`AU_BSB`: formatted `XXX-XXX` or 6 digits)
+    - **Australian Bank Account Numbers** (`AU_ACCOUNT_NUMBER`: 6-10 digits)
+    - **Australian Tax File Numbers** (`AU_TFN`: 8-9 digits verified with official ATO modulo-11 checksum)
+    - **Australian Medicare Numbers** (`AU_MEDICARE`: 10 digits with validation)
+    - **Australian Phone Numbers** (`AU_PHONE_NUMBER`: mobile and landline formats)
+    - **Payment Cards** (`CREDIT_CARD`: 13-19 digits validated with Luhn algorithm)
+  - **Reversible Token Vault**: Permitted banking values are substituted with opaque reversible tokens (`selected_account_...`) before entering model context. Original values are resolved strictly inside the trusted execution layer after customer authorization.
+  - **Zero-Credential LLM Exposure & Fail-Closed Checks**: Authentication secrets, PINs, CVVs, passwords, and API keys are completely stripped and never exposed to LLMs. Outbound verification fails closed if unmasked sensitive PII or credentials are detected.
+  - **Dependency-Injected `TokenVault` Interface**:
+    - `InMemoryTokenVault` (Default): Session and workflow-scoped with TTL, automatic expiry cleanup, and customer isolation (`owner`/`sub`).
+    - `RedisTokenVault`: Configurable future provider for multi-replica cluster persistence.
+    - *Storage Note:* In-memory storage is scoped to the local process lifetime; process restarts require active sessions to re-authenticate or re-select.
 - **Card Blocking & Unblocking:**
-  - Securely block compromised, lost, or stolen cards conversational ("Block my card ending in 1234") or via direct forms.
+  - Securely block compromised, lost, or stolen cards conversationally (*"Block my card ending in 1234"*) or via direct forms.
   - Unblock previously blocked cards with explicit confirmation prompt warnings.
   - Restricted selection: only active cards can be blocked; only blocked cards can be unblocked.
 - **Cross-Agent Pre-Issuance Security Rule:** 
@@ -24,10 +41,8 @@ A production-grade, chat-first banking simulation demonstrating **multi-agent or
 - **Independent FinCrime Backend & Database:**
   - Dedicated `fincrime_servicing` service and SQLite store (`fincrime.db`) maintaining immutable audit logs, block records, and idempotent replays.
   - Synchronizes card lifecycle status directly with the authoritative Cards database (`cards.db`).
-- **Privacy & Security Boundaries:**
-  - Model context receives sanitized intent and opaque references only; sensitive customer identifiers never enter model prompts.
-  - Customer writes require durable reviews and explicit customer confirmation.
-  - Stateless Streamable HTTP MCP architecture (no child process spawns or stdin/stdout piping).
+- **Extended Observability:**
+  - OpenTelemetry telemetry tracks supervisor routing decisions, specialist handoffs, MCP tool calls, and workflow transitions with all sensitive identifiers sanitized.
 
 ---
 
@@ -257,7 +272,7 @@ Once started, open **http://localhost:8080** in your browser.
 Run all automated unit, integration, and contract tests with a single command:
 
 ```powershell
-# Run all Python backend tests (186+ tests)
+# Run all Python backend tests (202+ tests including LangGraph and Presidio PII)
 .\.venv\Scripts\python.exe -m pytest -q
 
 # Run frontend tests

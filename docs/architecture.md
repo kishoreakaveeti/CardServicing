@@ -49,80 +49,97 @@ All application service hops are independent HTTP processes. Agent connects to M
 
 ## Multi-agent orchestration and card blocking
 
-The system supports multi-agent coordination between the **Card Servicing Agent** and the **FinCrime Agent**, governed by an **Agent Orchestrator**.
+The system supports multi-agent coordination between the **Card Servicing Agent** and the **FinCrime Agent**, governed by an **LLM-Powered LangGraph Supervisor Agent** and protected by a centralized **Microsoft Presidio PII Gateway & Token Vault**.
 
 ```mermaid
 sequenceDiagram
     autonumber
     actor Customer as React UI / Customer
     participant BFF as Experience BFF
-    participant Orch as Agent Orchestrator
-    participant FinCrimeAgent as FinCrime Agent
-    participant CardsAgent as Cards Agent
+    participant PII as Presidio PII Gateway
+    participant Vault as Token Vault
+    participant Sup as LangGraph Supervisor
+    participant FinCrimeAgent as FinCrime Specialist
+    participant CardsAgent as Cards Specialist
     participant MCP as MCP Streamable HTTP
     participant FinCrimeAPI as FinCrime Service API
     participant CardsAPI as Cards Banking API
     participant FinCrimeDB as [(FinCrime SQLite)]
     participant CardsDB as [(Cards SQLite)]
 
-    Note over Customer,CardsDB: 1. Card Blocking Customer Journey
+    Note over Customer,CardsDB: 1. Privacy-Preserving Inbound Flow
     Customer->>BFF: "Block my card ending in 1234"
-    BFF->>Orch: Forward turn with EdDSA customer delegation & cards
-    Orch->>FinCrimeAgent: Route intent to FinCrime Agent
-    FinCrimeAgent-->>Orch: Propose block_card(card_id='selected_card_...')
-    Orch-->>BFF: Action Review: "Block card: Card reference: ****1234. Confirm action"
+    BFF->>PII: Sanitize incoming message & extract entities
+    PII->>Vault: Tokenize sensitive identifiers into opaque tokens
+    PII->>Sup: Sanitized input + scoped tokens (zero raw PII)
+
+    Note over Customer,CardsDB: 2. Supervisor-Mediated Minimal-Context Handoff
+    Sup->>Sup: Dynamic LLM intent classification & plan
+    Sup->>FinCrimeAgent: Minimal Handoff Contract: AgentHandoff(intent='block_card', context={'card_id': 'selected_...'})
+    FinCrimeAgent->>FinCrimeAgent: Autonomous reasoning & tool selection
+    FinCrimeAgent-->>Sup: HandoffResult(status='requires_confirmation', tool='block_card')
+    Sup-->>BFF: Action Review: "Block card: Card reference: ****1234. Confirm action"
     BFF-->>Customer: Display review and confirmation button
+
+    Note over Customer,CardsDB: 3. Deterministic Trusted Execution
     Customer->>BFF: Confirm action
-    BFF->>Orch: Confirm execution
-    Orch->>MCP: Call tool block_card(card_id, reason)
+    BFF->>Vault: Resolve opaque token to raw value within trusted layer
+    BFF->>MCP: Call tool block_card(card_id, reason)
     MCP->>FinCrimeAPI: POST /fincrime/cards/{card_id}/block
     FinCrimeAPI->>FinCrimeDB: Insert blocked_cards, audit_log, idempotency (BEGIN IMMEDIATE)
     FinCrimeAPI->>CardsAPI: POST /banking/cards/{card_id}/block (Sync status)
     CardsAPI->>CardsDB: UPDATE cards SET status='blocked' (BEGIN IMMEDIATE)
     CardsAPI-->>FinCrimeAPI: 200 OK (status: blocked)
     FinCrimeAPI-->>MCP: 200 OK (CardBlockResult)
-    MCP-->>Orch: Tool success
-    Orch-->>BFF: "Block card succeeded. Card reference: SIM-...; Status: blocked."
+    MCP-->>BFF: Tool success
     BFF-->>Customer: Updated chat & [BLOCKED] badge in My Cards
 
-    Note over Customer,CardsDB: 2. Cross-Agent Pre-Issuance Rejection Policy
-    Customer->>BFF: "I would like a new card" (for blocked account)
-    BFF->>Orch: Forward message
-    Orch->>CardsAgent: Route to Cards Agent
-    CardsAgent-->>Orch: Propose issue_card(account_number)
-    Orch->>FinCrimeAPI: Check account status: GET /fincrime/accounts/{acc}/status
+    Note over Customer,CardsDB: 4. Cross-Agent Pre-Issuance Rejection Policy
+    Customer->>BFF: "I would like a new card" (for account with blocked card)
+    BFF->>PII: Sanitize input
+    PII->>Sup: Sanitized input
+    Sup->>CardsAgent: Minimal Handoff: AgentHandoff(intent='issue_card')
+    CardsAgent-->>Sup: Propose issue_card(account_number)
+    Sup->>FinCrimeAPI: Check account status: GET /fincrime/accounts/{acc}/status
     FinCrimeAPI->>FinCrimeDB: SELECT 1 FROM blocked_cards WHERE account_number=?
     FinCrimeDB-->>FinCrimeAPI: Blocked card found
-    FinCrimeAPI-->>Orch: has_blocked_cards = True
-    Orch-->>BFF: Intercept: "Cannot issue new card while an existing card for this account is blocked."
+    FinCrimeAPI-->>Sup: has_blocked_cards = True
+    Sup-->>BFF: Intercept: "Cannot issue new card while an existing card for this account is blocked."
     BFF-->>Customer: Explanatory rejection message
 
-    Note over Customer,CardsDB: 3. Card Unblocking Customer Journey
-    Customer->>BFF: "Unblock my card ending in 1234"
-    BFF->>Orch: Forward turn with EdDSA customer delegation & cards
-    Orch->>FinCrimeAgent: Route intent to FinCrime Agent
-    FinCrimeAgent-->>Orch: Propose unblock_card(card_id='selected_card_...')
-    Orch-->>BFF: Action Review: "Unblock card: Card reference: ****1234. ATTENTION: Unblocking this card will restore its active status and re-enable new card issuance on this account. Confirm with the button below."
-    BFF-->>Customer: Display review and confirmation button
-    Customer->>BFF: Confirm action
-    BFF->>Orch: Confirm execution
-    Orch->>MCP: Call tool unblock_card(card_id, reason)
-    MCP->>FinCrimeAPI: POST /fincrime/cards/{card_id}/unblock
-    FinCrimeAPI->>FinCrimeDB: UPDATE blocked_cards SET status='unblocked', audit_log (BEGIN IMMEDIATE)
-    FinCrimeAPI->>CardsAPI: POST /banking/cards/{card_id}/unblock (Sync status)
-    CardsAPI->>CardsDB: UPDATE cards SET status='created' (BEGIN IMMEDIATE)
-    CardsAPI-->>FinCrimeAPI: 200 OK (status: created)
-    FinCrimeAPI-->>MCP: 200 OK (CardBlockResult)
-    MCP-->>Orch: Tool success
-    Orch-->>BFF: "Unblock card succeeded. Card reference: SIM-...; Status: created."
-    BFF-->>Customer: Updated chat & status restored in My Cards
+    Note over Customer,CardsDB: 5. Compound Request Orchestration & Resumption
+    Customer->>BFF: "Unblock my card ending in 1234 and issue a new card"
+    BFF->>PII: Sanitize input
+    PII->>Sup: Sanitized input
+    Sup->>Sup: Plan compound intents: ['unblock_card', 'issue_card']
+    Sup->>FinCrimeAgent: Handoff Step 1: unblock_card
+    FinCrimeAgent-->>Sup: HandoffResult(status='requires_confirmation', tool='unblock_card')
+    Sup-->>Customer: Prompt warning & unblock review button
+    Customer->>BFF: Confirm unblock
+    BFF->>MCP: Execute unblock_card
+    MCP-->>BFF: Success (Card unblocked)
+    Sup->>CardsAgent: Handoff Step 2 (Resumption): issue_card with unblocked status
+    CardsAgent-->>Customer: Prepare card issuance review
 ```
 
 ### Roles and Responsibilities
 
-1. **Agent Orchestrator (`card_chat.agent.AgentOrchestrator`)**:
-   - Inspects caller context and customer conversation history to route turns to the appropriate specialized agent.
-   - Enforces cross-agent business rules: when card issuance is proposed, the orchestrator coordinates with the FinCrime subsystem to ensure the target account has no active blocked cards before presenting reviews or executing issuance.
+1. **LangGraph Supervisor Agent (`card_chat.orchestration.SupervisorAgent`)**:
+   - Replaces hardcoded regex routing with dynamic LLM intent classification and compound workflow planning.
+   - Dispatches explicit, structured `AgentHandoff` contracts without passing full conversation transcripts.
+   - Dynamically resumes the workflow when receiving a specialist's `HandoffResult` to execute subsequent compound steps.
+   - Enforces iteration limits (safety caps) to prevent unbounded reasoning loops.
+2. **Card Servicing Agent (`card_chat.agent.CardServicingAgent` / `CardsSpecialistNode`)**:
+   - Independent reasoning specialist handling account opening, viewing accounts and cards, and card issuance.
+   - Enforces declarative MCP tool access policies (`tools.json`).
+3. **FinCrime Agent (`card_chat.agent.FinCrimeAgent` / `FinCrimeSpecialistNode`)**:
+   - Independent risk management specialist handling card lifecycle security (`block_card`, `unblock_card`).
+   - Runs locally or via a containerized microservice boundary on port 8022.
+4. **Presidio PII Gateway & Token Vault (`card_chat.pii`)**:
+   - Centralized boundary sanitizing text before external LLM calls.
+   - Custom recognizers for Australian BSB, Account Number, TFN (with ATO checksum), Medicare, Phone, and Credit Cards.
+   - `InMemoryTokenVault` with TTL expiry, session isolation, and customer-scoped partitions. Future `RedisTokenVault` support.
+   - Outbound fail-closed verification preventing credentials (CVVs, PINs, passwords, API keys) from ever reaching external LLMs.
 2. **Card Servicing Agent (`card_chat.agent.CardServicingAgent`)**:
    - Focuses strictly on core banking journeys: account opening, viewing accounts and cards, and standard card issuance.
 3. **FinCrime Agent (`card_chat.agent.FinCrimeAgent`)**:
