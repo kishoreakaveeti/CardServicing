@@ -54,6 +54,13 @@ def configure(component):
         values.update(MODEL_PROVIDER=config.get('STACK_MODEL_PROVIDER', 'stub'),
                       MODEL_ID=config.get('MODEL_ID', ''), ANTHROPIC_API_KEY=config.get('ANTHROPIC_API_KEY', ''),
                       ANTHROPIC_PROMPT_CACHE=config.get('ANTHROPIC_PROMPT_CACHE', 'false'))
+        if component == 'agent':
+            values.update(QDRANT_URL=config.get('LOCAL_QDRANT_URL', 'http://127.0.0.1:6333'),
+                          EMBEDDING_PROVIDER=config.get('EMBEDDING_PROVIDER', 'fastembed'),
+                          FASTEMBED_MODEL=config.get('FASTEMBED_MODEL', 'BAAI/bge-small-en-v1.5'),
+                          POLICY_VECTOR_STORE=config.get('POLICY_VECTOR_STORE', 'qdrant'),
+                          POLICY_COLLECTION=config.get('POLICY_COLLECTION', 'banking_policies'),
+                          POLICIES_DIR=config.get('POLICIES_DIR', str(ROOT / 'policies')))
     else:
         os.environ.pop('ANTHROPIC_API_KEY', None)
     os.environ.update({key: str(value) for key, value in values.items()})

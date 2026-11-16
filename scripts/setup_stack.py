@@ -35,6 +35,10 @@ def service(name, secret, target, permission):
 clients = [service('experience-service', 'EXPERIENCE_SECRET', 'agent', 'agent:invoke'),
            service('agent-service', 'AGENT_SECRET', 'mcp', 'tools:execute'),
            service('mcp-service', 'MCP_SECRET', 'cards', 'cards:write')]
+clients[2]['defaultClientScopes'].append('tools:execute')
+fincrime_audience = audience('fincrime')
+fincrime_audience['name'] = 'fincrime-audience'
+clients[2]['protocolMappers'].append(fincrime_audience)
 clients.append({'clientId': 'experience-browser', 'secret': values['BROWSER_SECRET'],
     'enabled': True, 'protocol': 'openid-connect', 'publicClient': False,
     'standardFlowEnabled': True, 'directAccessGrantsEnabled': False,

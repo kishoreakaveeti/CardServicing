@@ -1,6 +1,7 @@
 """Business duplicate protection is independent of client idempotency keys."""
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import closing
+from datetime import timedelta
 
 import pytest
 from fastapi.testclient import TestClient
@@ -90,7 +91,13 @@ def test_existing_data_preserved_and_old_snapshots_replay_before_existence_check
     store = SQLiteCardStore(str(tmp_path/'cards.db'));store.initialize()
     # Existing pre-policy data can contain several cards. Keep them all.
     first,_ = store.create_idempotent(BODY,'old-first')
-    store.create_idempotent(BODY,'old-second')
+    second,_ = store.create_idempotent(BODY,'old-second')
+    # Make legacy chronology explicit: rapid inserts can share a timestamp on
+    # Windows, in which case the production UUID tie-break legitimately varies.
+    with closing(store.connect()) as db:
+        db.execute('UPDATE cards SET created_at=? WHERE id=?',
+                   ((first.created_at + timedelta(seconds=1)).isoformat(), str(second.id)))
+        db.commit()
     replay, replayed = store.issue_idempotent(BODY,'old-first')
     assert replayed and replay.id==first.id and replay.outcome=='created'
     ordinary,_ = store.issue_idempotent(BODY,'new-key')

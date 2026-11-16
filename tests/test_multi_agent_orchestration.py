@@ -163,8 +163,8 @@ def test_cross_agent_pre_issuance_security_rule():
         )
 
         assert isinstance(reply, CustomerReply)
-        assert "Cannot issue a new card" in reply.text
-        assert "blocked card must be unblocked" in reply.text
+        assert "restricts card issuance" in reply.text
+        assert "would you like to unblock" not in reply.text
 
     asyncio.run(scenario())
 

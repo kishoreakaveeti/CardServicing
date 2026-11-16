@@ -123,13 +123,25 @@ async def human_confirmation_node(state: BankingWorkflowState) -> dict[str, Any]
         last_event = "card_blocked_success"
         if proposal and proposal.get("arguments"):
             verified_facts["last_blocked_card_id"] = proposal["arguments"].get("card_id")
+            verified_facts["blocked_card_id"] = proposal["arguments"].get("card_id")
             verified_facts["last_block_reason"] = proposal["arguments"].get("reason", "lost card")
+            verified_facts["is_temporary_freeze"] = any(
+                term in verified_facts['last_block_reason'].lower() for term in ('freeze', 'frozen'))
             verified_facts["has_blocked_card"] = True
+        if isinstance(exec_data, dict):
+            verified_facts['blocked_card_id'] = exec_data.get('card_id') or exec_data.get('id') or verified_facts.get('blocked_card_id')
+            verified_facts['last_block_reason'] = exec_data.get('last_block_reason') or exec_data.get('reason') or verified_facts.get('last_block_reason', 'lost card')
+            verified_facts['is_temporary_freeze'] = any(
+                term in verified_facts['last_block_reason'].lower() for term in ('freeze', 'frozen'))
     elif tool_name == "unblock_card":
         last_event = "card_unblocked_success"
+        data = exec_data if isinstance(exec_data, dict) else {}
+        verified_facts['last_unblocked_card_id'] = (data.get('card_id') or data.get('id')
+            or (proposal or {}).get('arguments', {}).get('card_id'))
         verified_facts["has_blocked_card"] = False
         verified_facts["blocked_cards"] = []
         verified_facts["temporary_freeze"] = False
+        verified_facts["is_temporary_freeze"] = False
     elif tool_name in ("issue_card", "create_card"):
         last_event = "card_issued_success"
     elif tool_name == "replace_card":

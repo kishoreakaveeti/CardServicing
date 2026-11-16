@@ -6,6 +6,9 @@ A production-grade, chat-first banking simulation demonstrating **LangGraph + La
 
 ## Key Features
 
+Live policy RAG setup, ingestion and integration verification are documented in
+[Live policy runtime](docs/live-policy-runtime.md).
+
 - **LangGraph Multi-Agent Architecture:**
   - **`SupervisorAgent` (LangGraph)**: LLM-powered supervisor dynamically routes intents, constructs minimal-context handoff contracts, schedules specialist consultations, and orchestrates compound multi-step workflows.
   - **`CardServicingAgent` (LangGraph Specialist)**: Autonomous reasoning agent managing account creation, balance/account viewing, and new card issuance.

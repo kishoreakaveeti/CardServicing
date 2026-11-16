@@ -97,19 +97,19 @@ async def test_scenario_a_temporary_freeze_unblock_offer_accepted(policy_fixture
     assert fincrime_svc.has_temporary_freeze(acc["account_number"]) is True
 
     async def facts_retriever(account_number=None, state=None):
+        blocked = fincrime_svc.is_account_blocked(acc['account_number'])
         return {
             "account_number": acc["account_number"],
-            "has_blocked_card": True,
-            "temporary_freeze": True,
+            "has_blocked_card": blocked,
+            "temporary_freeze": fincrime_svc.has_temporary_freeze(acc['account_number']),
             "compromised": False,
-            "blocked_cards": [{"id": str(card.id), "reason": "temporary customer freeze", "status": "blocked"}],
+            "blocked_cards": [{"id": str(card.id), "reason": "temporary customer freeze", "status": "blocked"}] if blocked else [],
         }
 
     model = StubModel()
     orch = AgentOrchestrator(
         model=model,
         checkpointer=checkpointer,
-        policy_store=policy_store,
         policy_evaluator=policy_evaluator,
         facts_retriever_fn=facts_retriever,
         check_blocked_fn=fincrime_svc.is_account_blocked,
@@ -221,7 +221,6 @@ async def test_scenario_a_unblock_offer_declined(policy_fixture):
     orch = AgentOrchestrator(
         model=model,
         checkpointer=checkpointer,
-        policy_store=policy_store,
         policy_evaluator=policy_evaluator,
         facts_retriever_fn=facts_retriever,
         check_blocked_fn=fincrime_svc.is_account_blocked,
@@ -293,7 +292,6 @@ async def test_scenario_a_permanently_compromised_card_suggests_replacement(poli
     orch = AgentOrchestrator(
         model=model,
         checkpointer=checkpointer,
-        policy_store=policy_store,
         policy_evaluator=policy_evaluator,
         facts_retriever_fn=facts_retriever,
         check_blocked_fn=fincrime_svc.is_account_blocked,
@@ -346,7 +344,6 @@ async def test_scenario_b_lost_card_replacement_offered_and_accepted(policy_fixt
     orch = AgentOrchestrator(
         model=model,
         checkpointer=checkpointer,
-        policy_store=policy_store,
         policy_evaluator=policy_evaluator,
         check_blocked_fn=fincrime_svc.is_account_blocked,
     )
@@ -433,7 +430,6 @@ async def test_scenario_b_lost_card_replacement_declined(policy_fixture):
     orch = AgentOrchestrator(
         model=model,
         checkpointer=checkpointer,
-        policy_store=policy_store,
         policy_evaluator=policy_evaluator,
     )
 
@@ -522,7 +518,6 @@ async def test_scenario_c_policy_update_changes_behavior_without_code_changes(po
     orch = AgentOrchestrator(
         model=model,
         checkpointer=checkpointer,
-        policy_store=store,
         policy_evaluator=evaluator,
     )
 
@@ -614,7 +609,6 @@ async def test_fail_closed_on_missing_mandatory_policy(tmp_path):
     model = StubModel()
     orch = AgentOrchestrator(
         model=model,
-        policy_store=store,
         policy_evaluator=evaluator,
     )
 

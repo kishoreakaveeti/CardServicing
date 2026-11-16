@@ -28,7 +28,8 @@ with httpx.Client(base_url='http://localhost:8081', timeout=30) as admin:
         with httpx.Client(base_url='http://localhost:8081', timeout=30) as client:
             base = '/realms/' + name + '/protocol/openid-connect'
             for cid, secret, audience, scope in [('experience-service','EXPERIENCE_SECRET','agent','agent:invoke'),
-                ('agent-service','AGENT_SECRET','mcp','tools:execute'),('mcp-service','MCP_SECRET','cards','cards:write')]:
+                ('agent-service','AGENT_SECRET','mcp','tools:execute'),('mcp-service','MCP_SECRET','cards','cards:write'),
+                ('mcp-service','MCP_SECRET','fincrime','tools:execute')]:
                 result = client.post(base + '/token', data={'grant_type':'client_credentials',
                     'client_id':cid,'client_secret':config[secret]})
                 result.raise_for_status()

@@ -77,7 +77,7 @@ class FileSystemDocumentSource(DocumentSource):
         for file_path in sorted(self.directory.glob("*.md")):
             try:
                 doc, _ = parse_policy_file(file_path)
-                if approved_only and not doc.approved:
+                if approved_only and (not doc.approved or doc.status != 'approved'):
                     logger.debug("Skipping unapproved policy %s (status=%s)", doc.policy_id, doc.status)
                     continue
                 documents.append(doc)
@@ -110,7 +110,7 @@ class InMemoryDocumentSource(DocumentSource):
     def list_documents(self, approved_only: bool = True) -> list[PolicyDocument]:
         return [
             d for d in self._documents.values()
-            if not approved_only or d.approved
+            if not approved_only or (d.approved and d.status == 'approved')
         ]
 
     def get_document(self, policy_id: str, version: str | None = None) -> PolicyDocument | None:

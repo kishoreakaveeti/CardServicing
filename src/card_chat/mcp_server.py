@@ -3,11 +3,13 @@ import asyncio
 import logging
 import json
 from time import perf_counter
+from urllib.parse import urlsplit, unquote, quote
 
 import anyio
 import httpx
 from jsonschema import Draft202012Validator, FormatChecker
 from mcp.server import Server
+from mcp.server.lowlevel.helper_types import ReadResourceContents
 from contextlib import asynccontextmanager
 from mcp.server.streamable_http_manager import StreamableHTTPSessionManager
 from mcp.server.transport_security import TransportSecuritySettings
@@ -108,6 +110,55 @@ def execute(spec, arguments, key, base_url, execution_headers=None):
 def create_server(config):
     catalogue = load_catalogue(config)
     server = Server('Card servicing')
+
+    @server.list_resources()
+    async def list_resources():
+        return []  # Customer-scoped fact URIs are addressed only by the trusted gateway.
+
+    @server.read_resource()
+    async def read_policy_facts(uri):
+        parsed = urlsplit(str(uri))
+        if parsed.scheme != 'policy-facts' or parsed.netloc != 'accounts':
+            raise ValueError('Unknown resource')
+        account = unquote(parsed.path.lstrip('/'))
+        security = Security(config)
+        from card_chat.security import delegation
+        if not security.enabled:
+            raise HTTPException(403, 'Verified customer delegation required')
+        customer = security.customer(delegation.get(), 'mcp')
+        if account not in customer.get('accounts', []) or 'tools:execute' not in customer.get('permissions', []):
+            raise HTTPException(403, 'Account is not authorized')
+        # Read only signed customer card selections. Do not trust account/card
+        # identifiers supplied by a model or disclose another customer's records.
+        cards = [c for c in customer.get('cards', []) if isinstance(c, dict)
+                 and c.get('account_number') == account]
+        blocked = []
+        async with httpx.AsyncClient(timeout=15) as client:
+            headers = await security.headers()
+            base = config.get('FINCRIME_API_BASE_URL', 'http://127.0.0.1:8025').rstrip('/')
+            for card in cards:
+                response = await client.get(base + '/fincrime/cards/' + quote(str(card['id']), safe=''), headers=headers)
+                if response.status_code == 404:
+                    if card.get('status') == 'blocked':
+                        # Preserve the restriction without inventing unblock eligibility.
+                        blocked.append(dict(card))
+                    continue
+                response.raise_for_status()
+                record = response.json()
+                if str(record.get('card_id')) != str(card['id']):
+                    raise ValueError('Invalid FinCrime card facts')
+                if record.get('status') not in ('blocked', 'unblocked', 'created'):
+                    raise ValueError('Invalid FinCrime card status')
+                if record.get('status') == 'blocked':
+                    blocked.append({**card, 'reason': record.get('reason', ''), 'status': 'blocked'})
+        compromised = any(any(term in str(c.get('reason', '')).lower()
+            for term in ('lost', 'stolen', 'fraud', 'compromised', 'destroyed')) for c in blocked)
+        frozen = any(any(term in str(c.get('reason', '')).lower()
+            for term in ('freeze', 'frozen', 'temporary')) for c in blocked)
+        facts = {'account_number': account, 'has_blocked_card': bool(blocked),
+                 'blocked_cards': blocked, 'is_temporary_freeze': frozen,
+                 'is_permanently_compromised': compromised}
+        return [ReadResourceContents(content=json.dumps(facts), mime_type='application/json')]
 
     @server.list_tools()
     async def list_tools():

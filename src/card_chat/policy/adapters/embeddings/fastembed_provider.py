@@ -90,6 +90,7 @@ class FastEmbedEmbeddingProvider(EmbeddingProvider):
 
     @property
     def dimension(self) -> int:
+        self._ensure_model()
         return self._dimension
 
     @property

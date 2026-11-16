@@ -47,10 +47,8 @@ class InMemoryVectorStore(VectorStore):
             if filter_metadata:
                 match = True
                 for k, v in filter_metadata.items():
-                    if k == "policy_id" and chunk.policy_id != v:
-                        match = False
-                        break
-                    elif k in chunk.metadata and chunk.metadata[k] != v:
+                    actual = getattr(chunk, k, chunk.metadata.get(k))
+                    if (v not in actual if isinstance(actual, list) else actual != v):
                         match = False
                         break
                 if not match:

@@ -51,9 +51,8 @@ def build_vector_store(
     store = (store_type or os.getenv("POLICY_VECTOR_STORE", "qdrant")).lower()
     if store == "qdrant":
         url = qdrant_url or os.getenv("QDRANT_URL")
-        # If no explicit QDRANT_URL is set in local non-docker testing, use :memory:
         if not url:
-            url = ":memory:"
+            raise ValueError("QDRANT_URL is required; use :memory: explicitly for tests")
         if url in (":memory:", "memory"):
             return QdrantVectorStore(client=None, url=None, path=None, collection_name=collection_name)
         elif url.startswith("http://") or url.startswith("https://"):
@@ -76,10 +75,12 @@ def build_policy_retriever(
     src = document_source or build_document_source(policies_dir=policies_dir)
     emb = embedding_provider or build_embedding_provider(
         provider_type=config.get("EMBEDDING_PROVIDER"),
+        model_name=config.get("FASTEMBED_MODEL"),
     )
     store = vector_store or build_vector_store(
         store_type=config.get("POLICY_VECTOR_STORE"),
         qdrant_url=config.get("QDRANT_URL"),
+        collection_name=config.get("POLICY_COLLECTION", os.getenv("POLICY_COLLECTION", "banking_policies")),
     )
     return HybridPolicyRetriever(
         document_source=src,
@@ -110,14 +111,39 @@ def build_policy_pipeline(
     config = config or {}
     src = build_document_source(policies_dir=policies_dir)
     emb = build_embedding_provider(
-        provider_type=embedding_provider_type or config.get("EMBEDDING_PROVIDER")
+        provider_type=embedding_provider_type or config.get("EMBEDDING_PROVIDER"),
+        model_name=config.get("FASTEMBED_MODEL")
     )
     store = build_vector_store(
         store_type=vector_store_type or config.get("POLICY_VECTOR_STORE"),
         qdrant_url=qdrant_url or config.get("QDRANT_URL"),
+        collection_name=config.get("POLICY_COLLECTION", os.getenv("POLICY_COLLECTION", "banking_policies")),
     )
     return PolicyIngestionPipeline(
         document_source=src,
         embedding_provider=emb,
         vector_store=store,
+        audit_log_path=config.get('POLICY_AUDIT_LOG', os.getenv('POLICY_AUDIT_LOG', 'data/policy_audit.json')),
     )
+
+
+def build_runtime_policy_services(config: dict[str, Any], *, retriever=None):
+    """Compose live services; readiness is read-only and ingestion remains independent.
+
+    Supplying a retriever is the explicit dependency-injection seam for tests.
+    Production configuration always requires remote Qdrant and FastEmbed.
+    """
+    if retriever is None:
+        cfg = {**os.environ, **config}
+        if cfg.get("EMBEDDING_PROVIDER", "fastembed") != "fastembed":
+            raise RuntimeError("Live policy runtime requires EMBEDDING_PROVIDER=fastembed")
+        if cfg.get("POLICY_VECTOR_STORE", "qdrant") != "qdrant" or not str(cfg.get("QDRANT_URL", "")).startswith(("http://", "https://")):
+            raise RuntimeError("Live policy runtime requires a persistent QDRANT_URL (http/https)")
+        retriever = build_policy_retriever(config=cfg)
+    if isinstance(retriever, HybridPolicyRetriever):
+        retriever.strict_index = True
+        try:
+            retriever.check_ready()
+        except Exception as exc:
+            raise RuntimeError("Approved policy index unavailable; run the independent policy ingestion pipeline") from exc
+    return retriever, build_policy_evaluator(retriever=retriever)

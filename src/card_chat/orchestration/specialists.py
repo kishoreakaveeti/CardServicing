@@ -6,6 +6,7 @@ from card_chat.orchestration.contracts import AgentHandoff, HandoffResult
 from card_chat.orchestration.state import BankingWorkflowState
 from card_chat.turns import CustomerReply, ProposedToolCall
 from card_chat.mcp_server import get_agent_tools_policy
+from card_chat.model_context import build_context
 
 logger = logging.getLogger(__name__)
 
@@ -74,7 +75,8 @@ class CardsSpecialistNode:
         from card_chat.pii.gateway import get_default_pii_gateway
         gateway = get_default_pii_gateway()
         if gateway:
-            gateway.verify_outbound(str(messages) + " " + str(draft))
+            safe_messages, safe_draft, _ = build_context(messages, draft, cards_tools)
+            gateway.verify_outbound(str(safe_messages) + " " + str(safe_draft))
 
         # Deterministic create_account proposal if model has no queued outputs
         if intent == "create_account" and _is_unconfigured_stub(self.agent):
@@ -121,7 +123,8 @@ class CardsSpecialistNode:
                 }
 
         # Deterministic replace_card proposal if card_id is known and model has no queued outputs
-        if intent == "replace_card" and _is_unconfigured_stub(self.agent):
+        if intent == "replace_card" and (_is_unconfigured_stub(self.agent)
+                or state.get('last_domain_event') == 'card_blocked_success'):
             target_card_id = (
                 context_arguments.get("card_id")
                 or verified_draft.get("arguments", {}).get("card_id")
@@ -233,7 +236,8 @@ class FinCrimeSpecialistNode:
         from card_chat.pii.gateway import get_default_pii_gateway
         gateway = get_default_pii_gateway()
         if gateway:
-            gateway.verify_outbound(str(messages) + " " + str(draft))
+            safe_messages, safe_draft, _ = build_context(messages, draft, fincrime_tools)
+            gateway.verify_outbound(str(safe_messages) + " " + str(safe_draft))
 
         # Deterministic unblock_card proposal if model has no queued outputs
         if intent == "unblock_card" and _is_unconfigured_stub(self.agent):
@@ -261,8 +265,11 @@ class FinCrimeSpecialistNode:
             }
 
         # Deterministic block_card proposal if card_id is known and model has no queued outputs
-        if intent == "block_card" and _is_unconfigured_stub(self.agent) and context_arguments.get("card_id"):
-            tool_args = {"card_id": context_arguments["card_id"], "reason": context_arguments.get("reason", "lost card")}
+        if intent == "block_card" and ((_is_unconfigured_stub(self.agent) and context_arguments.get("card_id"))
+                or state.get('planned_intents')):
+            tool_args = {"reason": context_arguments.get("reason", "Customer requested blocking")}
+            if context_arguments.get('card_id'):
+                tool_args['card_id'] = context_arguments['card_id']
             result = HandoffResult(
                 source_agent=self.name,
                 status="requires_confirmation",

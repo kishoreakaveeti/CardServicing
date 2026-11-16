@@ -2,7 +2,6 @@
 import json
 import logging
 import re
-from pathlib import Path
 from typing import Any
 
 from card_chat.orchestration.contracts import AgentHandoff, HandoffResult
@@ -10,8 +9,7 @@ from card_chat.orchestration.state import BankingWorkflowState
 from card_chat.turns import CustomerReply, ProposedToolCall
 from card_chat.model_context import sanitise
 from card_chat.observability import emit_agent_trace
-from card_chat.policy.store import PolicyStore
-from card_chat.policy.evaluator import PolicyEvaluator
+from card_chat.policy.ports import PolicyRetriever, PolicyEvaluator
 
 logger = logging.getLogger(__name__)
 
@@ -39,6 +37,15 @@ def get_target_agent_for_intent(intent: str) -> str:
     return "cards_agent"
 
 
+def normalise_compound_intents(intents: list[str], allowed_tools: dict) -> list[str]:
+    """A new card requested alongside blocking is a replacement for that card."""
+    if 'block_card' in intents:
+        if 'replace_card' in allowed_tools:
+            intents = ['replace_card' if i in ('issue_card', 'create_card') else i for i in intents]
+        intents = ['block_card'] + [i for i in intents if i != 'block_card']
+    return list(dict.fromkeys(intents))
+
+
 def _find_keyword_pos(text: str, keywords: tuple[str, ...]) -> int:
     """Helper to find earliest keyword occurrence using word boundaries."""
     best_pos = -1
@@ -61,26 +68,26 @@ class SupervisorAgent:
     def __init__(
         self,
         model: Any,
-        policy_store: PolicyStore | None = None,
+        policy_retriever: PolicyRetriever | None = None,
         policy_evaluator: PolicyEvaluator | None = None,
         facts_retriever_fn: Any | None = None,
         check_blocked_fn: Any | None = None,
     ):
         self.model = model
         self.name = "supervisor"
-        if policy_store is None:
-            default_db = "data/policies.db" if Path("data").exists() else ":memory:"
-            policy_store = PolicyStore(default_db)
-            if Path("policies").exists():
-                policy_store.index_directory("policies")
-        self.policy_store = policy_store
-        self.policy_evaluator = policy_evaluator or PolicyEvaluator(policy_store)
+        self.policy_retriever = policy_retriever
+        if policy_evaluator is None:
+            raise ValueError("Inject policy services from card_chat.policy.factory")
+        self.policy_evaluator = policy_evaluator
         self.facts_retriever_fn = facts_retriever_fn
         self.check_blocked_fn = check_blocked_fn
 
     async def _retrieve_domain_facts(self, state: BankingWorkflowState, intent: str) -> dict[str, Any]:
         """Retrieve verified banking facts via authorized services and domain functions."""
+        if intent and intent not in ('issue_card', 'create_card', 'replace_card', 'block_card', 'unblock_card'):
+            return {}  # Read-only and account/auth journeys do not need FinCrime facts.
         facts = dict(state.get("verified_domain_facts", {}))
+        facts.pop('retrieval_failed', None)
         verified_draft = state.get("verified_draft", {})
         draft_args = verified_draft.get("arguments", {})
         account_number = draft_args.get("account_number") or facts.get("account_number")
@@ -90,22 +97,28 @@ class SupervisorAgent:
                 retrieved = await self.facts_retriever_fn(account_number=account_number, state=state)
                 if isinstance(retrieved, dict):
                     facts.update(retrieved)
+                    for old, current in (('temporary_freeze', 'is_temporary_freeze'),
+                                         ('compromised', 'is_permanently_compromised')):
+                        if old in retrieved and current not in retrieved:
+                            facts[current] = retrieved[old]
             except Exception as e:
                 logger.warning("Error calling facts_retriever_fn: %s", e)
+                facts['retrieval_failed'] = True
         elif self.check_blocked_fn and account_number:
             try:
                 is_blocked = await self.check_blocked_fn(account_number)
                 if is_blocked:
                     facts["has_blocked_card"] = True
                     facts["account_number"] = account_number
-                    if "temporary_freeze" not in facts and "compromised" not in facts:
-                        facts["temporary_freeze"] = True
             except Exception as e:
                 logger.warning("Error checking blocked account: %s", e)
+                facts['retrieval_failed'] = True
 
         if not facts.get("has_blocked_card") and draft_args.get("card_id"):
             facts["card_id"] = draft_args.get("card_id")
 
+        facts.setdefault('is_temporary_freeze', facts.get('temporary_freeze', False))
+        facts.setdefault('is_permanently_compromised', facts.get('compromised', False))
         return facts
 
     async def plan_or_route(self, state: BankingWorkflowState) -> dict[str, Any]:
@@ -150,7 +163,7 @@ class SupervisorAgent:
                 target_agent = eval_result.recommended_delegation
                 target_intent = eval_result.recommended_intent or ""
                 context = dict(eval_result.recommended_context)
-                subsequent = context.pop("subsequent_intent", None)
+                subsequent = context.pop("subsequent_intent", None) or pending_q.get("subsequent_intent")
                 if subsequent and subsequent not in planned_intents:
                     planned_intents.append(subsequent)
 
@@ -199,6 +212,7 @@ class SupervisorAgent:
                     "customer_decision": "accepted",
                     "pinned_policies": eval_result.pinned_versions,
                     "policy_evaluation": eval_result.model_dump(),
+                    "retrieved_policies": eval_result.retrieved_policies,
                     "planned_intents": planned_intents,
                     "completed_intents": completed_intents,
                     "action_plan": action_plan,
@@ -210,10 +224,11 @@ class SupervisorAgent:
                 decision_type = "declined" if eval_result.prohibited else "concluded"
                 return {
                     "iteration_count": iterations,
-                    "pending_customer_question": None,
+                    "pending_customer_question": eval_result.pending_question.model_dump() if eval_result.pending_question else None,
                     "customer_decision": decision_type,
                     "pinned_policies": eval_result.pinned_versions,
                     "policy_evaluation": eval_result.model_dump(),
+                    "retrieved_policies": eval_result.retrieved_policies,
                     "next_step": "respond",
                     "final_response": eval_result.decision_reason,
                     "action_plan": action_plan,
@@ -254,6 +269,23 @@ class SupervisorAgent:
                     next_intent = planned_intents.pop(0)
                     target_agent = get_target_agent_for_intent(next_intent)
 
+                    facts = await self._retrieve_domain_facts(state, next_intent)
+                    decision = self.policy_evaluator.evaluate(
+                        next_intent, '', facts, pinned_policies=state.get('pinned_policies', {}))
+                    policy_updates = {
+                        'retrieved_policies': decision.retrieved_policies,
+                        'pinned_policies': decision.pinned_versions,
+                        'policy_evaluation': decision.model_dump(),
+                        'verified_domain_facts': facts,
+                    }
+                    if not decision.permitted or decision.prohibited or decision.policy_error:
+                        return {
+                            'iteration_count': iterations, 'next_step': 'respond', 'active_agent': None,
+                            'final_response': decision.pending_question.question_text if decision.pending_question else decision.decision_reason,
+                            'pending_customer_question': decision.pending_question.model_dump() if decision.pending_question else None,
+                            'planned_intents': planned_intents, 'action_plan': action_plan, **policy_updates,
+                        }
+
                     for item in action_plan:
                         if item.get("intent") == next_intent and item.get("status") == "pending":
                             item["status"] = "executing"
@@ -282,15 +314,12 @@ class SupervisorAgent:
                         "current_handoff": handoff,
                         "active_agent": target_agent,
                         "next_step": target_agent,
+                        **policy_updates,
                     }
                 else:
                     # Single intent completion: check if post-block policy (POL-003) applies
                     last_event = state.get("last_domain_event")
-                    is_block = (
-                        last_event == "card_blocked_success"
-                        or any(item.get("intent") == "block_card" for item in action_plan)
-                        or (last_result.source_agent == "fincrime_agent" and "block" in last_result.message.lower() and "unblock" not in last_result.message.lower())
-                    )
+                    is_block = last_event == 'card_blocked_success' and last_result.data is not None
                     if is_block:
                         facts = dict(state.get("verified_domain_facts", {}))
                         if last_result.data and isinstance(last_result.data, dict):
@@ -310,8 +339,16 @@ class SupervisorAgent:
                                 "pending_customer_question": eval_result.pending_question.model_dump(),
                                 "pinned_policies": eval_result.pinned_versions,
                                 "policy_evaluation": eval_result.model_dump(),
+                                "retrieved_policies": eval_result.retrieved_policies,
                                 "action_plan": action_plan,
                             }
+                        return {
+                            'iteration_count': iterations, 'active_agent': None, 'next_step': 'respond',
+                            'final_response': last_result.message + (' ' + eval_result.decision_reason if eval_result.policy_error else ''),
+                            'pinned_policies': eval_result.pinned_versions,
+                            'retrieved_policies': eval_result.retrieved_policies,
+                            'policy_evaluation': eval_result.model_dump(), 'action_plan': action_plan,
+                        }
 
                     return {
                         "iteration_count": iterations,
@@ -368,7 +405,6 @@ class SupervisorAgent:
 
         # 4. Policy Retrieval and Evaluation stage
         facts = await self._retrieve_domain_facts(state, primary_intent)
-        retrieved_chunks = self.policy_store.retrieve(query=user_text, intent=primary_intent)
         eval_result = self.policy_evaluator.evaluate(
             primary_intent, user_text, facts, pinned_policies=state.get("pinned_policies", {})
         )
@@ -404,7 +440,7 @@ class SupervisorAgent:
             }
 
         # Policy prohibits operation
-        if eval_result.prohibited:
+        if eval_result.prohibited or not eval_result.permitted:
             return {
                 "iteration_count": iterations,
                 "next_step": "respond",
@@ -505,7 +541,8 @@ class SupervisorAgent:
                     "Available banking capabilities:\n"
                     "- FinCrime domain (fincrime_agent): block_card, unblock_card\n"
                     "- Cards domain (cards_agent): create_account, view_accounts, view_cards, issue_card, create_card, replace_card, register, login, logout\n"
-                    "For compound requests (e.g. 'block my card and issue a replacement'), list all intents in order.\n"
+                    "For compound requests (e.g. 'block my card and reissue a new one'), use block_card then replace_card. "
+                    "Reissue means replace_card, not additional card issuance. List all intents in execution order.\n"
                     "If the customer's request is ambiguous or unsupported, set intents to empty list and provide a clarification reply.\n"
                     "Respond with a JSON object ONLY: {\"intents\": [\"intent1\", ...], \"reply\": null or \"clarification message\"}."
                 )
@@ -543,6 +580,7 @@ class SupervisorAgent:
                         "You do not have authorization to perform the requested action, or that capability is currently unavailable.",
                     )
 
+                authorized_intents = normalise_compound_intents(authorized_intents, allowed_tools)
                 primary = authorized_intents[0]
                 # Enforce domain ownership independently of LLM output
                 target = get_target_agent_for_intent(primary)
@@ -577,7 +615,7 @@ class SupervisorAgent:
         # Block card
         pos_block = _find_keyword_pos(
             lower,
-            ("block", "freeze", "stop", "lost", "stolen", "fraud", "compromised"),
+            ("block", "blocking", "freeze", "stop", "lost", "stolen", "fraud", "compromised"),
         )
         if pos_block != -1 and (has_card or any(w in lower for w in ("lost", "stolen", "fraud", "compromised", "freeze"))):
             intent_candidates.append(("block_card", pos_block))
@@ -585,7 +623,7 @@ class SupervisorAgent:
         # Replace card
         pos_replace = _find_keyword_pos(
             lower,
-            ("replacement", "replace", "replace card", "replace it", "order a replacement", "issue a replacement", "replacement card"),
+            ("replacement", "replace", "reissue", "re-issue", "re issue", "replace card", "replace it", "order a replacement", "issue a replacement", "replacement card"),
         )
         if pos_replace != -1 and (has_card or "replacement" in lower or "replace" in lower):
             replace_tool = "replace_card" if "replace_card" in allowed_tools else ("issue_card" if "issue_card" in allowed_tools else "replace_card")
@@ -640,7 +678,7 @@ class SupervisorAgent:
         for i in detected_intents:
             if i not in ordered_unique:
                 ordered_unique.append(i)
-        detected_intents = ordered_unique
+        detected_intents = normalise_compound_intents(ordered_unique, allowed_tools)
 
         # If model outputs were pre-configured in test harness
         if not detected_intents and hasattr(self.model, "outputs") and self.model.outputs:

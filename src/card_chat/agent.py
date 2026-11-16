@@ -8,6 +8,7 @@ from card_chat.turns import CustomerReply, ProposedToolCall
 from card_chat.model_context import build_context
 from card_chat.orchestration.supervisor import SupervisorAgent
 from card_chat.orchestration.graph import create_banking_workflow
+from card_chat.policy.ports import PolicyRetriever, PolicyEvaluator
 
 logger = logging.getLogger(__name__)
 
@@ -68,20 +69,20 @@ class AgentOrchestrator:
                  check_blocked_fn=None,
                  agent_tools_policy: dict | None = None,
                  checkpointer=None,
-                 policy_store: Any | None = None,
-                 policy_evaluator: Any | None = None,
+                 policy_retriever: PolicyRetriever | None = None,
+                 policy_evaluator: PolicyEvaluator | None = None,
                  facts_retriever_fn: Any | None = None):
         self.model = model
         self.cards_agent = cards_agent or CardServicingAgent(model)
         self.fincrime_agent = fincrime_agent or FinCrimeAgent(model)
         self.check_blocked_fn = check_blocked_fn
         self.agent_tools_policy = agent_tools_policy
-        self.policy_store = policy_store
+        self.policy_retriever = policy_retriever
         self.policy_evaluator = policy_evaluator
         self.facts_retriever_fn = facts_retriever_fn
         self.supervisor = SupervisorAgent(
             model,
-            policy_store=policy_store,
+            policy_retriever=policy_retriever,
             policy_evaluator=policy_evaluator,
             facts_retriever_fn=facts_retriever_fn,
             check_blocked_fn=check_blocked_fn,
@@ -170,7 +171,9 @@ class AgentOrchestrator:
             "pending_customer_question": prior_state.get("pending_customer_question"),
             "pinned_policies": prior_state.get("pinned_policies", {}),
             "verified_domain_facts": prior_state.get("verified_domain_facts", {}),
-            "last_domain_event": prior_state.get("last_domain_event"),
+            # Domain events are consumed during execution resumption, not replayed
+            # as fresh events when another customer message starts a graph run.
+            "last_domain_event": None,
             "proposed_tool": None,
             "final_response": None,
         }

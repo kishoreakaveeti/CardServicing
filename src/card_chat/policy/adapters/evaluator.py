@@ -7,7 +7,6 @@ from typing import Any
 
 from ..models import (
     PendingCustomerQuestion,
-    PolicyDocument,
     PolicyEvidence,
     PolicyEvaluationResult,
 )
@@ -30,12 +29,12 @@ NEGATIVE_TERMS = {
 
 def is_affirmative(text: str) -> bool:
     clean = re.sub(r"[^\w\s]", "", text.lower().strip())
-    return clean in AFFIRMATIVE_TERMS or any(term in clean for term in ["yes", "sure", "please unblock", "unblock"])
+    return clean in AFFIRMATIVE_TERMS or any(re.search(rf"\b{term}\b", clean) for term in ("yes", "sure", "please unblock", "unblock"))
 
 
 def is_negative(text: str) -> bool:
     clean = re.sub(r"[^\w\s]", "", text.lower().strip())
-    return clean in NEGATIVE_TERMS or any(term in clean for term in ["no", "cancel", "dont", "do not"])
+    return clean in NEGATIVE_TERMS or any(re.search(rf"\b{term}\b", clean) for term in ("no", "cancel", "dont", "do not"))
 
 
 class GroundedPolicyEvaluator(PolicyEvaluator):
@@ -44,7 +43,53 @@ class GroundedPolicyEvaluator(PolicyEvaluator):
     def __init__(self, retriever: PolicyRetriever):
         self._retriever = retriever
 
-    def evaluate(
+    def evaluate(self, intent=None, user_text="", facts=None, state=None, pending_question=None,
+                 last_domain_event=None, pinned_policies=None, **kwargs):
+        if isinstance(user_text, dict) and facts is None:
+            facts, user_text = user_text, ""
+        facts = dict(facts or {})
+        facts.setdefault("is_temporary_freeze", facts.get("temporary_freeze", False))
+        facts.setdefault("is_permanently_compromised", facts.get("compromised", False))
+        try:
+            if facts.get('retrieval_failed'):
+                raise RuntimeError('Verified banking facts unavailable')
+            pending = pending_question or (state or {}).get("pending_customer_question")
+            effective_intent = intent
+            if pending:
+                kind = pending.get("question_type") if isinstance(pending, dict) else pending.question_type
+                effective_intent = "unblock_card" if kind == "unblock_offer" else "replace_card"
+            if (last_domain_event or (state or {}).get("last_domain_event") or facts.get("last_domain_event")) == "card_blocked_success" and not intent:
+                effective_intent = "block_card"
+            evidence = self._retriever.retrieve(effective_intent, facts) if effective_intent else []
+            required = {"issue_card": "POL-001", "create_card": "POL-001", "unblock_card": "POL-001",
+                        "replace_card": "POL-002", "block_card": "POL-003"}.get(effective_intent)
+            if required and required not in {e.policy_id for e in evidence}:
+                raise RuntimeError(f"Missing mandatory policy {required}")
+            if required and getattr(self._retriever, 'strict_index', False) and 'POL-004' not in {e.policy_id for e in evidence}:
+                raise RuntimeError('Missing mandatory policy POL-004')
+            pins = dict(pinned_policies or {})
+            for e in evidence:
+                if e.policy_id in pins and pins[e.policy_id] != e.version:
+                    raise RuntimeError(f"Approved policy version changed: {e.policy_id}; restart the workflow")
+            if pending and effective_intent == "unblock_card" and facts.get("is_permanently_compromised"):
+                result = PolicyEvaluationResult(permitted=False, prohibited=True,
+                    decision_reason="POL-001 forbids unblocking a permanently compromised card.")
+            else:
+                result = self._evaluate(intent, user_text, facts, state, pending_question,
+                                        last_domain_event, pinned_policies, _evidence=evidence, **kwargs)
+            if evidence:
+                result.retrieved_policies = [e.model_dump() for e in evidence]
+                result.pinned_versions = {**pins, **{e.policy_id: e.version for e in evidence}}
+                result.evidence_citations = [{"policy_id": e.policy_id, "version": e.version,
+                    "source": e.source, "section_title": e.section_title} for e in evidence]
+            return result
+        except Exception:
+            logger.exception("Policy evaluation unavailable")
+            return PolicyEvaluationResult(permitted=False, prohibited=True,
+                policy_error="PolicyRetrievalUnavailable",
+                decision_reason="Required approved policies are unavailable. Please try again later.")
+
+    def _evaluate(
         self,
         intent: str | None = None,
         user_text: str | dict[str, Any] = "",
@@ -53,6 +98,7 @@ class GroundedPolicyEvaluator(PolicyEvaluator):
         pending_question: Any | None = None,
         last_domain_event: str | None = None,
         pinned_policies: dict[str, str] | None = None,
+        _evidence: list[PolicyEvidence] | None = None,
         **kwargs: Any,
     ) -> PolicyEvaluationResult:
         if isinstance(user_text, dict) and facts is None:
@@ -72,11 +118,11 @@ class GroundedPolicyEvaluator(PolicyEvaluator):
         if not intent:
             event = last_domain_event or state.get("last_domain_event") or facts.get("last_domain_event")
             if event == "card_blocked_success":
-                return self._evaluate_post_block(facts, state)
+                return self._evaluate_post_block(facts, state, _evidence)
             return PolicyEvaluationResult(permitted=True, decision_reason="No intent specified")
 
         # 3. Retrieve policy evidence
-        evidence = self._retriever.retrieve(intent, facts)
+        evidence = _evidence if _evidence is not None else self._retriever.retrieve(intent, facts)
         evidence_dicts = [e.model_dump() for e in evidence]
         pinned = {e.policy_id: e.version for e in evidence}
 
@@ -97,41 +143,9 @@ class GroundedPolicyEvaluator(PolicyEvaluator):
             pinned_versions=pinned,
         )
 
-    def validate_execution(
-        self,
-        tool_name: str,
-        arguments: dict[str, Any],
-        facts: dict[str, Any],
-        state: dict[str, Any] | None = None,
-    ) -> PolicyEvaluationResult:
-        """Pre-execution zero-trust validation to ensure no safety boundaries are violated."""
-        # Unblocking permanently compromised card is strictly forbidden
-        if tool_name == "unblock_card":
-            if facts.get("is_permanently_compromised"):
-                return PolicyEvaluationResult(
-                    permitted=False,
-                    prohibited=True,
-                    decision_reason="POL-001 forbids unblocking a permanently compromised or stolen card.",
-                    policy_error="ProhibitedUnblock",
-                )
-
-        # Issuing card when account has blocked card (unless updated policy specifically permits)
-        if tool_name in ("issue_card", "create_card"):
-            evidence = self._retriever.retrieve(tool_name, facts)
-            pol1 = next((e for e in evidence if e.policy_id == "POL-001"), None)
-            allow_frozen_issuance = False
-            if pol1 and pol1.conditions.get("allow_issuance_on_temporary_freeze"):
-                allow_frozen_issuance = True
-
-            if facts.get("has_blocked_card") and not (facts.get("is_temporary_freeze") and allow_frozen_issuance):
-                return PolicyEvaluationResult(
-                    permitted=False,
-                    prohibited=True,
-                    decision_reason="POL-001 forbids card issuance while a blocked card exists on the account.",
-                    policy_error="BlockedCardExists",
-                )
-
-        return PolicyEvaluationResult(permitted=True, decision_reason="Execution validation passed.")
+    def validate_execution(self, tool_name, arguments, facts, state=None):
+        return self.evaluate(tool_name, facts=facts,
+                             pinned_policies=(state or {}).get('pinned_policies', {}))
 
     def _get_latest_user_message(self, state: dict[str, Any]) -> str:
         messages = state.get("messages", [])
@@ -167,7 +181,7 @@ class GroundedPolicyEvaluator(PolicyEvaluator):
         pinned = {policy_id: policy_ver}
 
         # 1. Affirmative response
-        if is_affirmative(latest_msg):
+        if is_affirmative(latest_msg) and not is_negative(latest_msg):
             if q_type == "unblock_offer":
                 planned = [subsequent] if subsequent else []
                 return PolicyEvaluationResult(
@@ -222,14 +236,14 @@ class GroundedPolicyEvaluator(PolicyEvaluator):
             recommended_delegation="respond",
         )
 
-    def _evaluate_post_block(self, facts: dict[str, Any], state: dict[str, Any]) -> PolicyEvaluationResult:
-        evidence = self._retriever.retrieve_mandatory(policy_id="POL-003")
+    def _evaluate_post_block(self, facts: dict[str, Any], state: dict[str, Any], evidence=None) -> PolicyEvaluationResult:
+        evidence = evidence if evidence is not None else self._retriever.retrieve_mandatory(policy_id="POL-003")
         pol3 = next((e for e in evidence if e.policy_id == "POL-003"), None)
         version = pol3.version if pol3 else "1.0.0"
         pinned = {"POL-003": version}
 
         block_reason = str(facts.get("last_block_reason", "lost")).lower()
-        is_freeze = facts.get("is_temporary_freeze", block_reason in ("freeze", "frozen", "temporary_freeze"))
+        is_freeze = facts.get("is_temporary_freeze", any(term in block_reason for term in ("freeze", "frozen")))
 
         offer_on_freeze = False
         if pol3 and pol3.conditions.get("offer_on_temporary_freeze"):
@@ -289,7 +303,8 @@ class GroundedPolicyEvaluator(PolicyEvaluator):
         pol1_version = pol1.version if pol1 else "1.0.0"
 
         # Check if policy was updated (e.g. Scenario C: allow_issuance_on_temporary_freeze)
-        if pol1 and pol1.conditions.get("allow_issuance_on_temporary_freeze") and facts.get("is_temporary_freeze"):
+        if (pol1 and pol1.conditions.get("allow_issuance_on_temporary_freeze")
+                and facts.get("is_temporary_freeze") and not facts.get('is_permanently_compromised')):
             return PolicyEvaluationResult(
                 permitted=True,
                 decision_reason=f"Under updated policy POL-001 (v{pol1_version}), additional card issuance is permitted while card is temporarily frozen, subject to standard eligibility checks.",

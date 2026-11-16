@@ -114,8 +114,12 @@ class PolicyEvaluator(Protocol):
     def evaluate(
         self,
         intent: str | None,
-        facts: dict[str, Any],
+        user_text: str = "",
+        facts: dict[str, Any] | None = None,
         state: dict[str, Any] | None = None,
+        pending_question: Any | None = None,
+        last_domain_event: str | None = None,
+        pinned_policies: dict[str, str] | None = None,
     ) -> PolicyEvaluationResult:
         """Evaluate policy rules against verified facts and conversation state."""
         ...

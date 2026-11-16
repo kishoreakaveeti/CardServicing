@@ -141,7 +141,7 @@ class PolicyIngestionPipeline:
             raise ValueError("Document missing policy_id")
         if not doc.version:
             raise ValueError(f"Document {doc.policy_id} missing version")
-        if not doc.approved:
+        if not doc.approved or doc.status != 'approved':
             raise ValueError(f"Document {doc.policy_id} is not approved for production enforcement (status={doc.status})")
         if not doc.effective_date:
             raise ValueError(f"Document {doc.policy_id} missing effective_date")
@@ -182,6 +182,8 @@ class PolicyIngestionPipeline:
         # Generate embeddings
         texts = [f"Title: {c.title}\nPolicy: {c.policy_id} v{c.version}\n{c.content}" for c in chunks]
         embeddings = self.embedder.embed_documents(texts)
+        for chunk in chunks:
+            chunk.metadata['embedding_model'] = self.embedder.model_name
 
         # Atomic replacement: delete existing points for this policy_id then upsert
         self.store.delete_by_policy_id(doc.policy_id)

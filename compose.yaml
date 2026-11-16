@@ -73,6 +73,9 @@ services:
       AGENT_DB: /data/agent.db
       QDRANT_URL: http://qdrant:6333
       EMBEDDING_PROVIDER: ${EMBEDDING_PROVIDER:-fastembed}
+      FASTEMBED_MODEL: ${FASTEMBED_MODEL:-BAAI/bge-small-en-v1.5}
+      POLICY_COLLECTION: ${POLICY_COLLECTION:-banking_policies}
+      POLICY_AUDIT_LOG: /data/policy_audit.json
       POLICY_VECTOR_STORE: ${POLICY_VECTOR_STORE:-qdrant}
       POLICIES_DIR: /app/policies
     volumes:

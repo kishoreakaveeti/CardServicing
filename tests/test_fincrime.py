@@ -271,7 +271,8 @@ def test_conversational_block_and_subsequent_issuance_blocked(tmp_path, monkeypa
         cid2 = client.post('/conversations').json()['id']
         path2 = f'/conversations/{cid2}'
         resp_issue = client.post(path2 + '/messages', json={'text': 'I need a new card'}).json()
-        assert resp_issue['input_tool'] == 'issue_card'
+        assert resp_issue['can_confirm'] is False
+        assert 'blocked' in resp_issue['message'].lower()
 
         # When attempting to submit the form for this account, it is blocked
         resp_blocked = prepare_review(client, cid2, {'account_number': account['account_number']}, tool='issue_card').json()

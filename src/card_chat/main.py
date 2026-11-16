@@ -40,12 +40,13 @@ class Conversation:
     review: str | None = None
     submission: dict | None = None
     bindings: dict = field(default_factory=dict)
+    compound_approval: dict | None = None
     usage: dict = field(default_factory=lambda: {key: 0 for key in ('model_calls', 'input_tokens',
         'output_tokens', 'cache_read_input_tokens', 'cache_creation_input_tokens', 'completed_actions')})
     lock: asyncio.Lock = field(default_factory=asyncio.Lock)
 
 
-def create_app(model=None, gateway=None, *, config=None):
+def create_app(model=None, gateway=None, *, config=None, policy_retriever=None):
     config = settings() if config is None else config
     journal = Journal(config.get('AGENT_DB', ':memory:'))
     tasks = set()
@@ -80,19 +81,19 @@ def create_app(model=None, gateway=None, *, config=None):
         else:
             fincrime_agent = local_fincrime
         from card_chat.orchestration.persistence import DurableSqliteSaver
-        from card_chat.policy.store import PolicyStore
-        from card_chat.policy.evaluator import PolicyEvaluator
+        from card_chat.policy.factory import build_runtime_policy_services
         checkpointer = DurableSqliteSaver(config.get('AGENT_DB', ':memory:'))
-        policy_db = config.get('POLICY_DB', 'data/policies.db' if Path('data').exists() else ':memory:')
-        policy_store = PolicyStore(policy_db)
-        if Path('policies').exists():
-            policy_store.index_directory('policies')
-        policy_evaluator = PolicyEvaluator(policy_store)
-        app.state.policy_store = policy_store
+        retriever, policy_evaluator = build_runtime_policy_services(config, retriever=policy_retriever)
+        app.state.policy_retriever = retriever
         app.state.policy_evaluator = policy_evaluator
 
         async def get_verified_domain_facts(account_number=None, state=None):
             cust = caller()
+            if state and account_number and state.get('session_id'):
+                binding = get(state['session_id']).bindings.get(account_number, {})
+                account_number = binding.get('value', account_number)
+            if not account_number and len(cust.get('accounts', [])) == 1:
+                account_number = cust['accounts'][0]
             facts = {
                 "accounts": cust.get("accounts", []),
                 "caller_cards": cust.get("cards", []),
@@ -106,12 +107,15 @@ def create_app(model=None, gateway=None, *, config=None):
                 for c_card in cust.get("cards", []):
                     if isinstance(c_card, dict) and c_card.get("account_number") == account_number:
                         if c_card.get("status") == "blocked":
+                            if (state and state.get('last_domain_event') == 'card_unblocked_success'
+                                    and str(c_card.get('id')) == str(state.get('verified_domain_facts', {}).get('last_unblocked_card_id'))):
+                                continue  # This workflow has a newer, actual API result.
                             facts["has_blocked_card"] = True
                             facts["blocked_cards"].append(c_card)
                             reason = (c_card.get("reason") or "").lower()
                             if any(t in reason for t in ("lost", "stolen", "fraud", "compromised", "destroyed")):
                                 facts["compromised"] = True
-                            else:
+                            elif any(t in reason for t in ("freeze", "frozen", "temporary")):
                                 facts["temporary_freeze"] = True
 
                 if hasattr(app.state, "fincrime_service") and app.state.fincrime_service:
@@ -128,14 +132,23 @@ def create_app(model=None, gateway=None, *, config=None):
                             "id": r.card_id, "account_number": r.account_number,
                             "status": r.status, "reason": r.reason,
                         })
+            facts['is_temporary_freeze'] = facts['temporary_freeze']
+            facts['is_permanently_compromised'] = facts['compromised']
+            if account_number and hasattr(app.state.gateway, 'policy_facts'):
+                remote = await app.state.gateway.policy_facts(account_number)
+                if remote is not None:
+                    if not isinstance(remote, dict) or remote.get('account_number') != account_number:
+                        raise ValueError('Invalid verified policy facts')
+                    facts.update(remote)
             return facts
 
+        app.state.facts_retriever = get_verified_domain_facts
         app.state.orchestrator = AgentOrchestrator(
             app.state.model, cards_agent, fincrime_agent,
             check_blocked_fn=check_account_has_blocked,
             agent_tools_policy=get_agent_tools_policy(config),
             checkpointer=checkpointer,
-            policy_store=policy_store,
+            policy_retriever=retriever,
             policy_evaluator=policy_evaluator,
             facts_retriever_fn=get_verified_domain_facts,
         )
@@ -231,15 +244,52 @@ def create_app(model=None, gateway=None, *, config=None):
         can_confirm = bool(c.review) and not (c.submission and c.submission['result']) and not (c.submission and c.submission['attempted']
                                              and not c.submission['result'] and not spec.safe_retry)
         return {'message': text, 'review': c.review, 'can_confirm': can_confirm,
-                'confirmation_label': (spec.entry.confirmation_label or spec.entry.label) if spec else None,
+                'confirmation_label': ('Block and replace this card' if spec and spec.name == 'block_card' and c.compound_approval
+                                       else (spec.entry.confirmation_label or spec.entry.label) if spec else None),
                 'usage': dict(c.usage), 'input_tool': input_tool}
+
+    async def review_compound(cid, c):
+        c.compound_approval = None
+        if not c.proposal or c.proposal.name != 'block_card' or 'replace_card' not in permitted():
+            return ''
+        snapshot = await app.state.orchestrator.workflow.aget_state(
+            {'configurable': {'thread_id': f'{owner()}:{cid}'}})
+        if snapshot.values.get('planned_intents') != ['replace_card']:
+            return ''
+        c.compound_approval = {'card_id': c.proposal.arguments['card_id'],
+                               'replacement_reason': 'Customer requested replacement', 'status': 'reviewed'}
+        return ' This confirmation also authorizes issuing a replacement for this same card after blocking succeeds.'
 
     async def execute(cid, c):
         proposal = c.proposal
         spec = app.state.gateway.catalogue[proposal.name]
         if proposal.name not in permitted():
             raise HTTPException(403, 'Action is not permitted')
-        authorise(spec, proposal.arguments, caller())
+        execution_caller = caller()
+        approval = c.compound_approval
+        if (proposal.name == 'replace_card' and approval and approval.get('status') == 'replacing'
+                and proposal.arguments.get('card_id') == approval.get('card_id')):
+            # The immediately preceding successful API result is newer than the
+            # signed card summary carried by this same HTTP request.
+            execution_caller = {**execution_caller, 'cards': [
+                {**card, 'status': 'blocked'} if isinstance(card, dict) and card.get('id') == approval['card_id'] else card
+                for card in execution_caller.get('cards', [])]}
+        authorise(spec, proposal.arguments, execution_caller)
+        if c.submission and c.submission['result'] is not None:
+            return reply(c, c.submission['result'])
+        if proposal.name in ('issue_card', 'create_card', 'replace_card', 'block_card', 'unblock_card'):
+            graph_config = {'configurable': {'thread_id': f'{owner()}:{cid}'}}
+            snapshot = await app.state.orchestrator.workflow.aget_state(graph_config)
+            facts = await app.state.facts_retriever(proposal.arguments.get('account_number'), state=snapshot.values)
+            card_id = proposal.arguments.get('card_id')
+            for card in caller().get('cards', []):
+                if isinstance(card, dict) and str(card.get('id', card.get('card_id'))) == str(card_id):
+                    facts = await app.state.facts_retriever(card.get('account_number'), state=snapshot.values)
+                    break
+            decision = app.state.policy_evaluator.validate_execution(
+                proposal.name, proposal.arguments, facts, snapshot.values)
+            if not decision.permitted:
+                return reply(c, decision.decision_reason)
         if c.submission is None:
             c.submission = {'tool': proposal.name, 'arguments': spec.validate(proposal.arguments),
                             'key': uuid4().hex if spec.entry.idempotency_header else None,
@@ -287,6 +337,9 @@ def create_app(model=None, gateway=None, *, config=None):
             fields = '; '.join(f'{label}: {mask(data[key]) if ("account" in key or "card_number" in key) and not str(data[key]).startswith("SIM-") else data[key]}'
                                for key, label in spec.entry.result_labels.items() if key in data)
             text = f'{spec.entry.label} succeeded.' + (' ' + fields if fields else '')
+            if proposal.name == 'replace_card' and approval and approval.get('status') == 'replacing':
+                text = approval['block_result'] + ' ' + text
+                approval['status'] = 'complete'
             issuance_outcome = result.get('issuance_outcome', data.get('outcome'))
             if spec.name in ('create_card', 'issue_card') and issuance_outcome == 'already_exists':
                 text = ('A card already exists for this account. No new card was created. '
@@ -307,6 +360,18 @@ def create_app(model=None, gateway=None, *, config=None):
                 )
 
             if isinstance(resumed_turn, ProposedToolCall):
+                if (proposal.name == 'block_card' and approval and approval.get('status') == 'confirmed'
+                        and resumed_turn.name == 'replace_card'
+                        and resumed_turn.arguments.get('card_id') == approval['card_id']):
+                    arguments = {'card_id': approval['card_id'], 'reason': approval['replacement_reason']}
+                    app.state.gateway.catalogue['replace_card'].validate(arguments)
+                    approval.update(status='replacing', block_result=text)
+                    ref = bind(c.bindings, cid, owner(), 'replace_card', 'card_id', approval['card_id'])
+                    c.draft = {'tool': 'replace_card', 'arguments': {**arguments, 'card_id': ref}}
+                    c.proposal = ProposedToolCall('replace_card', arguments)
+                    c.submission = None
+                    save(cid, c)  # Persist the reviewed continuation before its API write.
+                    return await execute(cid, c)
                 # Next compound intent requires separate human confirmation!
                 next_spec = app.state.gateway.catalogue.get(resumed_turn.name)
                 next_proposal_args = dict(resumed_turn.arguments)
@@ -383,6 +448,7 @@ def create_app(model=None, gateway=None, *, config=None):
                 return reply(c, 'This submission is fixed. Use its confirmation button for a supported retry, or start a new conversation.')
             # Every new turn invalidates any previous review before interpreting updates.
             c.review, c.proposal = None, None
+            c.compound_approval = None
             if hasattr(app.state, 'pii_gateway'):
                 pii_res = app.state.pii_gateway.sanitize_input(body.text, owner=owner(), session_id=cid, private_values=tuple(private_values(c)))
                 for tok, raw_val in pii_res.tokens_created.items():
@@ -435,10 +501,29 @@ def create_app(model=None, gateway=None, *, config=None):
             if turn is None:
                 return reply(c, 'The language service is unavailable or proposed an invalid action. Please try again.')
             if isinstance(turn, CustomerReply):
-                return reply(c, sanitise(turn.text, private_values(c)), language=True)
+                # Numeric policy identifiers resemble private PINs to the conservative
+                # chat scrubber. Keep exact citations in graph state and render names.
+                text = turn.text
+                for number in range(1, 5):
+                    text = text.replace(f'POL-{number:03}', f'banking policy {number}')
+                return reply(c, sanitise(text, private_values(c)), language=True)
             if turn.name == 'logout':
                 return reply(c, 'Confirm signing out using the button below.', input_tool='logout')
             spec = app.state.gateway.catalogue[turn.name]
+            graph_config = {'configurable': {'thread_id': f'{owner()}:{cid}'}}
+            snapshot = await app.state.orchestrator.workflow.aget_state(graph_config)
+            decision = snapshot.values.get('policy_evaluation', {})
+            if decision.get('customer_decision') == 'accept' and decision.get('recommended_intent') == turn.name:
+                # Only the evaluator's verified target may become a new selection.
+                # Ordinary model-supplied raw identifiers still fail resolution.
+                context = decision.get('recommended_context', {})
+                for field in ('card_id', 'account_number'):
+                    value = context.get(field)
+                    if value and turn.arguments.get(field) == value and field in spec.input_schema['properties']:
+                        turn.arguments[field] = bind(c.bindings, cid, owner(), turn.name, field, value)
+                turn = ProposedToolCall(turn.name, {
+                    key: value for key, value in turn.arguments.items()
+                    if key in spec.input_schema['properties']})
             if turn.name == 'issue_card' and not caller().get('accounts') and 'create_account' in catalogue:
                 c.draft = {'tool': 'create_account', 'arguments': {}}
                 return reply(c, 'Create an account first. You can choose to issue a card with it.', input_tool='create_account')
@@ -493,6 +578,7 @@ def create_app(model=None, gateway=None, *, config=None):
                 response.update(review=None, can_confirm=False, confirmation_label=None)
                 return response
             c.review = uuid4().hex
+            compound_notice = await review_compound(cid, c)
             details = '; '.join(f'{label}: {value}' for label, value in spec.masked(arguments).items())
             if spec.name == 'unblock_card':
                 prompt_warning = (
@@ -501,7 +587,7 @@ def create_app(model=None, gateway=None, *, config=None):
                     f'Confirm with the button or tell me what to change.'
                 )
                 return reply(c, prompt_warning)
-            return reply(c, f'Please review: {spec.entry.label}. {details}. Confirm with the button or tell me what to change.')
+            return reply(c, f'Please review: {spec.entry.label}. {details}.{compound_notice} Confirm with the button or tell me what to change.')
 
     @app.get('/conversations/{cid}/inputs', response_model=InputOptions, response_model_exclude_none=True)
     async def input_options(cid: str):
@@ -515,6 +601,7 @@ def create_app(model=None, gateway=None, *, config=None):
         if c.submission:
             return reply(c, 'This submission is fixed. Retry it safely or start a new conversation.')
         c.review, c.proposal = None, None
+        c.compound_approval = None
         # An accepted correction invalidates the previous review even when its
         # replacement details fail validation. Do not persist unvalidated input.
         save(cid, c)
@@ -565,13 +652,18 @@ def create_app(model=None, gateway=None, *, config=None):
             result.update(review=None, can_confirm=False, confirmation_label=None)
             return result
         c.review = uuid4().hex
+        compound_notice = await review_compound(cid, c)
         details = '; '.join(f'{label}: {value}' for label, value in spec.masked(arguments).items())
-        return reply(c, f'Please review: {spec.entry.label}. {details}. Confirm with the button or update the secure form.')
+        return reply(c, f'Please review: {spec.entry.label}. {details}.{compound_notice} Confirm with the button or update the secure form.')
 
     async def confirm(cid: str, body: Confirmation, c):
         async with c.lock:
             if not c.review or body.review != c.review or c.proposal is None:
                 raise HTTPException(409, 'Review changed. Read the latest review before confirming.')
+            if c.proposal.name == 'block_card' and c.compound_approval and c.compound_approval.get('status') == 'reviewed':
+                if c.proposal.arguments.get('card_id') != c.compound_approval['card_id']:
+                    raise HTTPException(409, 'Review changed. Read the latest review before confirming.')
+                c.compound_approval['status'] = 'confirmed'
             return await execute(cid, c)
 
     async def run_operation(oid):

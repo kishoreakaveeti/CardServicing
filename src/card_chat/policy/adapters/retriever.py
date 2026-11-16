@@ -27,6 +27,37 @@ class HybridPolicyRetriever(PolicyRetriever):
         self._doc_source = document_source
         self._embedder = embedding_provider
         self._store = vector_store
+        self.strict_index = False
+
+    def _active_documents(self):
+        documents = self._doc_source.list_documents(approved_only=True)
+        active = {}
+        for doc in documents:
+            if not doc.approved or doc.status != "approved":
+                continue
+            if doc.policy_id in active:
+                raise RuntimeError(f"Multiple approved versions for {doc.policy_id}; activate one version")
+            active[doc.policy_id] = doc
+        return list(active.values())
+
+    def _verify_indexed(self, doc):
+        hits = self._store.search(
+            self._embedder.embed_query(doc.title), limit=1,
+            filter_metadata={"policy_id": doc.policy_id, "version": doc.version,
+                             "approved": True, "status": "approved"},
+        )
+        if not any(h.chunk.policy_id == doc.policy_id and h.chunk.version == doc.version
+                   and h.chunk.metadata.get("content_hash") == doc.content_hash
+                   and h.chunk.metadata.get('embedding_model') == self._embedder.model_name for h in hits):
+            raise RuntimeError(f"Approved index missing or stale: {doc.policy_id} v{doc.version}")
+
+    def check_ready(self):
+        documents = self._active_documents()
+        missing = {"POL-001", "POL-002", "POL-003", "POL-004"} - {d.policy_id for d in documents}
+        if missing:
+            raise RuntimeError(f"Missing mandatory approved policies: {sorted(missing)}")
+        for doc in documents:
+            self._verify_indexed(doc)
 
     def get_document(self, policy_id: str, version: str | None = None) -> Any | None:
         """Retrieve the authoritative policy document model by ID and optional version."""
@@ -39,7 +70,7 @@ class HybridPolicyRetriever(PolicyRetriever):
         event: str | None = None,
     ) -> list[PolicyEvidence]:
         """Deterministically lookup approved policies based on rules, intent, or event triggers."""
-        documents = self._doc_source.list_documents(approved_only=True)
+        documents = self._active_documents()
         results: list[PolicyEvidence] = []
         seen_policies: set[str] = set()
 
@@ -49,6 +80,8 @@ class HybridPolicyRetriever(PolicyRetriever):
                 match = True
             elif intent and intent in doc.applicable_intents:
                 match = True
+            elif intent == 'unblock_card' and doc.policy_id == 'POL-001':
+                match = True
             elif event and event in doc.triggering_events:
                 match = True
             elif doc.policy_id == "POL-004":
@@ -56,6 +89,8 @@ class HybridPolicyRetriever(PolicyRetriever):
                 match = True
 
             if match and doc.policy_id not in seen_policies:
+                if self.strict_index:
+                    self._verify_indexed(doc)
                 seen_policies.add(doc.policy_id)
                 results.append(
                     PolicyEvidence(
@@ -114,9 +149,16 @@ class HybridPolicyRetriever(PolicyRetriever):
         try:
             query_vec = self._embedder.embed_query(search_query)
             search_results = self._store.search(query_vec, limit=limit, score_threshold=0.1)
+            active = {d.policy_id: d for d in self._active_documents()}
 
             for hit in search_results:
                 chunk = hit.chunk
+                doc = active.get(chunk.policy_id)
+                if not doc or doc.version != chunk.version or not chunk.metadata.get("approved", True) or chunk.metadata.get("status", "approved") != "approved":
+                    continue
+                if self.strict_index and (chunk.metadata.get("content_hash") != doc.content_hash
+                                          or chunk.metadata.get('embedding_model') != self._embedder.model_name):
+                    continue
                 key = f"{chunk.policy_id}:{chunk.title}"
                 if key in seen_keys:
                     continue
@@ -140,6 +182,8 @@ class HybridPolicyRetriever(PolicyRetriever):
                     )
                 )
         except Exception as exc:
+            if self.strict_index:
+                raise RuntimeError("Policy vector retrieval unavailable") from exc
             logger.warning("Semantic vector search encountered non-fatal error: %s", exc)
 
         return evidence_list

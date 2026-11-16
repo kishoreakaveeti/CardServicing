@@ -37,6 +37,19 @@ from card_chat.policy import (
 # 1. Architecture and Dependency Injection Contract Tests
 # ==============================================================================
 
+
+@pytest.mark.parametrize('explicit', [True, False])
+def test_pipeline_uses_configured_writable_audit_log(tmp_path, monkeypatch, explicit):
+    destination = tmp_path / 'writable-volume' / 'policy-audit.json'
+    config = {'EMBEDDING_PROVIDER': 'deterministic', 'POLICY_VECTOR_STORE': 'memory'}
+    if explicit:
+        config['POLICY_AUDIT_LOG'] = str(destination)
+    else:
+        monkeypatch.setenv('POLICY_AUDIT_LOG', str(destination))
+    pipeline = build_policy_pipeline(config=config)
+    assert pipeline.audit_path == destination
+    assert destination.parent.is_dir()
+
 def test_ports_and_adapters_protocols():
     """Verify that adapters conform to their respective runtime-checkable Protocols."""
     # Document sources
