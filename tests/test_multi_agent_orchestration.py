@@ -333,3 +333,298 @@ def test_remote_fincrime_agent_explicit_failure_no_silent_fallback():
 
     asyncio.run(scenario())
 
+
+
+def test_remote_fincrime_agent_sends_authorization_headers():
+    """Verify that RemoteFinCrimeAgent includes service authorization headers in outgoing requests."""
+    from card_chat.fincrime_agent import RemoteFinCrimeAgent
+    from unittest.mock import patch
+
+    class MockResponse:
+        status_code = 200
+        def json(self):
+            return {"kind": "reply", "text": "FinCrime response"}
+
+    async def mock_headers():
+        return {"Authorization": "Bearer test-service-token", "X-Correlation-ID": "test-trace-id"}
+
+    async def scenario():
+        agent = RemoteFinCrimeAgent("http://fincrime-service:8022", headers_fn=mock_headers)
+        with patch("httpx.AsyncClient.post") as mock_post:
+            mock_post.return_value = MockResponse()
+            reply = await agent.interpret_turn([], {}, {})
+            assert mock_post.called
+            call_kwargs = mock_post.call_args.kwargs
+            assert call_kwargs.get("headers") == {
+                "Authorization": "Bearer test-service-token",
+                "X-Correlation-ID": "test-trace-id",
+            }
+            assert isinstance(reply, CustomerReply)
+            assert reply.text == "FinCrime response"
+
+    asyncio.run(scenario())
+
+
+def test_supervisor_routes_issue_new_card_to_cards_agent():
+    """Verify that 'Issue a new card' routes to Cards agent with issue_card intent."""
+    async def scenario():
+        model = StubModel()
+        supervisor = SupervisorAgent(model)
+        state = {
+            "messages": [{"role": "user", "content": "Issue a new card"}],
+            "allowed_tools": {"issue_card": {}, "view_accounts": {}},
+            "iteration_count": 0,
+            "handoff_history": [],
+        }
+        result = await supervisor.plan_or_route(state)
+        assert result["next_step"] == "cards_agent"
+        assert result["active_agent"] == "cards_agent"
+        assert result["current_handoff"].intent == "issue_card"
+        assert result["current_handoff"].target_agent == "cards_agent"
+
+    asyncio.run(scenario())
+
+
+def test_supervisor_routes_show_my_accounts_to_cards_agent():
+    """Verify that 'Show my accounts' routes to Cards agent with view_accounts intent."""
+    async def scenario():
+        model = StubModel()
+        supervisor = SupervisorAgent(model)
+        state = {
+            "messages": [{"role": "user", "content": "Show my accounts"}],
+            "allowed_tools": {"view_accounts": {}, "block_card": {}},
+            "iteration_count": 0,
+            "handoff_history": [],
+        }
+        result = await supervisor.plan_or_route(state)
+        assert result["next_step"] == "cards_agent"
+        assert result["active_agent"] == "cards_agent"
+        assert result["current_handoff"].intent == "view_accounts"
+        assert result["current_handoff"].target_agent == "cards_agent"
+
+    asyncio.run(scenario())
+
+
+def test_supervisor_routes_lost_card_to_fincrime_agent():
+    """Verify that 'I've lost my card' routes to FinCrime agent with block_card intent."""
+    async def scenario():
+        model = StubModel()
+        supervisor = SupervisorAgent(model)
+        state = {
+            "messages": [{"role": "user", "content": "I've lost my card"}],
+            "allowed_tools": {"block_card": {}, "view_accounts": {}, "view_cards": {}},
+            "iteration_count": 0,
+            "handoff_history": [],
+        }
+        result = await supervisor.plan_or_route(state)
+        assert result["next_step"] == "fincrime_agent"
+        assert result["active_agent"] == "fincrime_agent"
+        assert result["current_handoff"].intent == "block_card"
+        assert result["current_handoff"].target_agent == "fincrime_agent"
+
+    asyncio.run(scenario())
+
+
+def test_supervisor_compound_block_and_issue_replacement():
+    """Verify compound request 'Block my card and issue a replacement' produces ordered intents."""
+    async def scenario():
+        model = StubModel()
+        supervisor = SupervisorAgent(model)
+        state = {
+            "messages": [{"role": "user", "content": "Block my card and issue a replacement"}],
+            "allowed_tools": {"block_card": {}, "issue_card": {}},
+            "iteration_count": 0,
+            "handoff_history": [],
+        }
+        result = await supervisor.plan_or_route(state)
+        assert result["next_step"] == "fincrime_agent"
+        assert result["current_handoff"].intent == "block_card"
+        assert result["planned_intents"] == ["issue_card"]
+
+    asyncio.run(scenario())
+
+
+def test_supervisor_explicit_ui_action_no_llm():
+    """Verify explicit UI action selection routes directly without unnecessary LLM invocation."""
+    async def scenario():
+        mock_messages = AsyncMock()
+        mock_client = AsyncMock()
+        mock_client.messages = mock_messages
+        mock_model = AsyncMock()
+        mock_model.client = mock_client
+        mock_model.model = "claude-haiku-5-5"
+
+        supervisor = SupervisorAgent(mock_model)
+        state = {
+            "messages": [{"role": "user", "content": "confirm"}],
+            "verified_draft": {"tool": "create_card", "arguments": {"account_number": "ref_123"}},
+            "allowed_tools": {"create_card": {}},
+            "iteration_count": 0,
+            "handoff_history": [],
+        }
+        result = await supervisor.plan_or_route(state)
+        assert result["next_step"] == "cards_agent"
+        assert result["current_handoff"].intent == "create_card"
+        assert not mock_messages.create.called
+
+    asyncio.run(scenario())
+
+
+def test_supervisor_invalid_unauthorized_wrong_domain_intent():
+    """Verify that domain ownership is enforced independently of whatever target agent the LLM specifies."""
+    async def scenario():
+        class MockLLMResponse:
+            content = [type("Block", (), {"type": "text", "text": '{"target": "cards_agent", "intents": ["block_card"]}'})()]
+
+        mock_messages = AsyncMock()
+        mock_messages.create = AsyncMock(return_value=MockLLMResponse())
+        mock_client = AsyncMock()
+        mock_client.messages = mock_messages
+        mock_model = AsyncMock()
+        mock_model.client = mock_client
+        mock_model.model = "claude-test-model"
+
+        supervisor = SupervisorAgent(mock_model)
+        state = {
+            "messages": [{"role": "user", "content": "Freeze my card"}],
+            "allowed_tools": {"block_card": {}},
+            "iteration_count": 0,
+            "handoff_history": [],
+        }
+        result = await supervisor.plan_or_route(state)
+        assert result["next_step"] == "fincrime_agent"
+        assert result["active_agent"] == "fincrime_agent"
+        assert result["current_handoff"].target_agent == "fincrime_agent"
+
+    asyncio.run(scenario())
+
+
+def test_supervisor_ambiguous_request_requests_clarification():
+    """Verify ambiguous requests ask for clarification rather than defaulting to view_accounts."""
+    async def scenario():
+        model = StubModel()
+        supervisor = SupervisorAgent(model)
+        state = {
+            "messages": [{"role": "user", "content": "What is the meaning of life?"}],
+            "allowed_tools": {"view_accounts": {}, "issue_card": {}},
+            "iteration_count": 0,
+            "handoff_history": [],
+        }
+        result = await supervisor.plan_or_route(state)
+        assert result["next_step"] == "respond"
+        assert "not sure what you'd like to do" in result["final_response"].lower() or "clarify" in result["final_response"].lower()
+        assert "current_handoff" not in result
+
+    asyncio.run(scenario())
+
+
+def test_supervisor_llm_failure_deterministic_fallback():
+    """Verify that when LLM call fails, deterministic fallback accurately routes the user's intent."""
+    async def scenario():
+        mock_messages = AsyncMock()
+        mock_messages.create = AsyncMock(side_effect=RuntimeError("Anthropic API connection timeout"))
+        mock_client = AsyncMock()
+        mock_client.messages = mock_messages
+        mock_model = AsyncMock()
+        mock_model.client = mock_client
+        mock_model.model = "claude-test-model"
+
+        supervisor = SupervisorAgent(mock_model)
+        state = {
+            "messages": [{"role": "user", "content": "I've lost my card, please block it"}],
+            "allowed_tools": {"block_card": {}, "view_accounts": {}},
+            "iteration_count": 0,
+            "handoff_history": [],
+        }
+        result = await supervisor.plan_or_route(state)
+        assert result["next_step"] == "fincrime_agent"
+        assert result["active_agent"] == "fincrime_agent"
+        assert result["current_handoff"].intent == "block_card"
+
+    asyncio.run(scenario())
+
+
+def test_supervisor_restricted_tool_catalogue():
+    """Verify that requests for tools outside a restricted tool catalogue are rejected or safely filtered."""
+    async def scenario():
+        model = StubModel()
+        supervisor = SupervisorAgent(model)
+
+        # Single request with restricted catalogue: user asks to block card, but only view_accounts is authorized
+        state1 = {
+            "messages": [{"role": "user", "content": "Please block my card"}],
+            "allowed_tools": {"view_accounts": {}},
+            "iteration_count": 0,
+            "handoff_history": [],
+        }
+        result1 = await supervisor.plan_or_route(state1)
+        assert result1["next_step"] == "respond"
+        assert "not have authorization" in result1["final_response"].lower()
+
+        # Compound request with restricted catalogue: user asks to block card and issue card, but only block_card is authorized
+        state2 = {
+            "messages": [{"role": "user", "content": "Block my card and issue a replacement"}],
+            "allowed_tools": {"block_card": {}},  # issue_card not authorized
+            "iteration_count": 0,
+            "handoff_history": [],
+        }
+        result2 = await supervisor.plan_or_route(state2)
+        assert result2["next_step"] == "fincrime_agent"
+        assert result2["current_handoff"].intent == "block_card"
+        assert result2["planned_intents"] == []
+
+    asyncio.run(scenario())
+
+
+def test_subsequent_lost_card_after_account_creation_routes_to_fincrime():
+    """Verify that after creating an account with card, typing 'i lost my card' routes to block_card, not view_cards."""
+    async def scenario():
+        model = StubModel()
+        supervisor = SupervisorAgent(model)
+        cards_agent = CardServicingAgent(model)
+        fincrime_agent = FinCrimeAgent(model)
+        workflow = create_banking_workflow(supervisor, cards_agent, fincrime_agent)
+
+        allowed = {
+            "create_account": {"input_schema": {"properties": {"account_type": {}}}},
+            "create_card": {},
+            "view_accounts": {},
+            "view_cards": {},
+            "issue_card": {},
+            "block_card": {"input_schema": {"properties": {"card_id": {}}}},
+        }
+
+        # Turn 1: User creates account with card
+        state1 = {
+            "messages": [{"role": "user", "content": "create account with card"}],
+            "allowed_tools": allowed,
+            "verified_draft": {},
+            "iteration_count": 0,
+            "handoff_history": [],
+        }
+        res1 = await workflow.ainvoke(state1, config={"configurable": {"thread_id": "turn_1"}})
+        assert res1["handoff_history"][-1].source_agent == "cards_agent"
+        assert res1["proposed_tool"] is not None
+        assert res1["proposed_tool"]["name"] in ("create_account", "create_card")
+
+        # Turn 2: Subsequent request: user types 'i lost my card'
+        # Crucial: in multi-turn chat, initial_state resets active_agent and proposed_tool
+        state2 = {
+            "messages": [
+                {"role": "user", "content": "create account with card"},
+                {"role": "assistant", "content": "I have created account [acc_ref_1]"},
+                {"role": "user", "content": "i lost my card"},
+            ],
+            "allowed_tools": allowed,
+            "verified_draft": {},
+            "iteration_count": 0,
+            "handoff_history": [],
+            "active_agent": None,
+            "proposed_tool": None,
+        }
+        res2 = await workflow.ainvoke(state2, config={"configurable": {"thread_id": "turn_2"}})
+        assert res2["handoff_history"][-1].source_agent == "fincrime_agent"
+        assert res2["proposed_tool"] is not None
+        assert res2["proposed_tool"]["name"] == "block_card"
+
+    asyncio.run(scenario())

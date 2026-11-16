@@ -140,6 +140,10 @@ class AgentOrchestrator:
             "allowed_tools": allowed_tools,
             "handoff_history": [],
             "iteration_count": 0,
+            "active_agent": None,
+            "planned_intents": [],
+            "proposed_tool": None,
+            "final_response": None,
         }
 
         # Run compiled LangGraph StateGraph with durable customer-scoped thread
