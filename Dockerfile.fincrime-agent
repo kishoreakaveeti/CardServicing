@@ -5,13 +5,18 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONPATH=/app/src
 
 WORKDIR /app
-RUN groupadd --gid 10001 app && useradd --uid 10001 --gid app --no-create-home app \
-    && mkdir /data && chown app:app /data
+RUN groupadd --gid 10001 app && useradd --uid 10001 --gid app --create-home app \
+    && mkdir -p /data /home/app/.cache && chown -R app:app /data /home/app
 
 COPY pyproject.toml ./
 RUN python -c "import subprocess,sys,tomllib; p=tomllib.load(open('pyproject.toml','rb'))['project']; subprocess.check_call([sys.executable,'-m','pip','install','--no-cache-dir']+p['dependencies']+p['optional-dependencies']['infra']+p['optional-dependencies']['chat'])"
+ENV HF_HOME=/home/app/.cache/huggingface \
+    FASTEMBED_CACHE_PATH=/home/app/.cache/fastembed
+RUN python -c "from fastembed import TextEmbedding; list(TextEmbedding(model_name='BAAI/bge-small-en-v1.5').embed(['warmup']))" \
+    && chown -R app:app /home/app
 COPY README.md ./
 COPY src/ ./src/
+COPY policies/ ./policies/
 COPY docs/cards.openapi.json ./docs/cards.openapi.json
 COPY scripts/service_entrypoint.py ./scripts/service_entrypoint.py
 

@@ -71,12 +71,18 @@ services:
       SERVICE_CLIENT_ID: agent-service
       SERVICE_CLIENT_SECRET: ${AGENT_SECRET:?Run scripts/setup-stack.ps1}
       AGENT_DB: /data/agent.db
+      QDRANT_URL: http://qdrant:6333
+      EMBEDDING_PROVIDER: ${EMBEDDING_PROVIDER:-fastembed}
+      POLICY_VECTOR_STORE: ${POLICY_VECTOR_STORE:-qdrant}
+      POLICIES_DIR: /app/policies
     volumes:
       - agent_data:/data
+      - ./policies:/app/policies:ro
       - ./data/identity/delegation-public.pem:/keys/delegation-public.pem:ro
     depends_on:
       mcp-server: {condition: service_healthy}
       fincrime-agent: {condition: service_healthy}
+      qdrant: {condition: service_healthy}
   fincrime-agent:
     container_name: fincrime-agent
     build: {context: ., dockerfile: Dockerfile.fincrime-agent, target: runtime}
@@ -192,6 +198,18 @@ services:
       timeout: 5s
       retries: 60
       start_period: 30s
+  qdrant:
+    container_name: card-servicing-qdrant
+    image: qdrant/qdrant:v1.13.4
+    ports: ["127.0.0.1:${QDRANT_HOST_PORT:-6333}:6333", "127.0.0.1:${QDRANT_GRPC_PORT:-6334}:6334"]
+    volumes:
+      - qdrant_data:/qdrant/storage
+    healthcheck:
+      test: [CMD, bash, -c, "exec 3<>/dev/tcp/127.0.0.1/6333; printf 'GET /readyz HTTP/1.0\r\n\r\n' >&3; grep -q '200 OK' <&3"]
+      interval: 5s
+      timeout: 4s
+      retries: 20
+      start_period: 5s
 volumes:
   agent_data:
   experience_data:
@@ -199,3 +217,4 @@ volumes:
   fincrime_data:
   identity_data:
   mongodb_data:
+  qdrant_data:

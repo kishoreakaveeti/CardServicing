@@ -1853,6 +1853,253 @@
           "label": "UI confirmation: 'Card ending in 1234 has been reactivated.'"
         }
       ]
+    },
+    {
+      "file": "10-policy-driven-agentic-orchestration.svg",
+      "title": "10 / Policy-driven agentic orchestration with RAG and LangGraph state",
+      "subtitle": "Dynamic orchestration evaluating versioned markdown policies against verified facts to steer specialist delegation, interactive questions, and resilient execution.",
+      "steps": [
+        {
+          "owner": "workflow",
+          "title": "Interpret customer intent and retrieve verified facts",
+          "body": [
+            "Supervisor inspects inbound user message, extracts domain entities, and queries authoritative banking APIs for verified account and card facts."
+          ],
+          "references": [
+            {
+              "path": "src/card_chat/orchestration/supervisor.py",
+              "anchor": "async def _retrieve_domain_facts("
+            },
+            {
+              "path": "src/card_chat/orchestration/state.py",
+              "anchor": "class BankingWorkflowState"
+            }
+          ]
+        },
+        {
+          "owner": "api",
+          "title": "Local RAG policy retrieval (hybrid mandatory + semantic)",
+          "body": [
+            "Deterministic mandatory retrieval ensures zero policy omissions for regulated operations, combined with local dense vector search over indexed markdown sections."
+          ],
+          "references": [
+            {
+              "path": "src/card_chat/policy/store.py",
+              "anchor": "class PolicyStore:"
+            },
+            {
+              "path": "src/card_chat/policy/store.py",
+              "anchor": "def retrieve_mandatory("
+            },
+            {
+              "path": "src/card_chat/policy/store.py",
+              "anchor": "def retrieve("
+            }
+          ]
+        },
+        {
+          "owner": "workflow",
+          "title": "Deterministic policy evaluation and version pinning",
+          "body": [
+            "Policy rules evaluate against facts, pin active policy versions in LangGraph state, and formulate interactive questions or specialist delegation routes."
+          ],
+          "references": [
+            {
+              "path": "src/card_chat/policy/evaluator.py",
+              "anchor": "class PolicyEvaluator:"
+            },
+            {
+              "path": "src/card_chat/policy/evaluator.py",
+              "anchor": "def evaluate("
+            }
+          ]
+        },
+        {
+          "owner": "agent",
+          "title": "Multi-agent specialist execution with human confirmation",
+          "body": [
+            "LangGraph orchestrates handoffs to FinCrime or Cards agents, gates mutations behind human confirmation, and resumes subsequent planned intents on verified success."
+          ],
+          "references": [
+            {
+              "path": "src/card_chat/orchestration/supervisor.py",
+              "anchor": "async def plan_or_route("
+            },
+            {
+              "path": "src/card_chat/orchestration/graph.py",
+              "anchor": "def create_banking_workflow("
+            }
+          ]
+        }
+      ],
+      "participants": [
+        {
+          "id": "browser",
+          "label": "Customer Browser"
+        },
+        {
+          "id": "experience",
+          "label": "Experience API"
+        },
+        {
+          "id": "workflow",
+          "label": "Supervisor Node"
+        },
+        {
+          "id": "api",
+          "label": "Policy RAG Store"
+        },
+        {
+          "id": "storage",
+          "label": "policies.db (Store)"
+        },
+        {
+          "id": "mcp",
+          "label": "MCP Facts Gateway"
+        },
+        {
+          "id": "fincrime_agent",
+          "label": "FinCrime Agent"
+        },
+        {
+          "id": "agent",
+          "label": "Cards Agent"
+        }
+      ],
+      "messages": [
+        {
+          "kind": "call",
+          "from": "browser",
+          "to": "experience",
+          "label": "POST /conversations/{id}/messages: Issue another card for my account"
+        },
+        {
+          "kind": "call",
+          "from": "experience",
+          "to": "workflow",
+          "label": "ainvoke(BankingWorkflowState)"
+        },
+        {
+          "kind": "call",
+          "from": "workflow",
+          "to": "mcp",
+          "label": "_retrieve_domain_facts(account_number)"
+        },
+        {
+          "kind": "return",
+          "from": "mcp",
+          "to": "workflow",
+          "label": "verified_facts: has_blocked_card=True, status=frozen, reason=temporary_freeze"
+        },
+        {
+          "kind": "call",
+          "from": "workflow",
+          "to": "api",
+          "label": "retrieve(intent='issue_card', facts)"
+        },
+        {
+          "kind": "call",
+          "from": "api",
+          "to": "storage",
+          "label": "retrieve_mandatory('POL-001') + cosine_similarity_search"
+        },
+        {
+          "kind": "return",
+          "from": "storage",
+          "to": "api",
+          "label": "Return POL-001 v1.0.0 (Unblock offering condition for temporary freeze)"
+        },
+        {
+          "kind": "call",
+          "from": "workflow",
+          "to": "api",
+          "label": "evaluate_policy(POL-001, verified_facts)"
+        },
+        {
+          "kind": "return",
+          "from": "api",
+          "to": "workflow",
+          "label": "PolicyEvaluationResult: permitted=False, question='Unblock first?', pin v1.0.0"
+        },
+        {
+          "kind": "return",
+          "from": "workflow",
+          "to": "browser",
+          "label": "Interactive question: Your card is temporarily frozen. Would you like to unblock it first?"
+        },
+        {
+          "kind": "call",
+          "from": "browser",
+          "to": "workflow",
+          "label": "Customer reply: 'Yes, please'"
+        },
+        {
+          "kind": "call",
+          "from": "workflow",
+          "to": "api",
+          "label": "evaluate(customer_reply='Yes, please', pending_question)"
+        },
+        {
+          "kind": "return",
+          "from": "api",
+          "to": "workflow",
+          "label": "customer_decision='accept', next_specialist='fincrime_agent', queue 'issue_card'"
+        },
+        {
+          "kind": "call",
+          "from": "workflow",
+          "to": "fincrime_agent",
+          "label": "Handoff to FinCrime specialist: unblock_card(card_id='c-1')"
+        },
+        {
+          "kind": "return",
+          "from": "fincrime_agent",
+          "to": "workflow",
+          "label": "HandoffResult: requires_confirmation (unblock_card)"
+        },
+        {
+          "kind": "return",
+          "from": "workflow",
+          "to": "browser",
+          "label": "Render review: 'Confirm unblocking card ending in 1234?'"
+        },
+        {
+          "kind": "call",
+          "from": "browser",
+          "to": "workflow",
+          "label": "POST /conversations/{id}/confirm (nonce verified)"
+        },
+        {
+          "kind": "call",
+          "from": "workflow",
+          "to": "mcp",
+          "label": "Execute call_tool('unblock_card', {'card_id': 'c-1'})"
+        },
+        {
+          "kind": "return",
+          "from": "mcp",
+          "to": "workflow",
+          "label": "Domain event: card_unblocked_success -> facts updated"
+        },
+        {
+          "kind": "call",
+          "from": "workflow",
+          "to": "agent",
+          "label": "Resume planned intent: issue_card (Cards Agent)"
+        },
+        {
+          "kind": "return",
+          "from": "agent",
+          "to": "workflow",
+          "label": "HandoffResult: requires_confirmation (issue_card)"
+        },
+        {
+          "kind": "return",
+          "from": "workflow",
+          "to": "browser",
+          "label": "Render separate review: 'Confirm issuing additional card?'"
+        }
+      ]
     }
   ]
 }

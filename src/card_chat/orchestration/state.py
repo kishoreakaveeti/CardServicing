@@ -1,11 +1,13 @@
-"""LangGraph workflow state schema for privacy-preserving multi-agent banking."""
+"""LangGraph workflow state schema for privacy-preserving, policy-driven multi-agent banking."""
+from __future__ import annotations
+
 import operator
 from typing import Annotated, Any, TypedDict
 from card_chat.orchestration.contracts import AgentHandoff, HandoffResult
 
 
 class BankingWorkflowState(TypedDict, total=False):
-    """Shared workflow state managed across LangGraph supervisor and specialist nodes."""
+    """Shared workflow state managed across LangGraph supervisor, policy, and specialist nodes."""
 
     # Conversation and identity scope
     owner: str
@@ -17,11 +19,27 @@ class BankingWorkflowState(TypedDict, total=False):
     verified_draft: dict[str, Any]
     allowed_tools: dict[str, Any]
 
+    # Customer intent and verified domain facts
+    customer_intent: str | None
+    verified_domain_facts: dict[str, Any]
+    last_domain_event: str | None
+
+    # Policy RAG retrieval and structured evaluation
+    retrieved_policies: list[dict[str, Any]]
+    pinned_policies: dict[str, str]
+    policy_evaluation: dict[str, Any] | None
+    policy_error: str | None
+
+    # Interactive customer questions and expected responses
+    pending_customer_question: dict[str, Any] | None
+    customer_decision: str | None
+    next_specialist: str | None
+
     # Active delegation and minimal-context contracts
     current_handoff: AgentHandoff | None
     handoff_history: list[HandoffResult]
     active_agent: str | None
-    next_step: str | None  # 'cards_agent' | 'fincrime_agent' | 'supervisor' | 'human_confirmation' | 'respond'
+    next_step: str | None  # 'cards_agent' | 'fincrime_agent' | 'policy_evaluator' | 'supervisor' | 'human_confirmation' | 'respond'
 
     # Compound request tracking
     planned_intents: list[str]

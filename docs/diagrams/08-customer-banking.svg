@@ -81,7 +81,7 @@
 <text x="40" y="1594" class="heading" font-size="20" fill="#0f172a">Traceable code references</text>
 <a href="../../src/card_servicing/banking.py"><text x="40" y="1619" font-size="16" fill="#1d4ed8">src/card_servicing/banking.py:59</text></a>
 <a href="../../src/card_chat/experience.py"><text x="40" y="1644" font-size="16" fill="#1d4ed8">src/card_chat/experience.py:163</text></a>
-<a href="../../src/card_chat/main.py"><text x="40" y="1669" font-size="16" fill="#1d4ed8">src/card_chat/main.py:411</text></a>
-<a href="../../src/card_chat/main.py"><text x="40" y="1694" font-size="16" fill="#1d4ed8">src/card_chat/main.py:174</text></a>
+<a href="../../src/card_chat/main.py"><text x="40" y="1669" font-size="16" fill="#1d4ed8">src/card_chat/main.py:514</text></a>
+<a href="../../src/card_chat/main.py"><text x="40" y="1694" font-size="16" fill="#1d4ed8">src/card_chat/main.py:237</text></a>
 <text x="40" y="1762" font-size="15" fill="#475569">Source: card-chat-flows.json | Regenerate: python scripts/render_chat_diagrams.py</text>
 </svg>

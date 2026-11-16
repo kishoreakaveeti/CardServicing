@@ -67,13 +67,25 @@ class AgentOrchestrator:
                  fincrime_agent: FinCrimeAgent | None = None,
                  check_blocked_fn=None,
                  agent_tools_policy: dict | None = None,
-                 checkpointer=None):
+                 checkpointer=None,
+                 policy_store: Any | None = None,
+                 policy_evaluator: Any | None = None,
+                 facts_retriever_fn: Any | None = None):
         self.model = model
         self.cards_agent = cards_agent or CardServicingAgent(model)
         self.fincrime_agent = fincrime_agent or FinCrimeAgent(model)
         self.check_blocked_fn = check_blocked_fn
         self.agent_tools_policy = agent_tools_policy
-        self.supervisor = SupervisorAgent(model)
+        self.policy_store = policy_store
+        self.policy_evaluator = policy_evaluator
+        self.facts_retriever_fn = facts_retriever_fn
+        self.supervisor = SupervisorAgent(
+            model,
+            policy_store=policy_store,
+            policy_evaluator=policy_evaluator,
+            facts_retriever_fn=facts_retriever_fn,
+            check_blocked_fn=check_blocked_fn,
+        )
         self.checkpointer = checkpointer
         self.workflow = create_banking_workflow(
             self.supervisor,
@@ -130,25 +142,40 @@ class AgentOrchestrator:
 
         stable_thread = thread_id or f"{owner or 'cust'}:{session_id or uuid4().hex}"
 
-        # Build initial LangGraph workflow state
+        # Inspect checkpointer for prior state within this thread
+        prior_state: dict = {}
+        config = {"configurable": {"thread_id": stable_thread}}
+        if self.checkpointer:
+            try:
+                snap = await self.workflow.aget_state(config)
+                if snap and snap.values:
+                    prior_state = snap.values
+            except Exception:
+                pass
+
+        # Build LangGraph workflow state, preserving multi-turn context
         initial_state = {
-            "owner": owner or "customer",
-            "session_id": session_id or "default",
-            "workflow_id": workflow_id or stable_thread,
+            "owner": owner or prior_state.get("owner", "customer"),
+            "session_id": session_id or prior_state.get("session_id", "default"),
+            "workflow_id": workflow_id or prior_state.get("workflow_id", stable_thread),
             "messages": history,
             "verified_draft": collected,
             "allowed_tools": allowed_tools,
             "handoff_history": [],
             "iteration_count": 0,
             "active_agent": None,
-            "planned_intents": [],
-            "action_plan": [],
+            "planned_intents": prior_state.get("planned_intents", []),
+            "completed_intents": prior_state.get("completed_intents", []),
+            "action_plan": prior_state.get("action_plan", []),
+            "pending_customer_question": prior_state.get("pending_customer_question"),
+            "pinned_policies": prior_state.get("pinned_policies", {}),
+            "verified_domain_facts": prior_state.get("verified_domain_facts", {}),
+            "last_domain_event": prior_state.get("last_domain_event"),
             "proposed_tool": None,
             "final_response": None,
         }
 
         # Run compiled LangGraph StateGraph with durable customer-scoped thread
-        config = {"configurable": {"thread_id": stable_thread}}
         final_state = await self.workflow.ainvoke(initial_state, config=config)
 
         # Check if the workflow produced a tool proposal

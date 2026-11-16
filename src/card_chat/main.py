@@ -80,12 +80,64 @@ def create_app(model=None, gateway=None, *, config=None):
         else:
             fincrime_agent = local_fincrime
         from card_chat.orchestration.persistence import DurableSqliteSaver
+        from card_chat.policy.store import PolicyStore
+        from card_chat.policy.evaluator import PolicyEvaluator
         checkpointer = DurableSqliteSaver(config.get('AGENT_DB', ':memory:'))
+        policy_db = config.get('POLICY_DB', 'data/policies.db' if Path('data').exists() else ':memory:')
+        policy_store = PolicyStore(policy_db)
+        if Path('policies').exists():
+            policy_store.index_directory('policies')
+        policy_evaluator = PolicyEvaluator(policy_store)
+        app.state.policy_store = policy_store
+        app.state.policy_evaluator = policy_evaluator
+
+        async def get_verified_domain_facts(account_number=None, state=None):
+            cust = caller()
+            facts = {
+                "accounts": cust.get("accounts", []),
+                "caller_cards": cust.get("cards", []),
+                "account_number": account_number,
+                "has_blocked_card": False,
+                "blocked_cards": [],
+                "temporary_freeze": False,
+                "compromised": False,
+            }
+            if account_number:
+                for c_card in cust.get("cards", []):
+                    if isinstance(c_card, dict) and c_card.get("account_number") == account_number:
+                        if c_card.get("status") == "blocked":
+                            facts["has_blocked_card"] = True
+                            facts["blocked_cards"].append(c_card)
+                            reason = (c_card.get("reason") or "").lower()
+                            if any(t in reason for t in ("lost", "stolen", "fraud", "compromised", "destroyed")):
+                                facts["compromised"] = True
+                            else:
+                                facts["temporary_freeze"] = True
+
+                if hasattr(app.state, "fincrime_service") and app.state.fincrime_service:
+                    fc = app.state.fincrime_service
+                    if fc.is_account_blocked(account_number):
+                        facts["has_blocked_card"] = True
+                    if fc.has_temporary_freeze(account_number):
+                        facts["temporary_freeze"] = True
+                    if fc.has_compromised_cards(account_number):
+                        facts["compromised"] = True
+                    blocked_records = fc.store.get_blocked_cards_for_account(account_number)
+                    for r in blocked_records:
+                        facts["blocked_cards"].append({
+                            "id": r.card_id, "account_number": r.account_number,
+                            "status": r.status, "reason": r.reason,
+                        })
+            return facts
+
         app.state.orchestrator = AgentOrchestrator(
             app.state.model, cards_agent, fincrime_agent,
             check_blocked_fn=check_account_has_blocked,
             agent_tools_policy=get_agent_tools_policy(config),
             checkpointer=checkpointer,
+            policy_store=policy_store,
+            policy_evaluator=policy_evaluator,
+            facts_retriever_fn=get_verified_domain_facts,
         )
         app.state.agent = app.state.orchestrator
         try:

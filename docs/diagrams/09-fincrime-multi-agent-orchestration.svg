@@ -200,7 +200,7 @@
 <path d="M681.1111111111111 4107 H130.0" fill="none" stroke="#334155" stroke-width="2" stroke-dasharray="7 5" marker-end="url(#arrow)"/>
 <text x="40" y="4207" class="heading" font-size="20" fill="#0f172a">Traceable code references</text>
 <a href="../../src/card_chat/agent.py"><text x="40" y="4232" font-size="16" fill="#1d4ed8">src/card_chat/agent.py:63</text></a>
-<a href="../../src/card_chat/agent.py"><text x="40" y="4257" font-size="16" fill="#1d4ed8">src/card_chat/agent.py:86</text></a>
+<a href="../../src/card_chat/agent.py"><text x="40" y="4257" font-size="16" fill="#1d4ed8">src/card_chat/agent.py:98</text></a>
 <a href="../../src/card_chat/fincrime_agent.py"><text x="40" y="4282" font-size="16" fill="#1d4ed8">src/card_chat/fincrime_agent.py:24</text></a>
 <a href="../../src/card_chat/mcp_server.py"><text x="40" y="4307" font-size="16" fill="#1d4ed8">src/card_chat/mcp_server.py:32</text></a>
 <a href="../../src/card_chat/mcp_server.py"><text x="40" y="4332" font-size="16" fill="#1d4ed8">src/card_chat/mcp_server.py:118</text></a>
@@ -210,6 +210,6 @@
 <a href="../../src/fincrime_servicing/persistence.py"><text x="40" y="4432" font-size="16" fill="#1d4ed8">src/fincrime_servicing/persistence.py:196</text></a>
 <a href="../../src/card_servicing/banking.py"><text x="40" y="4457" font-size="16" fill="#1d4ed8">src/card_servicing/banking.py:145</text></a>
 <a href="../../src/card_servicing/banking.py"><text x="40" y="4482" font-size="16" fill="#1d4ed8">src/card_servicing/banking.py:155</text></a>
-<a href="../../src/card_servicing/persistence.py"><text x="40" y="4507" font-size="16" fill="#1d4ed8">src/card_servicing/persistence.py:178</text></a>
+<a href="../../src/card_servicing/persistence.py"><text x="40" y="4507" font-size="16" fill="#1d4ed8">src/card_servicing/persistence.py:214</text></a>
 <text x="40" y="4575" font-size="15" fill="#475569">Source: card-chat-flows.json | Regenerate: python scripts/render_chat_diagrams.py</text>
 </svg>

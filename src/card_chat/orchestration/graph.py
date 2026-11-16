@@ -116,6 +116,25 @@ async def human_confirmation_node(state: BankingWorkflowState) -> dict[str, Any]
         message=exec_msg or f"{tool_name} completed successfully.",
         data=exec_data,
     )
+
+    verified_facts = dict(state.get("verified_domain_facts", {}))
+    last_event = state.get("last_domain_event")
+    if tool_name == "block_card":
+        last_event = "card_blocked_success"
+        if proposal and proposal.get("arguments"):
+            verified_facts["last_blocked_card_id"] = proposal["arguments"].get("card_id")
+            verified_facts["last_block_reason"] = proposal["arguments"].get("reason", "lost card")
+            verified_facts["has_blocked_card"] = True
+    elif tool_name == "unblock_card":
+        last_event = "card_unblocked_success"
+        verified_facts["has_blocked_card"] = False
+        verified_facts["blocked_cards"] = []
+        verified_facts["temporary_freeze"] = False
+    elif tool_name in ("issue_card", "create_card"):
+        last_event = "card_issued_success"
+    elif tool_name == "replace_card":
+        last_event = "card_replaced_success"
+
     return {
         "can_confirm": False,
         "proposed_tool": None,
@@ -123,6 +142,8 @@ async def human_confirmation_node(state: BankingWorkflowState) -> dict[str, Any]
         "handoff_history": list(state.get("handoff_history", [])) + [result],
         "active_agent": active_agent,
         "next_step": "supervisor",
+        "last_domain_event": last_event,
+        "verified_domain_facts": verified_facts,
     }
 
 

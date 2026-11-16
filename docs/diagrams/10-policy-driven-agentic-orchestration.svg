@@ -1,0 +1,128 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="2220" height="2595" viewBox="0 0 2220 2595" role="img" aria-labelledby="title description">
+<title id="title">10 / Policy-driven agentic orchestration with RAG and LangGraph state - sequence diagram</title>
+<desc id="description">Dynamic orchestration evaluating versioned markdown policies against verified facts to steer specialist delegation, interactive questions, and resilient execution. Read interactions from top to bottom. Dashed arrows are replies.</desc>
+<defs><marker id="arrow" markerWidth="9" markerHeight="9" refX="8" refY="4.5" orient="auto"><path d="M0 0 L9 4.5 L0 9" fill="#334155"/></marker></defs>
+<style>text{font-family:Consolas,"Liberation Mono",monospace}.heading{font-family:Arial,sans-serif;font-weight:700}</style>
+<rect width="2220" height="2595" fill="#fff"/>
+<text x="40" y="55" class="heading" font-size="32" fill="#0f172a">10 / Policy-driven agentic orchestration with RAG and LangGraph state</text>
+<text x="40" y="90" font-size="18" fill="#475569">Dynamic orchestration evaluating versioned markdown policies against verified facts to steer specialist delegation, interactive questions, and resilient execution.</text>
+<text x="40" y="120" font-size="16" fill="#475569">Time flows downward | Solid arrow: call | Dashed arrow: reply | Yellow: explanation</text>
+<path d="M130.0 207 V2235" stroke="#94a3b8" stroke-width="2" stroke-dasharray="6 6"/>
+<rect x="19.0" y="155" width="222" height="52" rx="7" fill="#155e75"/>
+<text x="130.0" y="187" text-anchor="middle" class="heading" font-size="19" fill="white">Customer Browser</text>
+<path d="M410.0 207 V2235" stroke="#94a3b8" stroke-width="2" stroke-dasharray="6 6"/>
+<rect x="299.0" y="155" width="222" height="52" rx="7" fill="#0369a1"/>
+<text x="410.0" y="187" text-anchor="middle" class="heading" font-size="19" fill="white">Experience API</text>
+<path d="M690.0 207 V2235" stroke="#94a3b8" stroke-width="2" stroke-dasharray="6 6"/>
+<rect x="579.0" y="155" width="222" height="52" rx="7" fill="#1d4ed8"/>
+<text x="690.0" y="187" text-anchor="middle" class="heading" font-size="19" fill="white">Supervisor Node</text>
+<path d="M970.0 207 V2235" stroke="#94a3b8" stroke-width="2" stroke-dasharray="6 6"/>
+<rect x="859.0" y="155" width="222" height="52" rx="7" fill="#0f766e"/>
+<text x="970.0" y="187" text-anchor="middle" class="heading" font-size="19" fill="white">Policy RAG Store</text>
+<path d="M1250.0 207 V2235" stroke="#94a3b8" stroke-width="2" stroke-dasharray="6 6"/>
+<rect x="1139.0" y="155" width="222" height="52" rx="7" fill="#334155"/>
+<text x="1250.0" y="187" text-anchor="middle" class="heading" font-size="19" fill="white">policies.db (Store)</text>
+<path d="M1530.0 207 V2235" stroke="#94a3b8" stroke-width="2" stroke-dasharray="6 6"/>
+<rect x="1419.0" y="155" width="222" height="52" rx="7" fill="#047857"/>
+<text x="1530.0" y="187" text-anchor="middle" class="heading" font-size="19" fill="white">MCP Facts Gateway</text>
+<path d="M1810.0 207 V2235" stroke="#94a3b8" stroke-width="2" stroke-dasharray="6 6"/>
+<rect x="1699.0" y="155" width="222" height="52" rx="7" fill="#9333ea"/>
+<text x="1810.0" y="187" text-anchor="middle" class="heading" font-size="19" fill="white">FinCrime Agent</text>
+<path d="M2090.0 207 V2235" stroke="#94a3b8" stroke-width="2" stroke-dasharray="6 6"/>
+<rect x="1979.0" y="155" width="222" height="52" rx="7" fill="#6d28d9"/>
+<text x="2090.0" y="187" text-anchor="middle" class="heading" font-size="19" fill="white">Cards Agent</text>
+<rect x="133.75" y="240" width="272.5" height="79" fill="white"/>
+<text x="270.0" y="260" text-anchor="middle" font-size="16" fill="#0f172a">POST /conversations/{id}/me</text>
+<text x="270.0" y="284" text-anchor="middle" font-size="16" fill="#0f172a">ssages: Issue another card</text>
+<text x="270.0" y="308" text-anchor="middle" font-size="16" fill="#0f172a">for my account</text>
+<path d="M130.0 326 H410.0" fill="none" stroke="#334155" stroke-width="2" marker-end="url(#arrow)"/>
+<rect x="413.75" y="359" width="272.5" height="55" fill="white"/>
+<text x="550.0" y="379" text-anchor="middle" font-size="16" fill="#0f172a">ainvoke(BankingWorkflowStat</text>
+<text x="550.0" y="403" text-anchor="middle" font-size="16" fill="#0f172a">e)</text>
+<path d="M410.0 421 H690.0" fill="none" stroke="#334155" stroke-width="2" marker-end="url(#arrow)"/>
+<rect x="921.5" y="454" width="377.0" height="31" fill="white"/>
+<text x="1110.0" y="474" text-anchor="middle" font-size="16" fill="#0f172a">_retrieve_domain_facts(account_number)</text>
+<path d="M690.0 492 H1530.0" fill="none" stroke="#334155" stroke-width="2" marker-end="url(#arrow)"/>
+<rect x="736.25" y="525" width="747.5" height="31" fill="white"/>
+<text x="1110.0" y="545" text-anchor="middle" font-size="16" fill="#0f172a">verified_facts: has_blocked_card=True, status=frozen, reason=temporary_freeze</text>
+<path d="M1530.0 563 H690.0" fill="none" stroke="#334155" stroke-width="2" stroke-dasharray="7 5" marker-end="url(#arrow)"/>
+<rect x="693.75" y="596" width="272.5" height="55" fill="white"/>
+<text x="830.0" y="616" text-anchor="middle" font-size="16" fill="#0f172a">retrieve(intent=&#x27;issue_card</text>
+<text x="830.0" y="640" text-anchor="middle" font-size="16" fill="#0f172a">&#x27;, facts)</text>
+<path d="M690.0 658 H970.0" fill="none" stroke="#334155" stroke-width="2" marker-end="url(#arrow)"/>
+<rect x="988.0" y="691" width="244.0" height="79" fill="white"/>
+<text x="1110.0" y="711" text-anchor="middle" font-size="16" fill="#0f172a">retrieve_mandatory(&#x27;POL-</text>
+<text x="1110.0" y="735" text-anchor="middle" font-size="16" fill="#0f172a">001&#x27;) +</text>
+<text x="1110.0" y="759" text-anchor="middle" font-size="16" fill="#0f172a">cosine_similarity_search</text>
+<path d="M970.0 777 H1250.0" fill="none" stroke="#334155" stroke-width="2" marker-end="url(#arrow)"/>
+<rect x="973.75" y="810" width="272.5" height="79" fill="white"/>
+<text x="1110.0" y="830" text-anchor="middle" font-size="16" fill="#0f172a">Return POL-001 v1.0.0</text>
+<text x="1110.0" y="854" text-anchor="middle" font-size="16" fill="#0f172a">(Unblock offering condition</text>
+<text x="1110.0" y="878" text-anchor="middle" font-size="16" fill="#0f172a">for temporary freeze)</text>
+<path d="M1250.0 896 H970.0" fill="none" stroke="#334155" stroke-width="2" stroke-dasharray="7 5" marker-end="url(#arrow)"/>
+<rect x="708.0" y="929" width="244.0" height="55" fill="white"/>
+<text x="830.0" y="949" text-anchor="middle" font-size="16" fill="#0f172a">evaluate_policy(POL-001,</text>
+<text x="830.0" y="973" text-anchor="middle" font-size="16" fill="#0f172a">verified_facts)</text>
+<path d="M690.0 991 H970.0" fill="none" stroke="#334155" stroke-width="2" marker-end="url(#arrow)"/>
+<rect x="698.5" y="1024" width="263.0" height="103" fill="white"/>
+<text x="830.0" y="1044" text-anchor="middle" font-size="16" fill="#0f172a">PolicyEvaluationResult:</text>
+<text x="830.0" y="1068" text-anchor="middle" font-size="16" fill="#0f172a">permitted=False,</text>
+<text x="830.0" y="1092" text-anchor="middle" font-size="16" fill="#0f172a">question=&#x27;Unblock first?&#x27;,</text>
+<text x="830.0" y="1116" text-anchor="middle" font-size="16" fill="#0f172a">pin v1.0.0</text>
+<path d="M970.0 1134 H690.0" fill="none" stroke="#334155" stroke-width="2" stroke-dasharray="7 5" marker-end="url(#arrow)"/>
+<rect x="145.5" y="1167" width="529.0" height="55" fill="white"/>
+<text x="410.0" y="1187" text-anchor="middle" font-size="16" fill="#0f172a">Interactive question: Your card is temporarily frozen.</text>
+<text x="410.0" y="1211" text-anchor="middle" font-size="16" fill="#0f172a">Would you like to unblock it first?</text>
+<path d="M690.0 1229 H130.0" fill="none" stroke="#334155" stroke-width="2" stroke-dasharray="7 5" marker-end="url(#arrow)"/>
+<rect x="264.25" y="1262" width="291.5" height="31" fill="white"/>
+<text x="410.0" y="1282" text-anchor="middle" font-size="16" fill="#0f172a">Customer reply: &#x27;Yes, please&#x27;</text>
+<path d="M130.0 1300 H690.0" fill="none" stroke="#334155" stroke-width="2" marker-end="url(#arrow)"/>
+<rect x="693.75" y="1333" width="272.5" height="79" fill="white"/>
+<text x="830.0" y="1353" text-anchor="middle" font-size="16" fill="#0f172a">evaluate(customer_reply=&#x27;Ye</text>
+<text x="830.0" y="1377" text-anchor="middle" font-size="16" fill="#0f172a">s, please&#x27;,</text>
+<text x="830.0" y="1401" text-anchor="middle" font-size="16" fill="#0f172a">pending_question)</text>
+<path d="M690.0 1419 H970.0" fill="none" stroke="#334155" stroke-width="2" marker-end="url(#arrow)"/>
+<rect x="693.75" y="1452" width="272.5" height="79" fill="white"/>
+<text x="830.0" y="1472" text-anchor="middle" font-size="16" fill="#0f172a">customer_decision=&#x27;accept&#x27;,</text>
+<text x="830.0" y="1496" text-anchor="middle" font-size="16" fill="#0f172a">next_specialist=&#x27;fincrime_a</text>
+<text x="830.0" y="1520" text-anchor="middle" font-size="16" fill="#0f172a">gent&#x27;, queue &#x27;issue_card&#x27;</text>
+<path d="M970.0 1538 H690.0" fill="none" stroke="#334155" stroke-width="2" stroke-dasharray="7 5" marker-end="url(#arrow)"/>
+<rect x="961.75" y="1571" width="576.5" height="31" fill="white"/>
+<text x="1250.0" y="1591" text-anchor="middle" font-size="16" fill="#0f172a">Handoff to FinCrime specialist: unblock_card(card_id=&#x27;c-1&#x27;)</text>
+<path d="M690.0 1609 H1810.0" fill="none" stroke="#334155" stroke-width="2" marker-end="url(#arrow)"/>
+<rect x="999.75" y="1642" width="500.5" height="31" fill="white"/>
+<text x="1250.0" y="1662" text-anchor="middle" font-size="16" fill="#0f172a">HandoffResult: requires_confirmation (unblock_card)</text>
+<path d="M1810.0 1680 H690.0" fill="none" stroke="#334155" stroke-width="2" stroke-dasharray="7 5" marker-end="url(#arrow)"/>
+<rect x="136.0" y="1713" width="548.0" height="31" fill="white"/>
+<text x="410.0" y="1733" text-anchor="middle" font-size="16" fill="#0f172a">Render review: &#x27;Confirm unblocking card ending in 1234?&#x27;</text>
+<path d="M690.0 1751 H130.0" fill="none" stroke="#334155" stroke-width="2" stroke-dasharray="7 5" marker-end="url(#arrow)"/>
+<rect x="169.25" y="1784" width="481.5" height="31" fill="white"/>
+<text x="410.0" y="1804" text-anchor="middle" font-size="16" fill="#0f172a">POST /conversations/{id}/confirm (nonce verified)</text>
+<path d="M130.0 1822 H690.0" fill="none" stroke="#334155" stroke-width="2" marker-end="url(#arrow)"/>
+<rect x="850.25" y="1855" width="519.5" height="31" fill="white"/>
+<text x="1110.0" y="1875" text-anchor="middle" font-size="16" fill="#0f172a">Execute call_tool(&#x27;unblock_card&#x27;, {&#x27;card_id&#x27;: &#x27;c-1&#x27;})</text>
+<path d="M690.0 1893 H1530.0" fill="none" stroke="#334155" stroke-width="2" marker-end="url(#arrow)"/>
+<rect x="850.25" y="1926" width="519.5" height="31" fill="white"/>
+<text x="1110.0" y="1946" text-anchor="middle" font-size="16" fill="#0f172a">Domain event: card_unblocked_success -&gt; facts updated</text>
+<path d="M1530.0 1964 H690.0" fill="none" stroke="#334155" stroke-width="2" stroke-dasharray="7 5" marker-end="url(#arrow)"/>
+<rect x="1158.75" y="1997" width="462.5" height="31" fill="white"/>
+<text x="1390.0" y="2017" text-anchor="middle" font-size="16" fill="#0f172a">Resume planned intent: issue_card (Cards Agent)</text>
+<path d="M690.0 2035 H2090.0" fill="none" stroke="#334155" stroke-width="2" marker-end="url(#arrow)"/>
+<rect x="1149.25" y="2068" width="481.5" height="31" fill="white"/>
+<text x="1390.0" y="2088" text-anchor="middle" font-size="16" fill="#0f172a">HandoffResult: requires_confirmation (issue_card)</text>
+<path d="M2090.0 2106 H690.0" fill="none" stroke="#334155" stroke-width="2" stroke-dasharray="7 5" marker-end="url(#arrow)"/>
+<rect x="126.5" y="2139" width="567.0" height="31" fill="white"/>
+<text x="410.0" y="2159" text-anchor="middle" font-size="16" fill="#0f172a">Render separate review: &#x27;Confirm issuing additional card?&#x27;</text>
+<path d="M690.0 2177 H130.0" fill="none" stroke="#334155" stroke-width="2" stroke-dasharray="7 5" marker-end="url(#arrow)"/>
+<text x="40" y="2277" class="heading" font-size="20" fill="#0f172a">Traceable code references</text>
+<a href="../../src/card_chat/orchestration/supervisor.py"><text x="40" y="2302" font-size="16" fill="#1d4ed8">src/card_chat/orchestration/supervisor.py:81</text></a>
+<a href="../../src/card_chat/orchestration/state.py"><text x="40" y="2327" font-size="16" fill="#1d4ed8">src/card_chat/orchestration/state.py:9</text></a>
+<a href="../../src/card_chat/policy/store.py"><text x="40" y="2352" font-size="16" fill="#1d4ed8">src/card_chat/policy/store.py:88</text></a>
+<a href="../../src/card_chat/policy/store.py"><text x="40" y="2377" font-size="16" fill="#1d4ed8">src/card_chat/policy/store.py:276</text></a>
+<a href="../../src/card_chat/policy/store.py"><text x="40" y="2402" font-size="16" fill="#1d4ed8">src/card_chat/policy/store.py:393</text></a>
+<a href="../../src/card_chat/policy/evaluator.py"><text x="40" y="2427" font-size="16" fill="#1d4ed8">src/card_chat/policy/evaluator.py:45</text></a>
+<a href="../../src/card_chat/policy/evaluator.py"><text x="40" y="2452" font-size="16" fill="#1d4ed8">src/card_chat/policy/evaluator.py:51</text></a>
+<a href="../../src/card_chat/orchestration/supervisor.py"><text x="40" y="2477" font-size="16" fill="#1d4ed8">src/card_chat/orchestration/supervisor.py:111</text></a>
+<a href="../../src/card_chat/orchestration/graph.py"><text x="40" y="2502" font-size="16" fill="#1d4ed8">src/card_chat/orchestration/graph.py:150</text></a>
+<text x="40" y="2570" font-size="15" fill="#475569">Source: card-chat-flows.json | Regenerate: python scripts/render_chat_diagrams.py</text>
+</svg>

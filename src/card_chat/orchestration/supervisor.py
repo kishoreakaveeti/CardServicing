@@ -2,6 +2,7 @@
 import json
 import logging
 import re
+from pathlib import Path
 from typing import Any
 
 from card_chat.orchestration.contracts import AgentHandoff, HandoffResult
@@ -9,6 +10,8 @@ from card_chat.orchestration.state import BankingWorkflowState
 from card_chat.turns import CustomerReply, ProposedToolCall
 from card_chat.model_context import sanitise
 from card_chat.observability import emit_agent_trace
+from card_chat.policy.store import PolicyStore
+from card_chat.policy.evaluator import PolicyEvaluator
 
 logger = logging.getLogger(__name__)
 
@@ -55,9 +58,55 @@ class SupervisorAgent:
     and multi-turn resumption using Anthropic Claude or deterministic stub.
     """
 
-    def __init__(self, model: Any):
+    def __init__(
+        self,
+        model: Any,
+        policy_store: PolicyStore | None = None,
+        policy_evaluator: PolicyEvaluator | None = None,
+        facts_retriever_fn: Any | None = None,
+        check_blocked_fn: Any | None = None,
+    ):
         self.model = model
         self.name = "supervisor"
+        if policy_store is None:
+            default_db = "data/policies.db" if Path("data").exists() else ":memory:"
+            policy_store = PolicyStore(default_db)
+            if Path("policies").exists():
+                policy_store.index_directory("policies")
+        self.policy_store = policy_store
+        self.policy_evaluator = policy_evaluator or PolicyEvaluator(policy_store)
+        self.facts_retriever_fn = facts_retriever_fn
+        self.check_blocked_fn = check_blocked_fn
+
+    async def _retrieve_domain_facts(self, state: BankingWorkflowState, intent: str) -> dict[str, Any]:
+        """Retrieve verified banking facts via authorized services and domain functions."""
+        facts = dict(state.get("verified_domain_facts", {}))
+        verified_draft = state.get("verified_draft", {})
+        draft_args = verified_draft.get("arguments", {})
+        account_number = draft_args.get("account_number") or facts.get("account_number")
+
+        if self.facts_retriever_fn:
+            try:
+                retrieved = await self.facts_retriever_fn(account_number=account_number, state=state)
+                if isinstance(retrieved, dict):
+                    facts.update(retrieved)
+            except Exception as e:
+                logger.warning("Error calling facts_retriever_fn: %s", e)
+        elif self.check_blocked_fn and account_number:
+            try:
+                is_blocked = await self.check_blocked_fn(account_number)
+                if is_blocked:
+                    facts["has_blocked_card"] = True
+                    facts["account_number"] = account_number
+                    if "temporary_freeze" not in facts and "compromised" not in facts:
+                        facts["temporary_freeze"] = True
+            except Exception as e:
+                logger.warning("Error checking blocked account: %s", e)
+
+        if not facts.get("has_blocked_card") and draft_args.get("card_id"):
+            facts["card_id"] = draft_args.get("card_id")
+
+        return facts
 
     async def plan_or_route(self, state: BankingWorkflowState) -> dict[str, Any]:
         """Supervisor node entry point in the LangGraph workflow."""
@@ -86,7 +135,91 @@ class SupervisorAgent:
             "",
         )
 
-        # Check if we are resuming after a specialist result in this execution cycle
+        # 1. Interactive policy question handling (e.g. customer responds to unblock or replacement offer)
+        pending_q = state.get("pending_customer_question")
+        if pending_q and user_text.strip():
+            facts = await self._retrieve_domain_facts(state, "")
+            eval_result = self.policy_evaluator.evaluate(
+                intent=None,
+                user_text=user_text,
+                facts=facts,
+                pending_question=pending_q,
+                pinned_policies=state.get("pinned_policies", {}),
+            )
+            if eval_result.recommended_delegation in ("cards_agent", "fincrime_agent"):
+                target_agent = eval_result.recommended_delegation
+                target_intent = eval_result.recommended_intent or ""
+                context = dict(eval_result.recommended_context)
+                subsequent = context.pop("subsequent_intent", None)
+                if subsequent and subsequent not in planned_intents:
+                    planned_intents.append(subsequent)
+
+                handoff = AgentHandoff(
+                    origin_agent="supervisor",
+                    target_agent=target_agent,
+                    intent=target_intent,
+                    relevant_context=context,
+                    session_id=session_id,
+                    workflow_id=workflow_id,
+                )
+                action_plan = [
+                    {
+                        "intent": target_intent,
+                        "target_agent": target_agent,
+                        "status": "executing",
+                        "tool_proposal": None,
+                        "result": None,
+                        "error": None,
+                    }
+                ]
+                if planned_intents:
+                    action_plan.extend([
+                        {
+                            "intent": pi,
+                            "target_agent": get_target_agent_for_intent(pi),
+                            "status": "pending",
+                            "tool_proposal": None,
+                            "result": None,
+                            "error": None,
+                        }
+                        for pi in planned_intents
+                    ])
+
+                emit_agent_trace(
+                    "supervisor_policy_decision",
+                    decision="customer_accepted",
+                    target_agent=target_agent,
+                    intent=target_intent,
+                    pinned_policies=eval_result.pinned_versions,
+                )
+
+                return {
+                    "iteration_count": iterations,
+                    "pending_customer_question": None,
+                    "customer_decision": "accepted",
+                    "pinned_policies": eval_result.pinned_versions,
+                    "policy_evaluation": eval_result.model_dump(),
+                    "planned_intents": planned_intents,
+                    "completed_intents": completed_intents,
+                    "action_plan": action_plan,
+                    "current_handoff": handoff,
+                    "active_agent": target_agent,
+                    "next_step": target_agent,
+                }
+            elif eval_result.prohibited or not eval_result.permitted or eval_result.recommended_delegation == "respond":
+                decision_type = "declined" if eval_result.prohibited else "concluded"
+                return {
+                    "iteration_count": iterations,
+                    "pending_customer_question": None,
+                    "customer_decision": decision_type,
+                    "pinned_policies": eval_result.pinned_versions,
+                    "policy_evaluation": eval_result.model_dump(),
+                    "next_step": "respond",
+                    "final_response": eval_result.decision_reason,
+                    "action_plan": action_plan,
+                }
+
+        # 2. Check if we are resuming after a specialist result in this execution cycle
         active_agent = state.get("active_agent") or (handoff_history[-1].source_agent if handoff_history else None)
         if handoff_history and active_agent:
             last_result = handoff_history[-1]
@@ -129,6 +262,9 @@ class SupervisorAgent:
                     handoff_context = {"previous_result": last_result.message}
                     if last_result.data and isinstance(last_result.data, dict):
                         handoff_context.update(last_result.data)
+                    acc_num = state.get("verified_domain_facts", {}).get("account_number") or state.get("verified_draft", {}).get("arguments", {}).get("account_number")
+                    if acc_num:
+                        handoff_context["account_number"] = acc_num
 
                     handoff = AgentHandoff(
                         origin_agent="supervisor",
@@ -148,6 +284,35 @@ class SupervisorAgent:
                         "next_step": target_agent,
                     }
                 else:
+                    # Single intent completion: check if post-block policy (POL-003) applies
+                    last_event = state.get("last_domain_event")
+                    is_block = (
+                        last_event == "card_blocked_success"
+                        or any(item.get("intent") == "block_card" for item in action_plan)
+                        or (last_result.source_agent == "fincrime_agent" and "block" in last_result.message.lower() and "unblock" not in last_result.message.lower())
+                    )
+                    if is_block:
+                        facts = dict(state.get("verified_domain_facts", {}))
+                        if last_result.data and isinstance(last_result.data, dict):
+                            facts.update(last_result.data)
+                        if "last_block_reason" not in facts:
+                            facts["last_block_reason"] = "lost card" if "lost" in last_result.message.lower() else "temporary freeze"
+
+                        eval_result = self.policy_evaluator.evaluate(
+                            None, "", facts, last_domain_event="card_blocked_success", pinned_policies=state.get("pinned_policies", {})
+                        )
+                        if eval_result.pending_question:
+                            return {
+                                "iteration_count": iterations,
+                                "active_agent": None,
+                                "next_step": "respond",
+                                "final_response": f"{last_result.message} {eval_result.pending_question.question_text}",
+                                "pending_customer_question": eval_result.pending_question.model_dump(),
+                                "pinned_policies": eval_result.pinned_versions,
+                                "policy_evaluation": eval_result.model_dump(),
+                                "action_plan": action_plan,
+                            }
+
                     return {
                         "iteration_count": iterations,
                         "active_agent": None,
@@ -172,7 +337,7 @@ class SupervisorAgent:
                     "action_plan": action_plan,
                 }
 
-        # Analyze intent and detect compound requests
+        # 3. Analyze intent and detect compound requests
         target_agent, detected_intents, direct_reply = await self._classify_and_plan(
             user_text, allowed_tools, state.get("verified_draft", {})
         )
@@ -201,6 +366,54 @@ class SupervisorAgent:
             for idx, intent in enumerate(detected_intents)
         ]
 
+        # 4. Policy Retrieval and Evaluation stage
+        facts = await self._retrieve_domain_facts(state, primary_intent)
+        retrieved_chunks = self.policy_store.retrieve(query=user_text, intent=primary_intent)
+        eval_result = self.policy_evaluator.evaluate(
+            primary_intent, user_text, facts, pinned_policies=state.get("pinned_policies", {})
+        )
+
+        state_policy_updates = {
+            "retrieved_policies": eval_result.retrieved_policies,
+            "pinned_policies": eval_result.pinned_versions,
+            "policy_evaluation": eval_result.model_dump(),
+            "verified_domain_facts": facts,
+        }
+
+        # Fail closed on mandatory policy missing or conflict
+        if eval_result.policy_error:
+            logger.error("Policy compliance check failed: %s", eval_result.policy_error)
+            return {
+                "iteration_count": iterations,
+                "next_step": "respond",
+                "final_response": f"Policy compliance failure: {eval_result.policy_error}",
+                "error": eval_result.policy_error,
+                "action_plan": action_plan,
+                **state_policy_updates,
+            }
+
+        # Policy mandates asking a question first (e.g. POL-001 offer unblock)
+        if eval_result.pending_question:
+            return {
+                "iteration_count": iterations,
+                "next_step": "respond",
+                "final_response": eval_result.pending_question.question_text,
+                "pending_customer_question": eval_result.pending_question.model_dump(),
+                "action_plan": action_plan,
+                **state_policy_updates,
+            }
+
+        # Policy prohibits operation
+        if eval_result.prohibited:
+            return {
+                "iteration_count": iterations,
+                "next_step": "respond",
+                "final_response": eval_result.decision_reason,
+                "action_plan": action_plan,
+                **state_policy_updates,
+            }
+
+        # 5. Permitted delegation to specialist
         handoff = AgentHandoff(
             origin_agent="supervisor",
             target_agent=target_agent,
@@ -233,6 +446,7 @@ class SupervisorAgent:
             "current_handoff": handoff,
             "active_agent": target_agent,
             "next_step": target_agent,
+            **state_policy_updates,
         }
 
     async def _classify_and_plan(

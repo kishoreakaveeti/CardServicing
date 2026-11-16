@@ -100,6 +100,6 @@
 <a href="../../src/fincrime_servicing/service.py"><text x="40" y="1916" font-size="16" fill="#1d4ed8">src/fincrime_servicing/service.py:20</text></a>
 <a href="../../src/fincrime_servicing/persistence.py"><text x="40" y="1941" font-size="16" fill="#1d4ed8">src/fincrime_servicing/persistence.py:87</text></a>
 <a href="../../src/card_servicing/banking.py"><text x="40" y="1966" font-size="16" fill="#1d4ed8">src/card_servicing/banking.py:145</text></a>
-<a href="../../src/card_servicing/persistence.py"><text x="40" y="1991" font-size="16" fill="#1d4ed8">src/card_servicing/persistence.py:178</text></a>
+<a href="../../src/card_servicing/persistence.py"><text x="40" y="1991" font-size="16" fill="#1d4ed8">src/card_servicing/persistence.py:214</text></a>
 <text x="40" y="2059" font-size="15" fill="#475569">Source: card-chat-flows.json | Regenerate: python scripts/render_chat_diagrams.py</text>
 </svg>
