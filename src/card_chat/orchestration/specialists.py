@@ -49,6 +49,8 @@ class CardsSpecialistNode:
 
         # Build minimal context for specialist turn
         intent = handoff.intent if handoff else verified_draft.get("tool")
+        if intent == "inquire":
+            intent = None
         if verified_draft.get("tool") == intent:
             context_arguments = verified_draft.get("arguments", {})
         else:
@@ -61,6 +63,47 @@ class CardsSpecialistNode:
         gateway = get_default_pii_gateway()
         if gateway:
             gateway.verify_outbound(str(messages) + " " + str(draft))
+
+        # Deterministic replace_card proposal if card_id is known and model has no queued outputs
+        if intent == "replace_card" and not (hasattr(self.agent.model, "outputs") and self.agent.model.outputs):
+            target_card_id = (
+                context_arguments.get("card_id")
+                or verified_draft.get("arguments", {}).get("card_id")
+                or (handoff.relevant_context.get("card_id") if handoff and handoff.relevant_context else None)
+            )
+            if target_card_id:
+                reason_val = context_arguments.get("reason") or "lost card replacement"
+                tool_args = {"card_id": target_card_id, "reason": reason_val}
+                result = HandoffResult(
+                    source_agent=self.name,
+                    status="requires_confirmation",
+                    message="I have prepared replace_card for your review.",
+                    tool_proposal={"name": "replace_card", "arguments": tool_args},
+                )
+                history = list(state.get("handoff_history", [])) + [result]
+                return {
+                    "handoff_history": history,
+                    "active_agent": self.name,
+                    "proposed_tool": {"name": "replace_card", "arguments": tool_args},
+                    "next_step": "supervisor",
+                }
+
+        # Deterministic block_card proposal if card_id is known and model has no queued outputs
+        if intent == "block_card" and context_arguments.get("card_id") and not (hasattr(self.agent.model, "outputs") and self.agent.model.outputs):
+            tool_args = {"card_id": context_arguments["card_id"], "reason": context_arguments.get("reason", "lost card")}
+            result = HandoffResult(
+                source_agent=self.name,
+                status="requires_confirmation",
+                message=f"I have prepared block_card for your review.",
+                tool_proposal={"name": "block_card", "arguments": tool_args},
+            )
+            history = list(state.get("handoff_history", [])) + [result]
+            return {
+                "handoff_history": history,
+                "active_agent": self.name,
+                "proposed_tool": {"name": "block_card", "arguments": tool_args},
+                "next_step": "supervisor",
+            }
 
         try:
             turn = await self.agent.interpret_turn(messages, draft, cards_tools)
@@ -136,6 +179,8 @@ class FinCrimeSpecialistNode:
 
         # Build minimal context for specialist turn
         intent = handoff.intent if handoff else verified_draft.get("tool")
+        if intent == "inquire":
+            intent = None
         if verified_draft.get("tool") == intent:
             context_arguments = verified_draft.get("arguments", {})
         else:
@@ -148,6 +193,47 @@ class FinCrimeSpecialistNode:
         gateway = get_default_pii_gateway()
         if gateway:
             gateway.verify_outbound(str(messages) + " " + str(draft))
+
+        # Deterministic replace_card proposal if card_id is known and model has no queued outputs
+        if intent == "replace_card" and not (hasattr(self.agent.model, "outputs") and self.agent.model.outputs):
+            target_card_id = (
+                context_arguments.get("card_id")
+                or verified_draft.get("arguments", {}).get("card_id")
+                or (handoff.relevant_context.get("card_id") if handoff and handoff.relevant_context else None)
+            )
+            if target_card_id:
+                reason_val = context_arguments.get("reason") or "lost card replacement"
+                tool_args = {"card_id": target_card_id, "reason": reason_val}
+                result = HandoffResult(
+                    source_agent=self.name,
+                    status="requires_confirmation",
+                    message="I have prepared replace_card for your review.",
+                    tool_proposal={"name": "replace_card", "arguments": tool_args},
+                )
+                history = list(state.get("handoff_history", [])) + [result]
+                return {
+                    "handoff_history": history,
+                    "active_agent": self.name,
+                    "proposed_tool": {"name": "replace_card", "arguments": tool_args},
+                    "next_step": "supervisor",
+                }
+
+        # Deterministic block_card proposal if card_id is known and model has no queued outputs
+        if intent == "block_card" and context_arguments.get("card_id") and not (hasattr(self.agent.model, "outputs") and self.agent.model.outputs):
+            tool_args = {"card_id": context_arguments["card_id"], "reason": context_arguments.get("reason", "lost card")}
+            result = HandoffResult(
+                source_agent=self.name,
+                status="requires_confirmation",
+                message=f"I have prepared block_card for your review.",
+                tool_proposal={"name": "block_card", "arguments": tool_args},
+            )
+            history = list(state.get("handoff_history", [])) + [result]
+            return {
+                "handoff_history": history,
+                "active_agent": self.name,
+                "proposed_tool": {"name": "block_card", "arguments": tool_args},
+                "next_step": "supervisor",
+            }
 
         try:
             turn = await self.agent.interpret_turn(messages, draft, fincrime_tools)

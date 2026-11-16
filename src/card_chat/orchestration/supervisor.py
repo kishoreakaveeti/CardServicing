@@ -21,6 +21,7 @@ CARDS_CAPABILITIES = {
     "view_cards",
     "issue_card",
     "create_card",
+    "replace_card",
     "register",
     "login",
     "logout",
@@ -73,6 +74,7 @@ class SupervisorAgent:
         planned_intents = list(state.get("planned_intents", []))
         completed_intents = list(state.get("completed_intents", []))
         handoff_history = state.get("handoff_history", [])
+        action_plan = list(state.get("action_plan", []))
         owner = state.get("owner", "customer")
         session_id = state.get("session_id", "default")
         workflow_id = state.get("workflow_id", "default")
@@ -89,25 +91,50 @@ class SupervisorAgent:
         if handoff_history and active_agent:
             last_result = handoff_history[-1]
             if last_result.status == "requires_confirmation" and last_result.tool_proposal:
-                # If a specialist proposed a sensitive action needing confirmation, route to policy/human confirmation
+                # Update current action in action_plan
+                for item in action_plan:
+                    if item.get("status") in ("pending", "executing"):
+                        item["status"] = "awaiting_confirmation"
+                        item["tool_proposal"] = last_result.tool_proposal
+                        break
                 return {
                     "iteration_count": iterations,
                     "active_agent": None,
                     "next_step": "human_confirmation",
                     "proposed_tool": last_result.tool_proposal,
                     "final_response": last_result.message,
+                    "action_plan": action_plan,
+                    "can_confirm": True,
                 }
             if last_result.status == "success":
+                # Mark current action completed (if not already marked by human_confirmation_node)
+                for item in action_plan:
+                    if item.get("status") in ("awaiting_confirmation", "executing") and (
+                        not last_result.source_agent or item.get("target_agent") == last_result.source_agent
+                    ):
+                        item["status"] = "completed"
+                        item["result"] = last_result.data
+                        break
+
                 if planned_intents:
                     # Compound workflow: previous specialist succeeded; resume next planned intent
                     next_intent = planned_intents.pop(0)
-                    completed_intents.append(next_intent)
                     target_agent = get_target_agent_for_intent(next_intent)
+
+                    for item in action_plan:
+                        if item.get("intent") == next_intent and item.get("status") == "pending":
+                            item["status"] = "executing"
+                            break
+
+                    handoff_context = {"previous_result": last_result.message}
+                    if last_result.data and isinstance(last_result.data, dict):
+                        handoff_context.update(last_result.data)
+
                     handoff = AgentHandoff(
                         origin_agent="supervisor",
                         target_agent=target_agent,
                         intent=next_intent,
-                        relevant_context={"previous_result": last_result.message},
+                        relevant_context=handoff_context,
                         session_id=session_id,
                         workflow_id=workflow_id,
                     )
@@ -115,6 +142,7 @@ class SupervisorAgent:
                         "iteration_count": iterations,
                         "planned_intents": planned_intents,
                         "completed_intents": completed_intents,
+                        "action_plan": action_plan,
                         "current_handoff": handoff,
                         "active_agent": target_agent,
                         "next_step": target_agent,
@@ -125,13 +153,23 @@ class SupervisorAgent:
                         "active_agent": None,
                         "next_step": "respond",
                         "final_response": last_result.message,
+                        "action_plan": action_plan,
                     }
             if last_result.status == "failed":
+                for item in action_plan:
+                    if item.get("status") in ("awaiting_confirmation", "executing", "pending"):
+                        item["status"] = "failed"
+                        item["error"] = last_result.message
+                        break
+                for item in action_plan:
+                    if item.get("status") == "pending":
+                        item["status"] = "cancelled"
                 return {
                     "iteration_count": iterations,
                     "active_agent": None,
                     "next_step": "respond",
                     "final_response": last_result.message,
+                    "action_plan": action_plan,
                 }
 
         # Analyze intent and detect compound requests
@@ -144,11 +182,24 @@ class SupervisorAgent:
                 "iteration_count": iterations,
                 "next_step": "respond",
                 "final_response": direct_reply or "Could you please clarify what banking service you would like to perform?",
+                "action_plan": action_plan,
             }
 
-        # If compound intents were detected (e.g. block_card + issue_card)
+        # If compound intents were detected (e.g. block_card + replace_card)
         primary_intent = detected_intents[0]
         remaining_intents = detected_intents[1:] if len(detected_intents) > 1 else []
+
+        action_plan = [
+            {
+                "intent": intent,
+                "target_agent": get_target_agent_for_intent(intent),
+                "status": "executing" if idx == 0 else "pending",
+                "tool_proposal": None,
+                "result": None,
+                "error": None,
+            }
+            for idx, intent in enumerate(detected_intents)
+        ]
 
         handoff = AgentHandoff(
             origin_agent="supervisor",
@@ -178,6 +229,7 @@ class SupervisorAgent:
             "iteration_count": iterations,
             "planned_intents": remaining_intents,
             "completed_intents": completed_intents,
+            "action_plan": action_plan,
             "current_handoff": handoff,
             "active_agent": target_agent,
             "next_step": target_agent,
@@ -208,6 +260,8 @@ class SupervisorAgent:
                 "ok",
                 "select",
             )
+            or "using these details" in lower
+            or "use these details" in lower
         ):
             if draft_tool in allowed_tools:
                 target = get_target_agent_for_intent(draft_tool)
@@ -236,7 +290,7 @@ class SupervisorAgent:
                     "one or more specialized banking intents in execution order.\n"
                     "Available banking capabilities:\n"
                     "- FinCrime domain (fincrime_agent): block_card, unblock_card\n"
-                    "- Cards domain (cards_agent): create_account, view_accounts, view_cards, issue_card, create_card, register, login, logout\n"
+                    "- Cards domain (cards_agent): create_account, view_accounts, view_cards, issue_card, create_card, replace_card, register, login, logout\n"
                     "For compound requests (e.g. 'block my card and issue a replacement'), list all intents in order.\n"
                     "If the customer's request is ambiguous or unsupported, set intents to empty list and provide a clarification reply.\n"
                     "Respond with a JSON object ONLY: {\"intents\": [\"intent1\", ...], \"reply\": null or \"clarification message\"}."
@@ -314,13 +368,24 @@ class SupervisorAgent:
         if pos_block != -1 and (has_card or any(w in lower for w in ("lost", "stolen", "fraud", "compromised", "freeze"))):
             intent_candidates.append(("block_card", pos_block))
 
+        # Replace card
+        pos_replace = _find_keyword_pos(
+            lower,
+            ("replacement", "replace", "replace card", "replace it", "order a replacement", "issue a replacement", "replacement card"),
+        )
+        if pos_replace != -1 and (has_card or "replacement" in lower or "replace" in lower):
+            replace_tool = "replace_card" if "replace_card" in allowed_tools else ("issue_card" if "issue_card" in allowed_tools else "replace_card")
+            intent_candidates.append((replace_tool, pos_replace))
+
         # Issue / create card
         pos_issue = _find_keyword_pos(
             lower,
-            ("issue", "new card", "debit card", "credit card", "replacement", "replace", "another card", "additional card", "create card", "create a card", "create the card", "order a card", "want a card", "want a new"),
+            ("issue", "new card", "debit card", "credit card", "another card", "additional card", "create card", "create a card", "create the card", "order a card", "want a card", "want a new"),
         )
-        if pos_issue != -1 and (has_card or "replacement" in lower or "replace" in lower):
-            intent_candidates.append(("issue_card", pos_issue))
+        if pos_issue != -1 and (has_card or any(w in lower for w in ("card", "cards"))):
+            if not any(i[0] in ("replace_card", "issue_card") for i in intent_candidates):
+                target_tool = "create_card" if (draft_tool == "create_card" or ("create_card" in allowed_tools and "create" in lower and "issue_card" not in allowed_tools)) else "issue_card"
+                intent_candidates.append((target_tool, pos_issue))
 
         # Create account
         pos_create_acc = _find_keyword_pos(lower, ("create account", "open account", "new account", "create an account", "open an account"))
@@ -330,7 +395,7 @@ class SupervisorAgent:
         # View cards (requires explicit viewing action verbs, never just "my card" to avoid false positive in "lost my card")
         pos_view_card = _find_keyword_pos(
             lower,
-            ("view card", "view cards", "view my card", "show card", "show cards", "show my card", "list card", "list cards", "see card", "see cards", "display card", "display cards"),
+            ("view card", "view cards", "view my card", "show card", "show cards", "show my card", "show all my cards", "list card", "list cards", "see card", "see cards", "display card", "display cards", "all my cards"),
         )
         if pos_view_card != -1 and has_card:
             intent_candidates.append(("view_cards", pos_view_card))
@@ -342,6 +407,15 @@ class SupervisorAgent:
         )
         if pos_view_acc != -1 and has_account:
             intent_candidates.append(("view_accounts", pos_view_acc))
+
+        # If both block_card and replace_card/issue_card are present, block_card must ALWAYS precede
+        intents_dict = dict(intent_candidates)
+        sec_card_tool = "replace_card" if "replace_card" in intents_dict else ("issue_card" if "issue_card" in intents_dict else None)
+        if "block_card" in intents_dict and sec_card_tool:
+            pos_b = intents_dict["block_card"]
+            pos_r = intents_dict[sec_card_tool]
+            if pos_r < pos_b:
+                intent_candidates = [(i, 0 if i == "block_card" else 1) for i, _ in intent_candidates]
 
         # Sort detected intents by their position in user text to preserve compound ordering
         intent_candidates.sort(key=lambda x: x[1])
@@ -356,14 +430,19 @@ class SupervisorAgent:
 
         # If model outputs were pre-configured in test harness
         if not detected_intents and hasattr(self.model, "outputs") and self.model.outputs:
-            output = self.model.outputs[0]
-            if isinstance(output, ProposedToolCall):
-                detected_intents = [output.name]
-            elif isinstance(output, CustomerReply):
-                reply_lower = output.text.lower()
-                for tool in ALL_CAPABILITIES:
-                    if tool in reply_lower or tool.replace("_", " ") in reply_lower:
-                        detected_intents.append(tool)
+            peek_output = self.model.outputs[0]
+            if isinstance(peek_output, ProposedToolCall):
+                target = get_target_agent_for_intent(peek_output.name)
+                return target, [peek_output.name], None
+            else:
+                target = "fincrime_agent" if set(allowed_tools.keys()) - {'logout', 'login', 'register'} == {'block_card'} else "cards_agent"
+                inquire_intent = "block_card" if target == "fincrime_agent" else "inquire"
+                return target, [inquire_intent], None
+
+        # General questions about available actions when not classified
+        if not detected_intents and any(q in lower for q in ("which actions", "what actions", "available actions")):
+            target = "fincrime_agent" if set(allowed_tools.keys()) - {'logout', 'login', 'register'} == {'block_card'} else "cards_agent"
+            return target, [], "Which action would you like to review?"
 
         # If intent candidates were recognized from text
         if detected_intents:

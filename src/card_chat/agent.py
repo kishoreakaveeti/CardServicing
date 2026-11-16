@@ -142,6 +142,7 @@ class AgentOrchestrator:
             "iteration_count": 0,
             "active_agent": None,
             "planned_intents": [],
+            "action_plan": [],
             "proposed_tool": None,
             "final_response": None,
         }
@@ -173,3 +174,89 @@ class AgentOrchestrator:
         # Otherwise return customer reply
         reply_text = final_state.get("final_response") or "How can I help you today?"
         return CustomerReply(reply_text)
+
+    async def resume_execution(
+        self,
+        thread_id: str,
+        owner: str,
+        session_id: str,
+        tool_name: str,
+        result: dict | Any,
+        ok: bool = True,
+        error: str | None = None,
+        message: str = "",
+    ) -> CustomerReply | ProposedToolCall | None:
+        """Resume LangGraph workflow with actual execution result from the trusted execution layer."""
+        config = {"configurable": {"thread_id": thread_id}}
+        if not self.checkpointer:
+            return None
+
+        try:
+            state_snap = await self.workflow.aget_state(config)
+        except Exception:
+            state_snap = None
+
+        if not state_snap or not state_snap.next:
+            return None
+
+        # Verify customer authorization/isolation
+        if owner and state_snap.values.get("owner") and state_snap.values.get("owner") != owner:
+            logger.warning("Unauthorized resume attempt on workflow %s by owner %s", thread_id, owner)
+            raise PermissionError("Cross-customer workflow access denied.")
+
+        resume_payload = {
+            "status": "confirmed",
+            "ok": ok,
+            "tool": tool_name,
+            "data": result.get("result") if isinstance(result, dict) else result,
+            "message": message,
+            "error": error,
+        }
+
+        from langgraph.types import Command
+        try:
+            final_state = await self.workflow.ainvoke(Command(resume=resume_payload), config=config)
+        except Exception as exc:
+            logger.exception("Failed to resume LangGraph workflow for thread %s: %s", thread_id, exc)
+            return None
+
+        proposal = final_state.get("proposed_tool")
+        if proposal and isinstance(proposal, dict):
+            return ProposedToolCall(proposal.get("name"), proposal.get("arguments", {}))
+
+        final_response = final_state.get("final_response")
+        if final_response:
+            return CustomerReply(final_response)
+
+        return None
+
+    async def cancel_execution(
+        self,
+        thread_id: str,
+        owner: str,
+        session_id: str,
+    ) -> CustomerReply | None:
+        """Cancel LangGraph workflow during human confirmation."""
+        config = {"configurable": {"thread_id": thread_id}}
+        if not self.checkpointer:
+            return None
+
+        try:
+            state_snap = await self.workflow.aget_state(config)
+        except Exception:
+            state_snap = None
+
+        if not state_snap or not state_snap.next:
+            return None
+
+        if owner and state_snap.values.get("owner") and state_snap.values.get("owner") != owner:
+            logger.warning("Unauthorized cancel attempt on workflow %s by owner %s", thread_id, owner)
+            raise PermissionError("Cross-customer workflow access denied.")
+
+        from langgraph.types import Command
+        try:
+            final_state = await self.workflow.ainvoke(Command(resume={"status": "rejected"}), config=config)
+            return CustomerReply(final_state.get("final_response") or "Workflow cancelled.")
+        except Exception as exc:
+            logger.exception("Failed to cancel LangGraph workflow for thread %s: %s", thread_id, exc)
+            return None

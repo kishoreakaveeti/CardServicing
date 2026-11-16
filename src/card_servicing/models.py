@@ -35,8 +35,13 @@ class CardOrigination(CardCreate):
         description='Explicitly request another card even if this account already has one.')
 
 
+class CardReplaceInput(BaseModel):
+    model_config = ConfigDict(extra='forbid')
+    reason: str = Field(default="Card lost/compromised", min_length=1, max_length=200, title="Reason")
+
+
 class CardIssuance(Card):
-    outcome: Literal['created', 'already_exists', 'additional_created']
+    outcome: Literal['created', 'already_exists', 'additional_created', 'replacement_created']
     message: str
 
     @classmethod
@@ -45,5 +50,6 @@ class CardIssuance(Card):
             'created': 'A simulated card was created.',
             'already_exists': 'A card already exists for this account. No new card was created. Select the additional-card option and confirm if you want another card.',
             'additional_created': 'An additional simulated card was created.',
+            'replacement_created': 'A replacement simulated card was created.',
         }
         return cls(**card.model_dump(), outcome=outcome, message=messages[outcome])

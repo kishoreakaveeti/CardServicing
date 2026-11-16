@@ -24,7 +24,7 @@ from card_chat.security import Security, protect, principal, trace
 logger = logging.getLogger(__name__)
 
 DEFAULT_AGENT_TOOLS = {
-    "cards_agent": ["create_card", "issue_card", "view_cards", "view_accounts", "create_account", "logout"],
+    "cards_agent": ["create_card", "issue_card", "replace_card", "view_cards", "view_accounts", "create_account", "logout"],
     "fincrime_agent": ["block_card", "unblock_card"]
 }
 
@@ -88,7 +88,7 @@ def execute(spec, arguments, key, base_url, execution_headers=None):
             return {'ok': False, 'error': 'API returned an invalid response.'}
         outcome = 'success'
         result = {'ok': True, 'result': data}
-        if issuance_outcome in ('created', 'already_exists', 'additional_created'):
+        if issuance_outcome in ('created', 'already_exists', 'additional_created', 'replacement_created'):
             result['issuance_outcome'] = issuance_outcome
         return result
     except httpx.TimeoutException:

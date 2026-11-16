@@ -52,10 +52,11 @@ def authorise(spec, arguments, caller):
             allowed_cards = [c['id'] if isinstance(c, dict) else c for c in caller.get('cards', [])]
             if allowed_cards and arguments[field] not in allowed_cards:
                 raise HTTPException(403, 'Card selection is no longer authorized')
-            if spec.name == 'unblock_card':
+            if spec.name in ('unblock_card', 'replace_card'):
                 blocked_cards = [c['id'] for c in caller.get('cards', []) if isinstance(c, dict) and c.get('status') == 'blocked']
                 if caller.get('cards') and any(isinstance(c, dict) and 'status' in c for c in caller.get('cards', [])) and arguments[field] not in blocked_cards:
-                    raise HTTPException(400, 'Only blocked cards can be unblocked')
+                    err_msg = 'Only blocked cards can be unblocked' if spec.name == 'unblock_card' else 'Only blocked or compromised cards are eligible for replacement'
+                    raise HTTPException(400, err_msg)
             elif spec.name == 'block_card':
                 active_cards = [c['id'] for c in caller.get('cards', []) if isinstance(c, dict) and c.get('status') != 'blocked']
                 if caller.get('cards') and any(isinstance(c, dict) and 'status' in c for c in caller.get('cards', [])) and arguments[field] not in active_cards:
@@ -84,7 +85,7 @@ def form_options(catalogue, caller, bindings, cid, owner):
                                     'label': 'Account ' + mask(value)} for value in caller.get('accounts', [])]
             elif source == 'card':
                 cards = caller.get('cards', [])
-                if name == 'unblock_card':
+                if name in ('unblock_card', 'replace_card'):
                     cards = [c for c in cards if not (isinstance(c, dict) and c.get('status') != 'blocked')]
                 elif name == 'block_card':
                     cards = [c for c in cards if not (isinstance(c, dict) and c.get('status') == 'blocked')]

@@ -97,5 +97,48 @@ class CardStore:
             self._issuances[key] = identity, result
             return result, replayed
 
+    def replace_idempotent(self, card_id, key, *, customer_id=None):
+        from card_servicing.ports import AccountNotOwned
+        identity = f"replace:{card_id}"
+        with self._lock:
+            target_card = self.get_card(card_id)
+            if not target_card:
+                raise ValueError("Card not found")
+            if target_card.status != "blocked":
+                raise ValueError("Only blocked cards can be replaced")
+            if key in self._issuances:
+                previous, result = self._issuances[key]
+                if previous != identity:
+                    raise IdempotencyConflict()
+                return result, True
+            instruction = CardCreate(
+                user_name=target_card.user_name,
+                given_name=target_card.given_name,
+                account_number=target_card.account_number,
+            )
+            card = self.create(instruction)
+            result = CardIssuance.for_card(card, 'replacement_created')
+            self._issuances[key] = identity, result
+            return result, False
+
+    def get_card(self, card_id: str):
+        with self._lock:
+            for c in self._cards.values():
+                if str(c.id) == str(card_id) or c.card_number == str(card_id):
+                    return c
+            return None
+
+    def update_card_status(self, card_id: str, status: str) -> bool:
+        with self._lock:
+            for c in self._cards.values():
+                if str(c.id) == str(card_id) or c.card_number == str(card_id):
+                    c.status = status
+                    return True
+            return False
+
+    def has_blocked_cards_for_account(self, account_number: str) -> bool:
+        with self._lock:
+            return any(c.account_number == account_number and c.status == 'blocked' for c in self._cards.values())
+
     def list(self) -> list[Card]:
         return list(self._cards.values())

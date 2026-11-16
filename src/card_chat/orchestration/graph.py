@@ -3,7 +3,9 @@ import logging
 from typing import Any
 
 from langgraph.graph import StateGraph, END
+from langgraph.types import interrupt
 from card_chat.orchestration.persistence import DurableSqliteSaver
+from card_chat.orchestration.contracts import HandoffResult
 
 from card_chat.orchestration.state import BankingWorkflowState
 from card_chat.orchestration.supervisor import SupervisorAgent
@@ -26,7 +28,102 @@ def route_supervisor_next(state: BankingWorkflowState) -> str:
 
 async def human_confirmation_node(state: BankingWorkflowState) -> dict[str, Any]:
     """Checkpoint node representing an intentional pause for two-phase customer review."""
-    return {"can_confirm": True}
+    proposal = state.get("proposed_tool")
+    action_plan = list(state.get("action_plan", []))
+    current_handoff = state.get("current_handoff")
+
+    # Update action plan: current action is awaiting confirmation
+    if action_plan and proposal:
+        for item in action_plan:
+            if item.get("status") in ("pending", "executing") and item.get("intent") == proposal.get("name"):
+                item["status"] = "awaiting_confirmation"
+                item["tool_proposal"] = proposal
+                break
+
+    # Pause execution and save checkpoint via LangGraph interrupt
+    confirmation_payload = interrupt({
+        "proposed_tool": proposal,
+        "action_plan": action_plan,
+        "can_confirm": True,
+    })
+
+    # Resumed via Command(resume=confirmation_payload)
+    status = confirmation_payload.get("status", "confirmed") if isinstance(confirmation_payload, dict) else "confirmed"
+    ok = confirmation_payload.get("ok", True) if isinstance(confirmation_payload, dict) else True
+    exec_data = confirmation_payload.get("data") if isinstance(confirmation_payload, dict) else None
+    exec_msg = confirmation_payload.get("message", "") if isinstance(confirmation_payload, dict) else ""
+    exec_error = confirmation_payload.get("error") if isinstance(confirmation_payload, dict) else None
+    tool_name = confirmation_payload.get("tool") or (proposal.get("name") if proposal else None)
+
+    active_agent = state.get("active_agent") or (current_handoff.target_agent if current_handoff else "supervisor")
+
+    if status == "rejected":
+        # Customer rejected or cancelled confirmation
+        if action_plan:
+            for item in action_plan:
+                if item.get("status") in ("awaiting_confirmation", "executing"):
+                    item["status"] = "cancelled"
+                elif item.get("status") == "pending":
+                    item["status"] = "cancelled"
+        result = HandoffResult(
+            source_agent=active_agent,
+            status="failed",
+            message="Operation was cancelled by the customer.",
+        )
+        return {
+            "can_confirm": False,
+            "proposed_tool": None,
+            "action_plan": action_plan,
+            "handoff_history": list(state.get("handoff_history", [])) + [result],
+            "active_agent": active_agent,
+            "next_step": "supervisor",
+        }
+
+    if not ok:
+        # Execution failed in trusted layer
+        if action_plan:
+            for item in action_plan:
+                if item.get("status") in ("awaiting_confirmation", "executing"):
+                    item["status"] = "failed"
+                    item["error"] = exec_error or exec_msg
+                elif item.get("status") == "pending":
+                    item["status"] = "cancelled"
+        result = HandoffResult(
+            source_agent=active_agent,
+            status="failed",
+            message=exec_msg or exec_error or "Execution failed.",
+        )
+        return {
+            "can_confirm": False,
+            "proposed_tool": None,
+            "action_plan": action_plan,
+            "handoff_history": list(state.get("handoff_history", [])) + [result],
+            "active_agent": active_agent,
+            "next_step": "supervisor",
+        }
+
+    # Execution succeeded in trusted layer
+    if action_plan:
+        for item in action_plan:
+            if item.get("status") in ("awaiting_confirmation", "executing") and (not tool_name or item.get("intent") == tool_name):
+                item["status"] = "completed"
+                item["result"] = exec_data
+                break
+
+    result = HandoffResult(
+        source_agent=active_agent,
+        status="success",
+        message=exec_msg or f"{tool_name} completed successfully.",
+        data=exec_data,
+    )
+    return {
+        "can_confirm": False,
+        "proposed_tool": None,
+        "action_plan": action_plan,
+        "handoff_history": list(state.get("handoff_history", [])) + [result],
+        "active_agent": active_agent,
+        "next_step": "supervisor",
+    }
 
 
 def create_banking_workflow(
@@ -66,7 +163,7 @@ def create_banking_workflow(
     # Specialist handoffs return to supervisor for review/compound next steps
     builder.add_edge("cards_agent", "supervisor")
     builder.add_edge("fincrime_agent", "supervisor")
-    builder.add_edge("human_confirmation", END)
+    builder.add_edge("human_confirmation", "supervisor")
 
     memory = checkpointer or DurableSqliteSaver()
     return builder.compile(checkpointer=memory)

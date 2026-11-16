@@ -396,6 +396,7 @@ function App() {
               ['create_account', 'Create account'],
               ['view_cards', 'View my cards'],
               ['issue_card', 'Issue new card'],
+              ['replace_card', 'Replace card'],
               ['block_card', 'Block card'],
               ['unblock_card', 'Unblock card']
             ].map(([name, label]) => (
@@ -457,6 +458,9 @@ function App() {
               )}
               {tool === 'unblock_card' && tools.find(t => t.name === tool)?.fields.some(f => f.name === 'card_id' && f.options?.length === 0) && (
                 <p>No blocked cards are currently available to unblock.</p>
+              )}
+              {tool === 'replace_card' && tools.find(t => t.name === tool)?.fields.some(f => f.name === 'card_id' && f.options?.length === 0) && (
+                <p>No blocked cards are currently available to replace.</p>
               )}
               {tool === 'block_card' && tools.find(t => t.name === tool)?.fields.some(f => f.name === 'card_id' && f.options?.length === 0) && (
                 <p>No active cards are available to block.</p>

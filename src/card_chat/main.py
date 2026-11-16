@@ -223,6 +223,11 @@ def create_app(model=None, gateway=None, *, config=None):
                 error = result.get('error', 'Execution failed.')
                 if not isinstance(error, str) or sanitise(error, private_values(c)) != error:
                     error = 'Execution failed.'
+                if hasattr(app.state, 'orchestrator'):
+                    thread_id = f"{owner()}:{cid}"
+                    await app.state.orchestrator.resume_execution(
+                        thread_id, owner(), cid, submission['tool'], result, ok=False, error=error
+                    )
                 return reply(c, error + ' ' + suffix)
             data = result.get('result')
             if not isinstance(data, dict):
@@ -240,6 +245,41 @@ def create_app(model=None, gateway=None, *, config=None):
             metrics = {'tool': spec.name, **c.usage}
             logger.warning('workflow_usage %s', json.dumps(metrics, sort_keys=True),
                            extra={'telemetry_event': 'workflow_usage', 'telemetry_fields': metrics})
+
+            # Resume LangGraph compound multi-agent workflow with actual execution result
+            resumed_turn = None
+            if hasattr(app.state, 'orchestrator'):
+                thread_id = f"{owner()}:{cid}"
+                resumed_turn = await app.state.orchestrator.resume_execution(
+                    thread_id, owner(), cid, submission['tool'], result, ok=True, message=text
+                )
+
+            if isinstance(resumed_turn, ProposedToolCall):
+                # Next compound intent requires separate human confirmation!
+                next_spec = app.state.gateway.catalogue.get(resumed_turn.name)
+                next_proposal_args = dict(resumed_turn.arguments)
+                if next_spec and 'card_id' in next_proposal_args:
+                    raw_card_id = next_proposal_args['card_id']
+                    if not str(raw_card_id).startswith('selected_card_') and not str(raw_card_id).startswith('selected_input_'):
+                        ref = bind(c.bindings, cid, owner(), resumed_turn.name, 'card_id', raw_card_id)
+                        next_proposal_args['card_id'] = ref
+                c.draft = {'tool': resumed_turn.name, 'arguments': next_proposal_args}
+                c.proposal = ProposedToolCall(resumed_turn.name, resumed_turn.arguments)
+                c.submission = None  # Reset submission so the next action can be confirmed
+                c.review = uuid4().hex  # Fresh review nonce for second confirmation
+                save(cid, c)
+                masked_details = '; '.join(f'{label}: {value}' for label, value in next_spec.masked(resumed_turn.arguments).items()) if next_spec else ''
+                combined_msg = f"{text} Next step: Please review: {next_spec.entry.label}. {masked_details}. Confirm with the button or tell me what to change."
+                response = reply(c, combined_msg)
+                response['can_confirm'] = True
+                response['review'] = c.review
+                response['confirmation_label'] = (next_spec.entry.confirmation_label or next_spec.entry.label) if next_spec else None
+                return response
+
+            if isinstance(resumed_turn, CustomerReply) and resumed_turn.text and resumed_turn.text != text:
+                if issuance_outcome != 'already_exists':
+                    text = f"{text} {resumed_turn.text}"
+
             response = reply(c, text)
             if proposal.name in ('view_accounts', 'view_cards'):
                 response['data'] = data
@@ -350,14 +390,14 @@ def create_app(model=None, gateway=None, *, config=None):
             if turn.name == 'issue_card' and not caller().get('accounts') and 'create_account' in catalogue:
                 c.draft = {'tool': 'create_account', 'arguments': {}}
                 return reply(c, 'Create an account first. You can choose to issue a card with it.', input_tool='create_account')
-            if turn.name in ('block_card', 'unblock_card') and 'card_id' not in turn.arguments:
+            if turn.name in ('block_card', 'unblock_card', 'replace_card') and 'card_id' not in turn.arguments:
                 import re
                 ending_match = re.search(r'ending in\s+([0-9a-zA-Z]{4})', safe_text, re.IGNORECASE)
                 if ending_match:
                     last4 = ending_match.group(1).lower()
                     for card in caller().get('cards', []):
                         is_blocked = isinstance(card, dict) and card.get('status') == 'blocked'
-                        if turn.name == 'unblock_card' and not is_blocked:
+                        if turn.name in ('unblock_card', 'replace_card') and not is_blocked:
                             continue
                         if turn.name == 'block_card' and is_blocked:
                             continue

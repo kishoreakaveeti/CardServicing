@@ -175,6 +175,42 @@ class SQLiteCardStore:
             return result, replayed
 
     @storage_operation
+    def replace_idempotent(self, card_id, key, *, customer_id=None):
+        if not self.ready:
+            self.initialize()
+        identity = f"replace:{card_id}"
+        with closing(self.connect()) as db, db:
+            db.execute('BEGIN IMMEDIATE')
+            db.row_factory = sqlite3.Row
+            target_row = db.execute('SELECT * FROM cards WHERE id=? OR card_number=?', (str(card_id), str(card_id))).fetchone()
+            if not target_row:
+                raise ValueError("Card not found")
+            account_number = target_row['account_number']
+            if customer_id is not None and not db.execute(
+                'SELECT 1 FROM accounts WHERE account_number=? AND customer_id=?',
+                (account_number, customer_id)).fetchone():
+                raise AccountNotOwned()
+            if target_row['status'] != 'blocked':
+                raise ValueError("Only blocked cards can be replaced")
+            prior = db.execute('SELECT request_fingerprint,response_json FROM card_issuance_requests WHERE request_key=?', (key,)).fetchone()
+            if prior:
+                if prior[0] != identity:
+                    raise IdempotencyConflict()
+                return CardIssuance.model_validate_json(prior[1]), True
+            instruction = CardCreate(
+                user_name=target_row['user_name'],
+                given_name=target_row['given_name'],
+                account_number=account_number,
+            )
+            card, _ = self._create_idempotent(db, instruction, key)
+            result = CardIssuance.for_card(card, 'replacement_created')
+            db.execute('INSERT INTO card_issuance_requests VALUES(?,?,?,?)',
+                       (key, identity, str(result.id), result.model_dump_json()))
+            if customer_id is not None:
+                db.execute('INSERT OR IGNORE INTO account_cards VALUES(?,?)', (str(result.id), account_number))
+            return result, False
+
+    @storage_operation
     def update_card_status(self, card_id: str, status: str) -> bool:
         if not self.ready:
             self.initialize()

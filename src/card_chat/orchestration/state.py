@@ -26,6 +26,8 @@ class BankingWorkflowState(TypedDict, total=False):
     # Compound request tracking
     planned_intents: list[str]
     completed_intents: list[str]
+    action_plan: list[dict[str, Any]]
+    execution_outcome: dict[str, Any] | None
 
     # Tool proposal and human confirmation lifecycle
     proposed_tool: dict[str, Any] | None

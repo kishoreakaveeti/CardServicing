@@ -142,6 +142,34 @@
         "card_id": "Card reference",
         "status": "Status"
       }
+    },
+    {
+      "name": "replace_card",
+      "agents": ["cards_agent"],
+      "operation_id": "replace_card",
+      "label": "Replace card",
+      "confirmation": "required",
+      "confirmation_label": "Replace this card",
+      "description": "Replace a lost, stolen, or compromised card that has been blocked. Issues a new replacement card for the same account while keeping the compromised card blocked.",
+      "idempotency_header": "Idempotency-Key",
+      "context_fields": [
+        "reason"
+      ],
+      "sensitive_fields": [
+        "card_id"
+      ],
+      "trusted_fields": {
+        "card_id": "card"
+      },
+      "field_labels": {
+        "card_id": "Blocked card reference",
+        "reason": "Reason"
+      },
+      "result_labels": {
+        "card_number": "Simulated card",
+        "id": "Reference",
+        "message": "Details"
+      }
     }
   ]
 }

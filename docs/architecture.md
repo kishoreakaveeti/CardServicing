@@ -107,19 +107,43 @@ sequenceDiagram
     Sup-->>BFF: Intercept: "Cannot issue new card while an existing card for this account is blocked."
     BFF-->>Customer: Explanatory rejection message
 
-    Note over Customer,CardsDB: 5. Compound Request Orchestration & Resumption
-    Customer->>BFF: "Unblock my card ending in 1234 and issue a new card"
+    Note over Customer,CardsDB: 5. Compound Request Orchestration & Resumption (Lost Card -> Block -> Replace)
+    Customer->>BFF: "I've lost my card. Block it and issue a replacement."
     BFF->>PII: Sanitize input
-    PII->>Sup: Sanitized input
-    Sup->>Sup: Plan compound intents: ['unblock_card', 'issue_card']
-    Sup->>FinCrimeAgent: Handoff Step 1: unblock_card
-    FinCrimeAgent-->>Sup: HandoffResult(status='requires_confirmation', tool='unblock_card')
-    Sup-->>Customer: Prompt warning & unblock review button
-    Customer->>BFF: Confirm unblock
-    BFF->>MCP: Execute unblock_card
-    MCP-->>BFF: Success (Card unblocked)
-    Sup->>CardsAgent: Handoff Step 2 (Resumption): issue_card with unblocked status
-    CardsAgent-->>Customer: Prepare card issuance review
+    PII->>Vault: Tokenize sensitive card reference
+    PII->>Sup: Sanitized text + card token
+    Sup->>Sup: Classify & plan compound intents: ['block_card', 'replace_card']
+    Sup->>FinCrimeAgent: Step 1 Handoff: AgentHandoff(intent='block_card', context={'card_id': '...'})
+    FinCrimeAgent-->>Sup: HandoffResult(status='requires_confirmation', tool='block_card')
+    Sup->>Sup: LangGraph interrupt() pauses graph, DurableSqliteSaver checkpoints state
+    Sup-->>BFF: Step 1 Confirmation Request (review nonce #1)
+    BFF-->>Customer: Display Step 1 Review: "Block card. Confirm with button."
+    Customer->>BFF: Confirm Step 1
+    BFF->>Vault: Resolve token
+    BFF->>MCP: Execute block_card
+    MCP->>FinCrimeAPI: POST /fincrime/cards/{card_id}/block
+    FinCrimeAPI->>CardsAPI: POST /banking/cards/{card_id}/block (status: 'blocked')
+    CardsAPI-->>FinCrimeAPI: 200 OK
+    FinCrimeAPI-->>MCP: 200 OK (status: 'blocked')
+    MCP-->>BFF: Execution result (ok=True, card_id, status='blocked')
+    BFF->>Sup: LangGraph Command(resume={'status': 'confirmed', 'tool': 'block_card', 'data': {...}})
+    Sup->>Sup: Update action_plan (block_card: completed, replace_card: executing)
+    Sup->>CardsAgent: Step 2 Handoff: AgentHandoff(intent='replace_card', context={'card_id': '...', 'status': 'blocked'})
+    CardsAgent->>CardsAgent: Verify replacement eligibility (card is blocked), prepare replace_card
+    CardsAgent-->>Sup: HandoffResult(status='requires_confirmation', tool='replace_card')
+    Sup->>Sup: LangGraph interrupt() pauses graph for separate Confirmation #2
+    Sup-->>BFF: Step 2 Confirmation Request (fresh review nonce #2)
+    BFF-->>Customer: Display Step 2 Review: "Replace card. Confirm with button."
+    Customer->>BFF: Confirm Step 2
+    BFF->>MCP: Execute replace_card (with Idempotency-Key)
+    MCP->>CardsAPI: POST /banking/cards/{card_id}/replace
+    CardsAPI->>CardsDB: Atomically issue replacement card (status='created'), keep original 'blocked'
+    CardsAPI-->>MCP: 201 Created (CardIssuance outcome='replacement_created')
+    MCP-->>BFF: Execution result (ok=True, new_card)
+    BFF->>Sup: LangGraph Command(resume={'status': 'confirmed', 'tool': 'replace_card', 'data': {...}})
+    Sup->>Sup: Update action_plan (replace_card: completed)
+    Sup-->>BFF: Compound workflow completed summary
+    BFF-->>Customer: Final confirmation: Card blocked and replacement card issued.
 ```
 
 ### Roles and Responsibilities
@@ -150,6 +174,12 @@ sequenceDiagram
 7. **MCP Server Agent-Tool Access Policy (`card_chat.mcp_server`)**:
    - Configuration-driven tool access control: tools configure permitted agents in `tools.json` (`"agents": ["cards_agent"]` or `"agents": ["fincrime_agent"]`).
    - Validates calling agent identity passed via request context `meta['agent']`, rejecting unauthorized cross-agent tool calls with HTTP 403.
+8. **Compound Resumable Workflow Lifecycle & Human-in-the-Loop Resumption**:
+   - **State Machine Transitions**: Tracks ordered action plan items across statuses: `pending` -> `awaiting_confirmation` -> `executing` -> `completed` / `failed` / `cancelled`.
+   - **Intentional Interrupts**: Pauses before any state-changing financial operation using LangGraph `interrupt(...)`. State is checkpointed durably to `agent.db` via `DurableSqliteSaver`.
+   - **Resumption with Authoritative Results**: Resumes via `workflow.ainvoke(Command(resume=payload))` using verified API results (`ok=True`, structured outcome) rather than model assumptions.
+   - **Domain Ownership & Compromise Invariants**: FinCrime retains exclusive risk ownership (`block_card`); Cards retains issuance ownership (`replace_card`). Original compromised cards remain permanently blocked; replacement card origination generates a distinct card with `replacement_created` outcome without automatically unblocking compromised cards.
+   - **Idempotency & Anti-Replay**: Each confirmation is gated by a cryptographically random single-use review nonce. Retries and duplicate confirmations leverage `Idempotency-Key` headers and database operation journal serialization (`BEGIN IMMEDIATE`).
 
 ## Data and trusted decisions
 

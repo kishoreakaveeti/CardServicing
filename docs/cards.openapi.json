@@ -424,6 +424,72 @@
           }
         }
       }
+    },
+    "/banking/cards/{card_id}/replace": {
+      "post": {
+        "tags": [
+          "banking"
+        ],
+        "summary": "Replace Card",
+        "operationId": "replace_card",
+        "parameters": [
+          {
+            "name": "card_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Card Id"
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128,
+              "pattern": "^[A-Za-z0-9._:-]+$",
+              "description": "Client-generated key, e.g. a UUID. Reuse only for retries of the same card.",
+              "title": "Idempotency-Key"
+            },
+            "description": "Client-generated key, e.g. a UUID. Reuse only for retries of the same card."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CardReplaceInput"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CardIssuance"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
@@ -576,6 +642,20 @@
         "type": "object",
         "title": "CardBlockInput"
       },
+      "CardReplaceInput": {
+        "properties": {
+          "reason": {
+            "type": "string",
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Reason",
+            "default": "Card lost/compromised"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "CardReplaceInput"
+      },
       "CardBlockResponse": {
         "properties": {
           "card_id": {
@@ -662,7 +742,8 @@
             "enum": [
               "created",
               "already_exists",
-              "additional_created"
+              "additional_created",
+              "replacement_created"
             ],
             "title": "Outcome"
           },

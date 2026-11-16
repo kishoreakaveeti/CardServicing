@@ -10,7 +10,7 @@ from uuid import uuid4
 from fastapi import APIRouter, Header, HTTPException, Request, Response
 from pydantic import BaseModel, ConfigDict, Field
 
-from card_servicing.models import Card, CardCreate, CardIssuance
+from card_servicing.models import Card, CardCreate, CardIssuance, CardReplaceInput
 from card_servicing.ports import AccountNotOwned, BlockedCardExists
 from card_servicing.idempotency import IdempotencyConflict
 from card_servicing.persistence import storage_operation
@@ -164,6 +164,23 @@ class BankingService:
         return {'card_id': str(card.id), 'status': 'created', 'message': 'Card successfully unblocked'}
 
     @storage_operation
+    def replace_card(self, customer, card_id, key, reason='Card lost/compromised', *, with_replay=False):
+        card = self.store.get_card(card_id)
+        if not card:
+            raise HTTPException(404, 'Card not found')
+        if customer and not self.owns(customer['sub'], card.account_number):
+            raise HTTPException(403, 'Card does not belong to authorized customer')
+        if card.status != 'blocked':
+            raise HTTPException(400, 'Only blocked or compromised cards are eligible for replacement.')
+        try:
+            result, replayed = self.store.replace_idempotent(card_id, customer['sub'] + ':' + key, customer_id=customer['sub'])
+        except AccountNotOwned:
+            raise HTTPException(404, 'Account not found') from None
+        except ValueError as exc:
+            raise HTTPException(400, str(exc)) from None
+        return (result, replayed) if with_replay else result
+
+    @storage_operation
     def cards(self, customer):
         with closing(self.store.connect()) as db:
             db.row_factory = sqlite3.Row
@@ -284,3 +301,16 @@ def unblock_card(card_id: str, body: CardBlockInput, request: Request):
     result = service(request).unblock_card(cust, card_id, body.reason)
     diagnostic(request, 'card_unblocked')
     return result
+
+
+@router.post('/cards/{card_id}/replace', operation_id='replace_card', response_model=CardIssuance, status_code=201)
+def replace_card(card_id: str, body: CardReplaceInput, request: Request, response: Response, idempotency_key: str = Header(min_length=1, max_length=128, pattern=r'^[A-Za-z0-9._:-]+$')):
+    try:
+        result, replayed = service(request).replace_card(customer(), card_id, idempotency_key, reason=body.reason, with_replay=True)
+        response.status_code = 201
+        response.headers['Idempotency-Replayed'] = str(replayed).lower()
+        response.headers['Card-Issuance-Outcome'] = result.outcome
+        diagnostic(request, 'card_replaced', result)
+        return result
+    except IdempotencyConflict:
+        raise HTTPException(409, 'Request key already used for different details') from None
