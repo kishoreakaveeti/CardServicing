@@ -1,0 +1,2215 @@
+{
+  "version": 1,
+  "symbols": {
+    "ui.App.choose": {
+      "file": "frontend/src/main.tsx",
+      "symbol": "App.choose",
+      "group": "Browser"
+    },
+    "ui.App.request": {
+      "file": "frontend/src/main.tsx",
+      "symbol": "App.request",
+      "group": "Browser"
+    },
+    "experience.create_app.start": {
+      "file": "src/card_chat/experience.py",
+      "symbol": "create_app.start",
+      "group": "Experience BFF"
+    },
+    "experience.create_app.forward": {
+      "file": "src/card_chat/experience.py",
+      "symbol": "create_app.forward",
+      "group": "Experience BFF"
+    },
+    "experience.create_app.session": {
+      "file": "src/card_chat/experience.py",
+      "symbol": "create_app.session",
+      "group": "Experience BFF"
+    },
+    "agent.create_app.start": {
+      "file": "src/card_chat/main.py",
+      "symbol": "create_app.start",
+      "group": "Agent HTTP and jobs"
+    },
+    "agent.create_app.input_options": {
+      "file": "src/card_chat/main.py",
+      "symbol": "create_app.input_options",
+      "group": "Agent HTTP and jobs"
+    },
+    "private.form_options": {
+      "file": "src/card_chat/private_inputs.py",
+      "symbol": "form_options",
+      "group": "Private inputs"
+    },
+    "ui.App.supply": {
+      "file": "frontend/src/main.tsx",
+      "symbol": "App.supply",
+      "group": "Browser"
+    },
+    "experience.create_app.supply_inputs": {
+      "file": "src/card_chat/experience.py",
+      "symbol": "create_app.supply_inputs",
+      "group": "Experience BFF"
+    },
+    "agent.create_app.submit_inputs": {
+      "file": "src/card_chat/main.py",
+      "symbol": "create_app.submit_inputs",
+      "group": "Agent HTTP and jobs"
+    },
+    "agent.create_app.submit": {
+      "file": "src/card_chat/main.py",
+      "symbol": "create_app.submit",
+      "group": "Agent HTTP and jobs"
+    },
+    "agent.create_app.schedule": {
+      "file": "src/card_chat/main.py",
+      "symbol": "create_app.schedule",
+      "group": "Agent HTTP and jobs"
+    },
+    "agent.create_app.run_operation": {
+      "file": "src/card_chat/main.py",
+      "symbol": "create_app.run_operation",
+      "group": "Agent HTTP and jobs"
+    },
+    "agent.create_app.structured": {
+      "file": "src/card_chat/main.py",
+      "symbol": "create_app.structured",
+      "group": "Agent HTTP and jobs"
+    },
+    "private.bind": {
+      "file": "src/card_chat/private_inputs.py",
+      "symbol": "bind",
+      "group": "Private inputs"
+    },
+    "private.resolve": {
+      "file": "src/card_chat/private_inputs.py",
+      "symbol": "resolve",
+      "group": "Private inputs"
+    },
+    "private.authorise": {
+      "file": "src/card_chat/private_inputs.py",
+      "symbol": "authorise",
+      "group": "Private inputs"
+    },
+    "catalogue.ToolSpec.validate": {
+      "file": "src/card_chat/catalogue.py",
+      "symbol": "ToolSpec.validate",
+      "group": "Catalogue"
+    },
+    "ui.App.confirm": {
+      "file": "frontend/src/main.tsx",
+      "symbol": "App.confirm",
+      "group": "Browser"
+    },
+    "experience.create_app.confirm": {
+      "file": "src/card_chat/experience.py",
+      "symbol": "create_app.confirm",
+      "group": "Experience BFF"
+    },
+    "agent.create_app.submit_confirmation": {
+      "file": "src/card_chat/main.py",
+      "symbol": "create_app.submit_confirmation",
+      "group": "Agent HTTP and jobs"
+    },
+    "agent.create_app.confirm": {
+      "file": "src/card_chat/main.py",
+      "symbol": "create_app.confirm",
+      "group": "Agent HTTP and jobs"
+    },
+    "agent.create_app.execute": {
+      "file": "src/card_chat/main.py",
+      "symbol": "create_app.execute",
+      "group": "Agent HTTP and jobs"
+    },
+    "gateway.connect.RemoteGateway.execute": {
+      "file": "src/card_chat/gateway.py",
+      "symbol": "connect.RemoteGateway.execute",
+      "group": "MCP gateway"
+    },
+    "gateway.connect.session": {
+      "file": "src/card_chat/gateway.py",
+      "symbol": "connect.session",
+      "group": "MCP gateway"
+    },
+    "gateway.Gateway.execute": {
+      "file": "src/card_chat/gateway.py",
+      "symbol": "Gateway.execute",
+      "group": "MCP gateway"
+    },
+    "mcp.create_server.call_tool": {
+      "file": "src/card_chat/mcp_server.py",
+      "symbol": "create_server.call_tool",
+      "group": "MCP server"
+    },
+    "mcp.execute": {
+      "file": "src/card_chat/mcp_server.py",
+      "symbol": "execute",
+      "group": "MCP server"
+    },
+    "client.ApiClient.execute_operation": {
+      "file": "src/api_client/client.py",
+      "symbol": "ApiClient.execute_operation",
+      "group": "HTTP client"
+    },
+    "security.protect.authenticate": {
+      "file": "src/card_chat/security.py",
+      "symbol": "protect.authenticate",
+      "group": "Security"
+    },
+    "cards.create_app.trace_request": {
+      "file": "src/card_servicing/main.py",
+      "symbol": "create_app.trace_request",
+      "group": "Cards middleware"
+    },
+    "banking.create_account": {
+      "file": "src/card_servicing/banking.py",
+      "symbol": "create_account",
+      "group": "Banking routes and domain"
+    },
+    "banking.customer": {
+      "file": "src/card_servicing/banking.py",
+      "symbol": "customer",
+      "group": "Banking routes and domain"
+    },
+    "banking.service": {
+      "file": "src/card_servicing/banking.py",
+      "symbol": "service",
+      "group": "Banking routes and domain"
+    },
+    "banking.BankingService.create_account": {
+      "file": "src/card_servicing/banking.py",
+      "symbol": "BankingService.create_account",
+      "group": "Banking routes and domain"
+    },
+    "banking.BankingService.issue": {
+      "file": "src/card_servicing/banking.py",
+      "symbol": "BankingService.issue",
+      "group": "Banking routes and domain"
+    },
+    "banking.BankingService.owns": {
+      "file": "src/card_servicing/banking.py",
+      "symbol": "BankingService.owns",
+      "group": "Banking routes and domain"
+    },
+    "store.SQLiteCardStore.issue_idempotent": {
+      "file": "src/card_servicing/persistence.py",
+      "symbol": "SQLiteCardStore.issue_idempotent",
+      "group": "Cards persistence"
+    },
+    "store.SQLiteCardStore._create_idempotent": {
+      "file": "src/card_servicing/persistence.py",
+      "symbol": "SQLiteCardStore._create_idempotent",
+      "group": "Cards persistence"
+    },
+    "store.SQLiteCardStore.connect": {
+      "file": "src/card_servicing/persistence.py",
+      "symbol": "SQLiteCardStore.connect",
+      "group": "Cards persistence"
+    },
+    "orchestrator.AgentOrchestrator.resume_execution": {
+      "file": "src/card_chat/agent.py",
+      "symbol": "AgentOrchestrator.resume_execution",
+      "group": "Orchestration"
+    },
+    "banking.issue_card": {
+      "file": "src/card_servicing/banking.py",
+      "symbol": "issue_card",
+      "group": "Banking routes and domain"
+    },
+    "agent.create_app.check_account_has_blocked": {
+      "file": "src/card_chat/main.py",
+      "symbol": "create_app.check_account_has_blocked",
+      "group": "Agent HTTP and jobs"
+    },
+    "ui.App.authenticate": {
+      "file": "frontend/src/main.tsx",
+      "symbol": "App.authenticate",
+      "group": "Browser"
+    },
+    "experience.create_app.register_customer": {
+      "file": "src/card_chat/experience.py",
+      "symbol": "create_app.register_customer",
+      "group": "Experience BFF"
+    },
+    "experience.create_app.password_login": {
+      "file": "src/card_chat/experience.py",
+      "symbol": "create_app.password_login",
+      "group": "Experience BFF"
+    },
+    "experience.create_app.credentials": {
+      "file": "src/card_chat/experience.py",
+      "symbol": "create_app.credentials",
+      "group": "Experience BFF"
+    },
+    "experience.create_app.banking_request": {
+      "file": "src/card_chat/experience.py",
+      "symbol": "create_app.banking_request",
+      "group": "Experience BFF"
+    },
+    "banking.register": {
+      "file": "src/card_servicing/banking.py",
+      "symbol": "register",
+      "group": "Banking routes and domain"
+    },
+    "banking.login": {
+      "file": "src/card_servicing/banking.py",
+      "symbol": "login",
+      "group": "Banking routes and domain"
+    },
+    "banking.BankingService.register": {
+      "file": "src/card_servicing/banking.py",
+      "symbol": "BankingService.register",
+      "group": "Banking routes and domain"
+    },
+    "banking.BankingService.login": {
+      "file": "src/card_servicing/banking.py",
+      "symbol": "BankingService.login",
+      "group": "Banking routes and domain"
+    },
+    "ui.App.submit": {
+      "file": "frontend/src/main.tsx",
+      "symbol": "App.submit",
+      "group": "Browser"
+    },
+    "experience.create_app.message": {
+      "file": "src/card_chat/experience.py",
+      "symbol": "create_app.message",
+      "group": "Experience BFF"
+    },
+    "agent.create_app.submit_message": {
+      "file": "src/card_chat/main.py",
+      "symbol": "create_app.submit_message",
+      "group": "Agent HTTP and jobs"
+    },
+    "agent.create_app.message": {
+      "file": "src/card_chat/main.py",
+      "symbol": "create_app.message",
+      "group": "Agent HTTP and jobs"
+    },
+    "orchestrator.AgentOrchestrator.interpret_turn": {
+      "file": "src/card_chat/agent.py",
+      "symbol": "AgentOrchestrator.interpret_turn",
+      "group": "Orchestration"
+    },
+    "graph.create_banking_workflow": {
+      "file": "src/card_chat/orchestration/graph.py",
+      "symbol": "create_banking_workflow",
+      "group": "Graph"
+    },
+    "supervisor.SupervisorAgent.plan_or_route": {
+      "file": "src/card_chat/orchestration/supervisor.py",
+      "symbol": "SupervisorAgent.plan_or_route",
+      "group": "Supervisor"
+    },
+    "supervisor.SupervisorAgent._classify_and_plan": {
+      "file": "src/card_chat/orchestration/supervisor.py",
+      "symbol": "SupervisorAgent._classify_and_plan",
+      "group": "Supervisor"
+    },
+    "specialist.CardsSpecialistNode.execute": {
+      "file": "src/card_chat/orchestration/specialists.py",
+      "symbol": "CardsSpecialistNode.execute",
+      "group": "Specialists"
+    },
+    "orchestrator.CardServicingAgent.interpret_turn": {
+      "file": "src/card_chat/agent.py",
+      "symbol": "CardServicingAgent.interpret_turn",
+      "group": "Orchestration"
+    },
+    "provider.AnthropicModel.turn": {
+      "file": "src/card_chat/provider.py",
+      "symbol": "AnthropicModel.turn",
+      "group": "Language providers"
+    },
+    "provider.StubModel.turn": {
+      "file": "src/card_chat/provider.py",
+      "symbol": "StubModel.turn",
+      "group": "Language providers"
+    },
+    "agent.create_app.save": {
+      "file": "src/card_chat/main.py",
+      "symbol": "create_app.save",
+      "group": "Agent HTTP and jobs"
+    },
+    "journal.Journal.save": {
+      "file": "src/card_chat/durable.py",
+      "symbol": "Journal.save",
+      "group": "Durable journal"
+    },
+    "security.Security.headers": {
+      "file": "src/card_chat/security.py",
+      "symbol": "Security.headers",
+      "group": "Security"
+    },
+    "graph.human_confirmation_node": {
+      "file": "src/card_chat/orchestration/graph.py",
+      "symbol": "human_confirmation_node",
+      "group": "Graph"
+    },
+    "agent.create_app.lifespan": {
+      "file": "src/card_chat/main.py",
+      "symbol": "create_app.lifespan",
+      "group": "Agent HTTP and jobs"
+    },
+    "journal.Journal.__init__": {
+      "file": "src/card_chat/durable.py",
+      "symbol": "Journal.__init__",
+      "group": "Durable journal"
+    },
+    "checkpoints.DurableSqliteSaver.__init__": {
+      "file": "src/card_chat/orchestration/persistence.py",
+      "symbol": "DurableSqliteSaver.__init__",
+      "group": "Graph checkpoints"
+    },
+    "factory.build_runtime_policy_services": {
+      "file": "src/card_chat/policy/factory.py",
+      "symbol": "build_runtime_policy_services",
+      "group": "Policy composition"
+    },
+    "factory.build_policy_retriever": {
+      "file": "src/card_chat/policy/factory.py",
+      "symbol": "build_policy_retriever",
+      "group": "Policy composition"
+    },
+    "retriever.HybridPolicyRetriever.check_ready": {
+      "file": "src/card_chat/policy/adapters/retriever.py",
+      "symbol": "HybridPolicyRetriever.check_ready",
+      "group": "Live RAG retriever"
+    },
+    "retriever.HybridPolicyRetriever._active_documents": {
+      "file": "src/card_chat/policy/adapters/retriever.py",
+      "symbol": "HybridPolicyRetriever._active_documents",
+      "group": "Live RAG retriever"
+    },
+    "retriever.HybridPolicyRetriever._verify_indexed": {
+      "file": "src/card_chat/policy/adapters/retriever.py",
+      "symbol": "HybridPolicyRetriever._verify_indexed",
+      "group": "Live RAG retriever"
+    },
+    "documents.FileSystemDocumentSource.list_documents": {
+      "file": "src/card_chat/policy/adapters/document_source.py",
+      "symbol": "FileSystemDocumentSource.list_documents",
+      "group": "Approved policy documents"
+    },
+    "embedder.FastEmbedEmbeddingProvider.embed_query": {
+      "file": "src/card_chat/policy/adapters/embeddings/fastembed_provider.py",
+      "symbol": "FastEmbedEmbeddingProvider.embed_query",
+      "group": "FastEmbed"
+    },
+    "vectors.QdrantVectorStore.search": {
+      "file": "src/card_chat/policy/adapters/vector_stores/qdrant_store.py",
+      "symbol": "QdrantVectorStore.search",
+      "group": "Qdrant"
+    },
+    "supervisor.SupervisorAgent.__init__": {
+      "file": "src/card_chat/orchestration/supervisor.py",
+      "symbol": "SupervisorAgent.__init__",
+      "group": "Supervisor"
+    },
+    "gateway.connect": {
+      "file": "src/card_chat/gateway.py",
+      "symbol": "connect",
+      "group": "MCP gateway"
+    },
+    "gateway.Gateway.__init__": {
+      "file": "src/card_chat/gateway.py",
+      "symbol": "Gateway.__init__",
+      "group": "MCP gateway"
+    },
+    "mcp.create_server.list_tools": {
+      "file": "src/card_chat/mcp_server.py",
+      "symbol": "create_server.list_tools",
+      "group": "MCP server"
+    },
+    "catalogue.load_catalogue": {
+      "file": "src/card_chat/catalogue.py",
+      "symbol": "load_catalogue",
+      "group": "Catalogue"
+    },
+    "catalogue.compile_entry": {
+      "file": "src/card_chat/catalogue.py",
+      "symbol": "compile_entry",
+      "group": "Catalogue"
+    },
+    "agent.create_app.recover": {
+      "file": "src/card_chat/main.py",
+      "symbol": "create_app.recover",
+      "group": "Agent HTTP and jobs"
+    },
+    "experience.create_app.store": {
+      "file": "src/card_chat/experience.py",
+      "symbol": "create_app.store",
+      "group": "Experience BFF"
+    },
+    "experience.create_app.load": {
+      "file": "src/card_chat/experience.py",
+      "symbol": "create_app.load",
+      "group": "Experience BFF"
+    },
+    "experience.create_app.current_session": {
+      "file": "src/card_chat/experience.py",
+      "symbol": "create_app.current_session",
+      "group": "Experience BFF"
+    },
+    "ui.App.logout": {
+      "file": "frontend/src/main.tsx",
+      "symbol": "App.logout",
+      "group": "Browser"
+    },
+    "experience.create_app.logout": {
+      "file": "src/card_chat/experience.py",
+      "symbol": "create_app.logout",
+      "group": "Experience BFF"
+    },
+    "banking.accounts": {
+      "file": "src/card_servicing/banking.py",
+      "symbol": "accounts",
+      "group": "Banking routes and domain"
+    },
+    "banking.cards": {
+      "file": "src/card_servicing/banking.py",
+      "symbol": "cards",
+      "group": "Banking routes and domain"
+    },
+    "banking.BankingService.accounts": {
+      "file": "src/card_servicing/banking.py",
+      "symbol": "BankingService.accounts",
+      "group": "Banking routes and domain"
+    },
+    "banking.BankingService.cards": {
+      "file": "src/card_servicing/banking.py",
+      "symbol": "BankingService.cards",
+      "group": "Banking routes and domain"
+    },
+    "pii.PIIGateway.sanitize_input": {
+      "file": "src/card_chat/pii/gateway.py",
+      "symbol": "PIIGateway.sanitize_input",
+      "group": "PII gateway"
+    },
+    "context.sanitise": {
+      "file": "src/card_chat/model_context.py",
+      "symbol": "sanitise",
+      "group": "Model privacy"
+    },
+    "context.build_context": {
+      "file": "src/card_chat/model_context.py",
+      "symbol": "build_context",
+      "group": "Model privacy"
+    },
+    "pii.PIIGateway.verify_outbound": {
+      "file": "src/card_chat/pii/gateway.py",
+      "symbol": "PIIGateway.verify_outbound",
+      "group": "PII gateway"
+    },
+    "supervisor.SupervisorAgent._retrieve_domain_facts": {
+      "file": "src/card_chat/orchestration/supervisor.py",
+      "symbol": "SupervisorAgent._retrieve_domain_facts",
+      "group": "Supervisor"
+    },
+    "agent.create_app.lifespan.get_verified_domain_facts": {
+      "file": "src/card_chat/main.py",
+      "symbol": "create_app.lifespan.get_verified_domain_facts",
+      "group": "Agent HTTP and jobs"
+    },
+    "evaluator.GroundedPolicyEvaluator.evaluate": {
+      "file": "src/card_chat/policy/adapters/evaluator.py",
+      "symbol": "GroundedPolicyEvaluator.evaluate",
+      "group": "Live policy evaluator"
+    },
+    "specialist.FinCrimeSpecialistNode.execute": {
+      "file": "src/card_chat/orchestration/specialists.py",
+      "symbol": "FinCrimeSpecialistNode.execute",
+      "group": "Specialists"
+    },
+    "fcagent.RemoteFinCrimeAgent.interpret_turn": {
+      "file": "src/card_chat/fincrime_agent.py",
+      "symbol": "RemoteFinCrimeAgent.interpret_turn",
+      "group": "Remote FinCrime specialist"
+    },
+    "fcagent.create_app.turn": {
+      "file": "src/card_chat/fincrime_agent.py",
+      "symbol": "create_app.turn",
+      "group": "Remote FinCrime specialist"
+    },
+    "orchestrator.FinCrimeAgent.interpret_turn": {
+      "file": "src/card_chat/agent.py",
+      "symbol": "FinCrimeAgent.interpret_turn",
+      "group": "Orchestration"
+    },
+    "evaluator.GroundedPolicyEvaluator.validate_execution": {
+      "file": "src/card_chat/policy/adapters/evaluator.py",
+      "symbol": "GroundedPolicyEvaluator.validate_execution",
+      "group": "Live policy evaluator"
+    },
+    "retriever.HybridPolicyRetriever.retrieve": {
+      "file": "src/card_chat/policy/adapters/retriever.py",
+      "symbol": "HybridPolicyRetriever.retrieve",
+      "group": "Live RAG retriever"
+    },
+    "evaluator.GroundedPolicyEvaluator._evaluate_fincrime_action": {
+      "file": "src/card_chat/policy/adapters/evaluator.py",
+      "symbol": "GroundedPolicyEvaluator._evaluate_fincrime_action",
+      "group": "Live policy evaluator"
+    },
+    "banking.block_card": {
+      "file": "src/card_servicing/banking.py",
+      "symbol": "block_card",
+      "group": "Banking routes and domain"
+    },
+    "banking.BankingService.block_card": {
+      "file": "src/card_servicing/banking.py",
+      "symbol": "BankingService.block_card",
+      "group": "Banking routes and domain"
+    },
+    "store.SQLiteCardStore.get_card": {
+      "file": "src/card_servicing/persistence.py",
+      "symbol": "SQLiteCardStore.get_card",
+      "group": "Cards persistence"
+    },
+    "store.SQLiteCardStore.update_card_status": {
+      "file": "src/card_servicing/persistence.py",
+      "symbol": "SQLiteCardStore.update_card_status",
+      "group": "Cards persistence"
+    },
+    "evaluator.GroundedPolicyEvaluator._evaluate_post_block": {
+      "file": "src/card_chat/policy/adapters/evaluator.py",
+      "symbol": "GroundedPolicyEvaluator._evaluate_post_block",
+      "group": "Live policy evaluator"
+    },
+    "evaluator.GroundedPolicyEvaluator._evaluate_issuance": {
+      "file": "src/card_chat/policy/adapters/evaluator.py",
+      "symbol": "GroundedPolicyEvaluator._evaluate_issuance",
+      "group": "Live policy evaluator"
+    },
+    "evaluator.GroundedPolicyEvaluator._handle_pending_question_response": {
+      "file": "src/card_chat/policy/adapters/evaluator.py",
+      "symbol": "GroundedPolicyEvaluator._handle_pending_question_response",
+      "group": "Live policy evaluator"
+    },
+    "banking.unblock_card": {
+      "file": "src/card_servicing/banking.py",
+      "symbol": "unblock_card",
+      "group": "Banking routes and domain"
+    },
+    "banking.BankingService.unblock_card": {
+      "file": "src/card_servicing/banking.py",
+      "symbol": "BankingService.unblock_card",
+      "group": "Banking routes and domain"
+    },
+    "supervisor.normalise_compound_intents": {
+      "file": "src/card_chat/orchestration/supervisor.py",
+      "symbol": "normalise_compound_intents",
+      "group": "Supervisor"
+    },
+    "agent.create_app.review_compound": {
+      "file": "src/card_chat/main.py",
+      "symbol": "create_app.review_compound",
+      "group": "Agent HTTP and jobs"
+    },
+    "evaluator.GroundedPolicyEvaluator._evaluate_replacement": {
+      "file": "src/card_chat/policy/adapters/evaluator.py",
+      "symbol": "GroundedPolicyEvaluator._evaluate_replacement",
+      "group": "Live policy evaluator"
+    },
+    "banking.replace_card": {
+      "file": "src/card_servicing/banking.py",
+      "symbol": "replace_card",
+      "group": "Banking routes and domain"
+    },
+    "banking.BankingService.replace_card": {
+      "file": "src/card_servicing/banking.py",
+      "symbol": "BankingService.replace_card",
+      "group": "Banking routes and domain"
+    },
+    "store.SQLiteCardStore.replace_idempotent": {
+      "file": "src/card_servicing/persistence.py",
+      "symbol": "SQLiteCardStore.replace_idempotent",
+      "group": "Cards persistence"
+    },
+    "policycli.main": {
+      "file": "src/card_chat/policy/pipeline/cli.py",
+      "symbol": "main",
+      "group": "Policy CLI"
+    },
+    "factory.build_policy_pipeline": {
+      "file": "src/card_chat/policy/factory.py",
+      "symbol": "build_policy_pipeline",
+      "group": "Policy composition"
+    },
+    "ingestion.PolicyIngestionPipeline.ingest_all": {
+      "file": "src/card_chat/policy/pipeline/ingestion.py",
+      "symbol": "PolicyIngestionPipeline.ingest_all",
+      "group": "Policy ingestion"
+    },
+    "ingestion.PolicyIngestionPipeline.initialize": {
+      "file": "src/card_chat/policy/pipeline/ingestion.py",
+      "symbol": "PolicyIngestionPipeline.initialize",
+      "group": "Policy ingestion"
+    },
+    "vectors.QdrantVectorStore.initialize": {
+      "file": "src/card_chat/policy/adapters/vector_stores/qdrant_store.py",
+      "symbol": "QdrantVectorStore.initialize",
+      "group": "Qdrant"
+    },
+    "documents.parse_policy_file": {
+      "file": "src/card_chat/policy/adapters/document_source.py",
+      "symbol": "parse_policy_file",
+      "group": "Approved policy documents"
+    },
+    "ingestion.PolicyIngestionPipeline.ingest_document": {
+      "file": "src/card_chat/policy/pipeline/ingestion.py",
+      "symbol": "PolicyIngestionPipeline.ingest_document",
+      "group": "Policy ingestion"
+    },
+    "ingestion.PolicyIngestionPipeline.validate_document": {
+      "file": "src/card_chat/policy/pipeline/ingestion.py",
+      "symbol": "PolicyIngestionPipeline.validate_document",
+      "group": "Policy ingestion"
+    },
+    "ingestion.chunk_policy_markdown": {
+      "file": "src/card_chat/policy/pipeline/ingestion.py",
+      "symbol": "chunk_policy_markdown",
+      "group": "Policy ingestion"
+    },
+    "embedder.FastEmbedEmbeddingProvider.embed_documents": {
+      "file": "src/card_chat/policy/adapters/embeddings/fastembed_provider.py",
+      "symbol": "FastEmbedEmbeddingProvider.embed_documents",
+      "group": "FastEmbed"
+    },
+    "embedder.FastEmbedEmbeddingProvider._ensure_model": {
+      "file": "src/card_chat/policy/adapters/embeddings/fastembed_provider.py",
+      "symbol": "FastEmbedEmbeddingProvider._ensure_model",
+      "group": "FastEmbed"
+    },
+    "vectors.QdrantVectorStore.delete_by_policy_id": {
+      "file": "src/card_chat/policy/adapters/vector_stores/qdrant_store.py",
+      "symbol": "QdrantVectorStore.delete_by_policy_id",
+      "group": "Qdrant"
+    },
+    "vectors.QdrantVectorStore.upsert_chunks": {
+      "file": "src/card_chat/policy/adapters/vector_stores/qdrant_store.py",
+      "symbol": "QdrantVectorStore.upsert_chunks",
+      "group": "Qdrant"
+    },
+    "ingestion.PolicyIngestionPipeline._record_audit": {
+      "file": "src/card_chat/policy/pipeline/ingestion.py",
+      "symbol": "PolicyIngestionPipeline._record_audit",
+      "group": "Policy ingestion"
+    },
+    "ingestion.PolicyIngestionPipeline.inspect": {
+      "file": "src/card_chat/policy/pipeline/ingestion.py",
+      "symbol": "PolicyIngestionPipeline.inspect",
+      "group": "Policy ingestion"
+    },
+    "gateway.connect.RemoteGateway.policy_facts": {
+      "file": "src/card_chat/gateway.py",
+      "symbol": "connect.RemoteGateway.policy_facts",
+      "group": "MCP gateway"
+    },
+    "mcp.create_server.read_policy_facts": {
+      "file": "src/card_chat/mcp_server.py",
+      "symbol": "create_server.read_policy_facts",
+      "group": "MCP server"
+    },
+    "security.Security.customer": {
+      "file": "src/card_chat/security.py",
+      "symbol": "Security.customer",
+      "group": "Security"
+    },
+    "fincrime.create_app.get_card": {
+      "file": "src/fincrime_servicing/main.py",
+      "symbol": "create_app.get_card",
+      "group": "FinCrime API"
+    },
+    "fcservice.FinCrimeService.get_blocked_card": {
+      "file": "src/fincrime_servicing/service.py",
+      "symbol": "FinCrimeService.get_blocked_card",
+      "group": "FinCrime domain"
+    },
+    "fcstore.SQLiteFinCrimeStore.get_blocked_card": {
+      "file": "src/fincrime_servicing/persistence.py",
+      "symbol": "SQLiteFinCrimeStore.get_blocked_card",
+      "group": "FinCrime persistence"
+    },
+    "retriever.HybridPolicyRetriever.retrieve_mandatory": {
+      "file": "src/card_chat/policy/adapters/retriever.py",
+      "symbol": "HybridPolicyRetriever.retrieve_mandatory",
+      "group": "Live RAG retriever"
+    },
+    "evaluator.GroundedPolicyEvaluator._evaluate": {
+      "file": "src/card_chat/policy/adapters/evaluator.py",
+      "symbol": "GroundedPolicyEvaluator._evaluate",
+      "group": "Live policy evaluator"
+    },
+    "checkpoints.DurableSqliteSaver.put": {
+      "file": "src/card_chat/orchestration/persistence.py",
+      "symbol": "DurableSqliteSaver.put",
+      "group": "Graph checkpoints"
+    },
+    "checkpoints.DurableSqliteSaver.get_tuple": {
+      "file": "src/card_chat/orchestration/persistence.py",
+      "symbol": "DurableSqliteSaver.get_tuple",
+      "group": "Graph checkpoints"
+    },
+    "experience.create_app.status": {
+      "file": "src/card_chat/experience.py",
+      "symbol": "create_app.status",
+      "group": "Experience BFF"
+    },
+    "agent.create_app.status": {
+      "file": "src/card_chat/main.py",
+      "symbol": "create_app.status",
+      "group": "Agent HTTP and jobs"
+    },
+    "agent.create_app.operation": {
+      "file": "src/card_chat/main.py",
+      "symbol": "create_app.operation",
+      "group": "Agent HTTP and jobs"
+    },
+    "telemetry.instrument.request_trace": {
+      "file": "src/card_chat/observability.py",
+      "symbol": "instrument.request_trace",
+      "group": "Service observability"
+    },
+    "fincrime.create_app.block_card": {
+      "file": "src/fincrime_servicing/main.py",
+      "symbol": "create_app.block_card",
+      "group": "FinCrime API"
+    },
+    "fincrime.create_app.unblock_card": {
+      "file": "src/fincrime_servicing/main.py",
+      "symbol": "create_app.unblock_card",
+      "group": "FinCrime API"
+    },
+    "fcservice.FinCrimeService.block_card": {
+      "file": "src/fincrime_servicing/service.py",
+      "symbol": "FinCrimeService.block_card",
+      "group": "FinCrime domain"
+    },
+    "fcservice.FinCrimeService.unblock_card": {
+      "file": "src/fincrime_servicing/service.py",
+      "symbol": "FinCrimeService.unblock_card",
+      "group": "FinCrime domain"
+    },
+    "fcstore.SQLiteFinCrimeStore.block_card_idempotent": {
+      "file": "src/fincrime_servicing/persistence.py",
+      "symbol": "SQLiteFinCrimeStore.block_card_idempotent",
+      "group": "FinCrime persistence"
+    },
+    "fcstore.SQLiteFinCrimeStore.unblock_card_idempotent": {
+      "file": "src/fincrime_servicing/persistence.py",
+      "symbol": "SQLiteFinCrimeStore.unblock_card_idempotent",
+      "group": "FinCrime persistence"
+    },
+    "fcservice.FinCrimeService._sync_to_cards_api": {
+      "file": "src/fincrime_servicing/service.py",
+      "symbol": "FinCrimeService._sync_to_cards_api",
+      "group": "FinCrime domain"
+    },
+    "fcservice.FinCrimeService._sync_unblock_to_cards_api": {
+      "file": "src/fincrime_servicing/service.py",
+      "symbol": "FinCrimeService._sync_unblock_to_cards_api",
+      "group": "FinCrime domain"
+    },
+    "fcstore.SQLiteFinCrimeStore.mark_card_synced": {
+      "file": "src/fincrime_servicing/persistence.py",
+      "symbol": "SQLiteFinCrimeStore.mark_card_synced",
+      "group": "FinCrime persistence"
+    },
+    "experience.create_app.login": {
+      "file": "src/card_chat/experience.py",
+      "symbol": "create_app.login",
+      "group": "Experience BFF"
+    },
+    "experience.create_app.complete_login": {
+      "file": "src/card_chat/experience.py",
+      "symbol": "create_app.complete_login",
+      "group": "Experience BFF"
+    },
+    "security.Security.verify": {
+      "file": "src/card_chat/security.py",
+      "symbol": "Security.verify",
+      "group": "Security"
+    },
+    "security.Security.issue_customer": {
+      "file": "src/card_chat/security.py",
+      "symbol": "Security.issue_customer",
+      "group": "Security"
+    },
+    "security.Security.service_token": {
+      "file": "src/card_chat/security.py",
+      "symbol": "Security.service_token",
+      "group": "Security"
+    },
+    "telemetry.DiagnosticHandler.emit": {
+      "file": "src/card_chat/observability.py",
+      "symbol": "DiagnosticHandler.emit",
+      "group": "Service observability"
+    },
+    "banking.diagnostic": {
+      "file": "src/card_servicing/banking.py",
+      "symbol": "diagnostic",
+      "group": "Banking routes and domain"
+    },
+    "metrics.event_record": {
+      "file": "src/card_servicing/telemetry.py",
+      "symbol": "event_record",
+      "group": "Mongo telemetry"
+    },
+    "metrics.MongoTelemetry.emit": {
+      "file": "src/card_servicing/telemetry.py",
+      "symbol": "MongoTelemetry.emit",
+      "group": "Mongo telemetry"
+    },
+    "metrics.MongoTelemetry._run": {
+      "file": "src/card_servicing/telemetry.py",
+      "symbol": "MongoTelemetry._run",
+      "group": "Mongo telemetry"
+    },
+    "metrics.fallback": {
+      "file": "src/card_servicing/telemetry.py",
+      "symbol": "fallback",
+      "group": "Mongo telemetry"
+    }
+  },
+  "segments": {
+    "form": [
+      {
+        "layer": "Browser",
+        "title": "Start action and collect private fields",
+        "refs": [
+          "ui.App.choose",
+          "ui.App.supply",
+          "ui.App.request"
+        ],
+        "inspect": "A write opens a fresh conversation. fields are values; selections are opaque bound references."
+      },
+      {
+        "layer": "Experience",
+        "title": "Validate session and refresh ownership",
+        "refs": [
+          "experience.create_app.supply_inputs",
+          "experience.create_app.session",
+          "experience.create_app.forward",
+          "experience.create_app.banking_request"
+        ],
+        "inspect": "Origin/CSRF and cookie are checked. Local-customer account/card refreshes happen before the Agent request; each refresh has its own trace."
+      },
+      {
+        "layer": "Agent journal",
+        "title": "Accept and run private input operation",
+        "refs": [
+          "agent.create_app.submit_inputs",
+          "agent.create_app.submit",
+          "agent.create_app.schedule",
+          "agent.create_app.run_operation"
+        ],
+        "inspect": "Inspect cid, operation id, request key, stored trace and worker lock. Both sync and async submissions use the journal."
+      },
+      {
+        "layer": "Agent",
+        "title": "Resolve values and prepare review",
+        "refs": [
+          "agent.create_app.structured",
+          "private.resolve",
+          "private.authorise",
+          "catalogue.ToolSpec.validate",
+          "agent.create_app.save"
+        ],
+        "inspect": "Inspect proposal, draft, private bindings and fresh review nonce. No write is authorized by form submission alone."
+      }
+    ],
+    "confirm": [
+      {
+        "layer": "Browser / BFF",
+        "title": "Send reviewed confirmation",
+        "refs": [
+          "ui.App.confirm",
+          "experience.create_app.confirm",
+          "experience.create_app.forward"
+        ],
+        "inspect": "Body contains the current review nonce. Browser operation key differs from the downstream execution key."
+      },
+      {
+        "layer": "Agent",
+        "title": "Validate nonce and persist exact submission",
+        "refs": [
+          "agent.create_app.submit_confirmation",
+          "agent.create_app.submit",
+          "agent.create_app.run_operation",
+          "agent.create_app.confirm",
+          "agent.create_app.execute",
+          "journal.Journal.save"
+        ],
+        "inspect": "The execution snapshot and key are durable before the first write. Restricted card actions also recheck current facts and policy."
+      }
+    ],
+    "transport": [
+      {
+        "layer": "Agent gateway",
+        "title": "Open authenticated MCP call",
+        "refs": [
+          "gateway.connect.RemoteGateway.execute",
+          "gateway.connect.session",
+          "gateway.Gateway.execute",
+          "security.Security.headers"
+        ],
+        "inspect": "Fresh destination token and customer assertion; idempotency_key and calling agent travel as MCP metadata."
+      },
+      {
+        "layer": "MCP / HTTP",
+        "title": "Authorize tool and execute compiled API operation",
+        "refs": [
+          "mcp.create_server.call_tool",
+          "mcp.execute",
+          "client.ApiClient.execute_operation",
+          "security.protect.authenticate"
+        ],
+        "inspect": "Compare spec.method/path, allowed agent, body, status and response schema. Current catalogue tools target CARD_API_BASE_URL."
+      }
+    ],
+    "result": [
+      {
+        "layer": "Agent / graph",
+        "title": "Validate result and resume actual execution",
+        "refs": [
+          "agent.create_app.execute",
+          "orchestrator.AgentOrchestrator.resume_execution",
+          "graph.human_confirmation_node",
+          "agent.create_app.run_operation"
+        ],
+        "inspect": "MCP structured result drives completion. Graph resumes only if a checkpoint is waiting. Operation success can still contain a business-failure Reply."
+      },
+      {
+        "layer": "Experience / Browser",
+        "title": "Validate reply and render",
+        "refs": [
+          "experience.create_app.forward",
+          "ui.App.request"
+        ],
+        "inspect": "BFF exposes typed Reply/Operation. View actions supply Reply.data; write results usually provide a summary. Capture correlation headers."
+      }
+    ]
+  },
+  "journeys": [
+    {
+      "id": "startup",
+      "title": "Startup, catalogue discovery and approved-policy readiness",
+      "trigger": "Launch the configured local or Docker stack after policy ingestion.",
+      "outcome": "Agent starts only with usable approved policy index and matching MCP catalogue.",
+      "notes": [],
+      "steps": [
+        {
+          "layer": "Agent",
+          "title": "Compose runtime dependencies",
+          "refs": [
+            "agent.create_app.lifespan",
+            "journal.Journal.__init__",
+            "checkpoints.DurableSqliteSaver.__init__"
+          ],
+          "inspect": "Inspect AGENT_DB, model provider, remote FinCrime URL and checkpoint store."
+        },
+        {
+          "layer": "Policy factory",
+          "title": "Build live RAG services",
+          "refs": [
+            "factory.build_runtime_policy_services",
+            "factory.build_policy_retriever"
+          ],
+          "inspect": "Live runtime requires FastEmbed and remote persistent Qdrant unless an explicit test retriever is injected."
+        },
+        {
+          "layer": "Retriever",
+          "title": "Check approved documents and index compatibility",
+          "refs": [
+            "retriever.HybridPolicyRetriever.check_ready",
+            "retriever.HybridPolicyRetriever._active_documents",
+            "retriever.HybridPolicyRetriever._verify_indexed",
+            "documents.FileSystemDocumentSource.list_documents"
+          ],
+          "inspect": "POL-001 through POL-004 must exist. Verify approved version, content_hash and embedding_model."
+        },
+        {
+          "layer": "Embedding / Qdrant",
+          "title": "Read approved indexed evidence",
+          "refs": [
+            "embedder.FastEmbedEmbeddingProvider.embed_query",
+            "vectors.QdrantVectorStore.search"
+          ],
+          "inspect": "Read-only readiness queries; runtime startup does not ingest or initialize missing collections."
+        },
+        {
+          "layer": "Graph",
+          "title": "Build supervisor and specialists",
+          "refs": [
+            "graph.create_banking_workflow",
+            "supervisor.SupervisorAgent.__init__"
+          ],
+          "inspect": "Same retriever/evaluator instances are passed into supervisor. Check tool policies and checkpointer."
+        },
+        {
+          "layer": "MCP",
+          "title": "Discover and verify tool schemas",
+          "refs": [
+            "gateway.connect",
+            "gateway.Gateway.__init__",
+            "mcp.create_server.list_tools",
+            "catalogue.load_catalogue",
+            "catalogue.compile_entry"
+          ],
+          "inspect": "Gateway compares discovered tools with compiled OpenAPI/catalogue definitions."
+        },
+        {
+          "layer": "Journal",
+          "title": "Recover accepted jobs",
+          "refs": [
+            "agent.create_app.recover",
+            "agent.create_app.schedule",
+            "agent.create_app.run_operation"
+          ],
+          "inspect": "Running operations were reset to pending at Journal construction; persisted delegation is revalidated before execution."
+        }
+      ],
+      "troubleshoot": "For startup failure inspect service terminal, ingestion settings and index metadata. Compare catalogue/OpenAPI files on Agent and MCP; do not rebuild policy data during a request."
+    },
+    {
+      "id": "authentication",
+      "title": "Register, password login and logout",
+      "trigger": "Choose Register or Login, use the credential form, later Sign out.",
+      "outcome": "Customer identity is stored by Cards; BFF rotates a cookie session and CSRF value.",
+      "notes": [],
+      "steps": [
+        {
+          "layer": "Browser",
+          "title": "Send credential form",
+          "refs": [
+            "ui.App.authenticate"
+          ],
+          "inspect": "Passwords go to /auth/register or /auth/password-login, not chat or MCP."
+        },
+        {
+          "layer": "Experience",
+          "title": "Validate origin and throttle attempts",
+          "refs": [
+            "experience.create_app.register_customer",
+            "experience.create_app.password_login",
+            "experience.create_app.credentials"
+          ],
+          "inspect": "Inspect origin and auth_attempts; repeated attempts produce 429."
+        },
+        {
+          "layer": "BFF / Security",
+          "title": "Authenticate Cards hop",
+          "refs": [
+            "experience.create_app.banking_request",
+            "security.Security.headers",
+            "security.protect.authenticate"
+          ],
+          "inspect": "X-Banking-BFF selects the Experience-authorized banking entry path; downstream customer identity is not required for credential entry."
+        },
+        {
+          "layer": "Cards",
+          "title": "Register or verify customer",
+          "refs": [
+            "banking.register",
+            "banking.login",
+            "banking.BankingService.register",
+            "banking.BankingService.login",
+            "store.SQLiteCardStore.connect"
+          ],
+          "inspect": "customers holds username and scrypt hash. Login compares hashes; registration username collision returns 409."
+        },
+        {
+          "layer": "Experience",
+          "title": "Rotate and persist session",
+          "refs": [
+            "experience.create_app.credentials",
+            "experience.create_app.store",
+            "experience.create_app.load"
+          ],
+          "inspect": "sessions stores hashed session ids with expiry, claims and CSRF. Inspect existence/expiry, not a shared credential dump."
+        },
+        {
+          "layer": "Browser",
+          "title": "Read session state",
+          "refs": [
+            "ui.App.authenticate",
+            "experience.create_app.current_session"
+          ],
+          "inspect": "React stores public name and CSRF. Login clears visible conversation state."
+        },
+        {
+          "layer": "Browser / Experience",
+          "title": "End session when requested",
+          "refs": [
+            "ui.App.logout",
+            "experience.create_app.logout",
+            "experience.create_app.load"
+          ],
+          "inspect": "Logout checks CSRF, consumes stored session and clears cookie/UI state."
+        }
+      ],
+      "troubleshoot": "401: inspect customer hash verification and session expiry. 403: Origin/CSRF or service identity. Registration is outside Agent journal and does not have a conversation operation id."
+    },
+    {
+      "id": "account-card",
+      "title": "Create account with optional first card",
+      "trigger": "Choose Create account; select issue_card=true; review and confirm.",
+      "outcome": "One account and optional card are durable; account and card commits are separate.",
+      "notes": [],
+      "steps": [
+        {
+          "segment": "form"
+        },
+        {
+          "segment": "confirm"
+        },
+        {
+          "segment": "transport"
+        },
+        {
+          "layer": "Cards route",
+          "title": "Accept account creation",
+          "refs": [
+            "banking.create_account",
+            "banking.customer",
+            "banking.service"
+          ],
+          "inspect": "POST /banking/accounts receives AccountCreate and the saved execution key."
+        },
+        {
+          "layer": "Cards domain / SQLite",
+          "title": "Create or replay account",
+          "refs": [
+            "banking.BankingService.create_account",
+            "store.SQLiteCardStore.connect"
+          ],
+          "inspect": "BEGIN IMMEDIATE protects customer/key lookup and account insert. accounts and banking_requests commit before optional issuance."
+        },
+        {
+          "layer": "Cards domain",
+          "title": "Optionally issue first card",
+          "refs": [
+            "banking.BankingService.issue",
+            "banking.BankingService.owns"
+          ],
+          "inspect": "Only if issue_card=true. Internal key is account: plus account execution key; store prefixes customer id."
+        },
+        {
+          "layer": "Cards SQLite",
+          "title": "Replay or create card and snapshots",
+          "refs": [
+            "store.SQLiteCardStore.issue_idempotent",
+            "store.SQLiteCardStore._create_idempotent"
+          ],
+          "inspect": "Inspect card_issuance_requests, card_idempotency, cards and account_cards under one issuance transaction."
+        },
+        {
+          "segment": "result"
+        }
+      ],
+      "troubleshoot": "Account exists but card is absent: retry the original account submission/key. Do not create another account to recover optional issuance. Use view actions to verify records."
+    },
+    {
+      "id": "read-accounts-cards",
+      "title": "View owned accounts and cards",
+      "trigger": "Choose View my accounts or View my cards.",
+      "outcome": "Owned lists return in Reply.data without write confirmation.",
+      "notes": [],
+      "steps": [
+        {
+          "layer": "Browser",
+          "title": "Open read workflow and send empty inputs",
+          "refs": [
+            "ui.App.choose",
+            "ui.App.request"
+          ],
+          "inspect": "choose starts a conversation then posts inputs for view_* immediately."
+        },
+        {
+          "layer": "Experience",
+          "title": "Refresh owned state and forward",
+          "refs": [
+            "experience.create_app.supply_inputs",
+            "experience.create_app.session",
+            "experience.create_app.forward",
+            "experience.create_app.banking_request"
+          ],
+          "inspect": "Reads still require an authenticated caller; local customer summaries are refreshed."
+        },
+        {
+          "layer": "Agent",
+          "title": "Accept read operation and execute directly",
+          "refs": [
+            "agent.create_app.submit_inputs",
+            "agent.create_app.submit",
+            "agent.create_app.run_operation",
+            "agent.create_app.structured",
+            "agent.create_app.execute"
+          ],
+          "inspect": "Catalogue confirmation=none skips nonce review; request still has durable operation status."
+        },
+        {
+          "segment": "transport"
+        },
+        {
+          "layer": "Cards / SQLite",
+          "title": "Select customer-owned records",
+          "refs": [
+            "banking.accounts",
+            "banking.cards",
+            "banking.BankingService.accounts",
+            "banking.BankingService.cards",
+            "store.SQLiteCardStore.connect"
+          ],
+          "inspect": "GET /banking/accounts or /banking/cards filters by customer sub; cards reads join owned accounts."
+        },
+        {
+          "segment": "result"
+        }
+      ],
+      "troubleshoot": "An empty list can be valid. Compare caller sub and effective native/Compose database. A BFF refresh failure may occur before the read operation is accepted."
+    },
+    {
+      "id": "chat-interpretation",
+      "title": "Natural-language request, privacy and specialist routing",
+      "trigger": "Send an authenticated chat message describing an account/card operation.",
+      "outcome": "Sanitized interpretation returns a reply, private form or reviewed proposal; it does not directly authorize a write.",
+      "notes": [],
+      "steps": [
+        {
+          "layer": "Browser / Experience",
+          "title": "Send message through authenticated BFF",
+          "refs": [
+            "ui.App.submit",
+            "experience.create_app.message",
+            "experience.create_app.forward"
+          ],
+          "inspect": "Frontend hides private-looking pasted input; server performs its own checks."
+        },
+        {
+          "layer": "Agent journal",
+          "title": "Durably accept safe message",
+          "refs": [
+            "agent.create_app.submit_message",
+            "agent.create_app.submit",
+            "agent.create_app.run_operation",
+            "agent.create_app.message"
+          ],
+          "inspect": "submit replaces rejected private pastes before storage; message invalidates stale reviews."
+        },
+        {
+          "layer": "Privacy",
+          "title": "Analyze input and prepare model projection",
+          "refs": [
+            "pii.PIIGateway.sanitize_input",
+            "context.sanitise",
+            "context.build_context",
+            "pii.PIIGateway.verify_outbound"
+          ],
+          "inspect": "Inspect safe history/verified draft; raw account choices and credentials must not become model arguments."
+        },
+        {
+          "layer": "Graph",
+          "title": "Load customer-scoped state and route",
+          "refs": [
+            "orchestrator.AgentOrchestrator.interpret_turn",
+            "supervisor.SupervisorAgent.plan_or_route",
+            "supervisor.SupervisorAgent._classify_and_plan"
+          ],
+          "inspect": "thread_id=owner:cid. Inspect planned_intents, action_plan, permitted tools and policy decisions; supervisor can run repeatedly."
+        },
+        {
+          "layer": "Policy",
+          "title": "Enrich facts and evaluate restricted intents",
+          "refs": [
+            "supervisor.SupervisorAgent._retrieve_domain_facts",
+            "agent.create_app.lifespan.get_verified_domain_facts",
+            "evaluator.GroundedPolicyEvaluator.evaluate"
+          ],
+          "inspect": "Card lifecycle intents may invoke the RAG journey below. Account/auth/read intents do not need FinCrime facts."
+        },
+        {
+          "layer": "Specialists",
+          "title": "Propose Cards or FinCrime tool",
+          "refs": [
+            "specialist.CardsSpecialistNode.execute",
+            "specialist.FinCrimeSpecialistNode.execute",
+            "orchestrator.CardServicingAgent.interpret_turn"
+          ],
+          "inspect": "Specialists are permission-filtered. Deterministic stub/compound branches can bypass a provider call."
+        },
+        {
+          "layer": "Remote specialist (conditional)",
+          "title": "Delegate FinCrime interpretation",
+          "refs": [
+            "fcagent.RemoteFinCrimeAgent.interpret_turn",
+            "fcagent.create_app.turn",
+            "orchestrator.FinCrimeAgent.interpret_turn"
+          ],
+          "inspect": "Only when remote specialist interpretation is actually invoked. A remote proposal is not an executed block."
+        },
+        {
+          "layer": "Provider (conditional)",
+          "title": "Interpret sanitized context",
+          "refs": [
+            "provider.AnthropicModel.turn",
+            "provider.StubModel.turn"
+          ],
+          "inspect": "Hosted and stub branches differ; inspect returned CustomerReply/ProposedToolCall and usage, not credentials."
+        },
+        {
+          "layer": "Agent",
+          "title": "Resolve proposal and request review/details",
+          "refs": [
+            "agent.create_app.message",
+            "private.resolve",
+            "private.authorise",
+            "graph.human_confirmation_node"
+          ],
+          "inspect": "Missing owned account for issue_card opens create_account. A write waits for explicit review; follow that action journey next."
+        },
+        {
+          "layer": "BFF / Browser",
+          "title": "Render proposal or private form",
+          "refs": [
+            "experience.create_app.forward",
+            "ui.App.request"
+          ],
+          "inspect": "input_tool selects the form; can_confirm/review controls confirmation."
+        }
+      ],
+      "troubleshoot": "If forms work but chat fails, inspect PII, supervisor state, provider response and policy retrieval. Never infer write success from model prose alone."
+    },
+    {
+      "id": "issue-card",
+      "title": "Issue first, existing or additional card",
+      "trigger": "Choose Issue new card and an owned account; explicitly select additional_card only for another card.",
+      "outcome": "Ordinary issuance creates one card or returns already_exists; an explicit additional request can create another.",
+      "notes": [],
+      "steps": [
+        {
+          "segment": "form"
+        },
+        {
+          "layer": "Agent",
+          "title": "Check blocked-card preflight",
+          "refs": [
+            "agent.create_app.check_account_has_blocked",
+            "agent.create_app.structured"
+          ],
+          "inspect": "Forms can reject a blocked account before confirmation; this is not the authoritative backend transaction."
+        },
+        {
+          "segment": "confirm"
+        },
+        {
+          "layer": "Policy / facts",
+          "title": "Revalidate before execution",
+          "refs": [
+            "agent.create_app.lifespan.get_verified_domain_facts",
+            "evaluator.GroundedPolicyEvaluator.validate_execution",
+            "evaluator.GroundedPolicyEvaluator.evaluate",
+            "retriever.HybridPolicyRetriever.retrieve"
+          ],
+          "inspect": "Inspect latest verified blocked-card facts, policy evidence and pinned versions. See runtime RAG journey."
+        },
+        {
+          "segment": "transport"
+        },
+        {
+          "layer": "Cards",
+          "title": "Authorize managed account and issue",
+          "refs": [
+            "banking.issue_card",
+            "banking.BankingService.issue",
+            "banking.BankingService.owns"
+          ],
+          "inspect": "POST /banking/cards; backend still checks ownership and blocked-card restrictions."
+        },
+        {
+          "layer": "SQLite",
+          "title": "Check replay before existence and insert atomically",
+          "refs": [
+            "store.SQLiteCardStore.issue_idempotent",
+            "store.SQLiteCardStore._create_idempotent"
+          ],
+          "inspect": "BEGIN IMMEDIATE protects ownership, existing decisions, blocked cards and ordinary card existence. Same key/details replays; changed fingerprint conflicts."
+        },
+        {
+          "layer": "MCP / Agent",
+          "title": "Propagate issuance decision",
+          "refs": [
+            "mcp.execute",
+            "agent.create_app.execute"
+          ],
+          "inspect": "Card-Issuance-Outcome/JSON outcome distinguishes created, already_exists and additional_created. HTTP 200 already_exists is not a failed creation."
+        },
+        {
+          "segment": "result"
+        }
+      ],
+      "troubleshoot": "For a timeout, inspect saved execution key and card_issuance_requests before retrying. Keep the same key/body for one operation; a new additional card needs a new reviewed workflow."
+    },
+    {
+      "id": "block-card",
+      "title": "Block or temporarily freeze a card",
+      "trigger": "Choose Block card; select active card; enter a synthetic reason; review and confirm.",
+      "outcome": "Cards status becomes blocked; a chat graph may offer a subsequent replacement.",
+      "notes": [
+        "Current block/unblock catalogue entries have no idempotency_header. ToolSpec.safe_retry is false for these writes. Do not apply issuance retry guarantees to a block after an uncertain result."
+      ],
+      "steps": [
+        {
+          "segment": "form"
+        },
+        {
+          "segment": "confirm"
+        },
+        {
+          "layer": "Agent policy",
+          "title": "Evaluate block authorization and evidence",
+          "refs": [
+            "evaluator.GroundedPolicyEvaluator.validate_execution",
+            "evaluator.GroundedPolicyEvaluator._evaluate_fincrime_action",
+            "retriever.HybridPolicyRetriever.retrieve"
+          ],
+          "inspect": "POL-003/POL-004 evidence is required. A FinCrime specialist proposal is separate from API execution."
+        },
+        {
+          "segment": "transport"
+        },
+        {
+          "layer": "Cards route / domain",
+          "title": "Block the selected owned card",
+          "refs": [
+            "banking.block_card",
+            "banking.BankingService.block_card",
+            "store.SQLiteCardStore.get_card"
+          ],
+          "inspect": "Current tool resolves to POST /banking/cards/{card_id}/block on Cards, not POST /fincrime/cards/{card_id}/block."
+        },
+        {
+          "layer": "Cards SQLite",
+          "title": "Persist blocked status",
+          "refs": [
+            "store.SQLiteCardStore.update_card_status"
+          ],
+          "inspect": "cards.status becomes blocked. This route does not insert blocked_cards or persist reason in the separate FinCrime DB."
+        },
+        {
+          "layer": "Graph",
+          "title": "Resume actual result and optional post-block offer",
+          "refs": [
+            "orchestrator.AgentOrchestrator.resume_execution",
+            "graph.human_confirmation_node",
+            "supervisor.SupervisorAgent.plan_or_route",
+            "evaluator.GroundedPolicyEvaluator._evaluate_post_block"
+          ],
+          "inspect": "When a waiting graph resumes, actual success creates card_blocked_success context. Offer logic considers the actual reason/context; a direct form may have no waiting graph."
+        },
+        {
+          "segment": "result"
+        }
+      ],
+      "troubleshoot": "Inspect Cards status first. Missing FinCrime reason records can limit temporary-freeze/compromise classification; do not assume the two databases were synchronized by this tool."
+    },
+    {
+      "id": "unblock-policy",
+      "title": "Policy-driven unblock offer and subsequent issuance",
+      "trigger": "With verified temporary-freeze facts, ask for another card; accept the unblock offer and confirm the reviewed unblock.",
+      "outcome": "Eligible temporary freeze can be removed; a subsequent issue_card action requires its own review.",
+      "notes": [],
+      "steps": [
+        {
+          "layer": "UI / BFF / Agent",
+          "title": "Submit chat intent under the caller",
+          "refs": [
+            "ui.App.submit",
+            "experience.create_app.message",
+            "experience.create_app.forward",
+            "agent.create_app.submit_message",
+            "agent.create_app.submit",
+            "agent.create_app.run_operation",
+            "agent.create_app.message"
+          ],
+          "inspect": "Use the chat path to observe the interactive policy branch. A private form can simply reject a blocked account."
+        },
+        {
+          "layer": "Graph / facts",
+          "title": "Resolve temporary-freeze evidence",
+          "refs": [
+            "orchestrator.AgentOrchestrator.interpret_turn",
+            "supervisor.SupervisorAgent.plan_or_route",
+            "supervisor.SupervisorAgent._retrieve_domain_facts",
+            "agent.create_app.lifespan.get_verified_domain_facts"
+          ],
+          "inspect": "Facts must identify a temporary freeze and target card. See the MCP policy-facts journey; unknown reason is not automatically an eligible temporary freeze."
+        },
+        {
+          "layer": "Policy / RAG",
+          "title": "Offer unblock or prohibit compromise",
+          "refs": [
+            "evaluator.GroundedPolicyEvaluator.evaluate",
+            "retriever.HybridPolicyRetriever.retrieve",
+            "evaluator.GroundedPolicyEvaluator._evaluate_issuance"
+          ],
+          "inspect": "Inspect pending_customer_question and pinned policy version. Permanently compromised facts prohibit unblocking."
+        },
+        {
+          "layer": "UI / Graph",
+          "title": "Accept policy question",
+          "refs": [
+            "ui.App.submit",
+            "agent.create_app.message",
+            "supervisor.SupervisorAgent.plan_or_route",
+            "evaluator.GroundedPolicyEvaluator._handle_pending_question_response"
+          ],
+          "inspect": "A conversational yes chooses the next intent; it does not replace the write confirmation nonce."
+        },
+        {
+          "layer": "FinCrime specialist",
+          "title": "Prepare selected unblock proposal",
+          "refs": [
+            "specialist.FinCrimeSpecialistNode.execute",
+            "agent.create_app.message"
+          ],
+          "inspect": "Validate selected card binding and authorization. Remote interpretation is conditional; deterministic branches may prepare the proposal locally."
+        },
+        {
+          "segment": "confirm"
+        },
+        {
+          "layer": "Policy",
+          "title": "Revalidate selected unblock",
+          "refs": [
+            "evaluator.GroundedPolicyEvaluator.validate_execution",
+            "evaluator.GroundedPolicyEvaluator._evaluate_fincrime_action"
+          ],
+          "inspect": "Fail closed if policy retrieval/facts are unavailable or compromise forbids unblocking."
+        },
+        {
+          "segment": "transport"
+        },
+        {
+          "layer": "Cards / SQLite",
+          "title": "Restore blocked card to created status",
+          "refs": [
+            "banking.unblock_card",
+            "banking.BankingService.unblock_card",
+            "store.SQLiteCardStore.update_card_status"
+          ],
+          "inspect": "Backend verifies ownership and current blocked state. This route does not update FinCrime records; compare sources if later policy facts remain blocked."
+        },
+        {
+          "layer": "Graph / UI",
+          "title": "Resume and review the next intent",
+          "refs": [
+            "orchestrator.AgentOrchestrator.resume_execution",
+            "graph.human_confirmation_node",
+            "supervisor.SupervisorAgent.plan_or_route",
+            "agent.create_app.execute",
+            "ui.App.request"
+          ],
+          "inspect": "Inspect planned/completed intents and next proposal. Subsequent issuance requires a fresh review/confirmation, then follows issuance journey."
+        }
+      ],
+      "troubleshoot": "No unblock offer: inspect reason provenance and temporary-freeze flags, not just Cards status. After unblocking, stale FinCrime block records can still influence remote facts. Block/unblock tool retries are not declared safe."
+    },
+    {
+      "id": "replacement",
+      "title": "Replace a blocked card or run combined block-and-replace",
+      "trigger": "Choose Replace card for a blocked card, or in chat explicitly request blocking and replacement of the same card.",
+      "outcome": "Replacement card is created for the owned account while original remains blocked.",
+      "notes": [],
+      "steps": [
+        {
+          "layer": "Browser / Agent graph",
+          "title": "Prepare standalone or compound intent",
+          "refs": [
+            "ui.App.choose",
+            "ui.App.submit",
+            "agent.create_app.message",
+            "supervisor.SupervisorAgent._classify_and_plan",
+            "supervisor.normalise_compound_intents"
+          ],
+          "inspect": "Standalone form starts with a blocked card. Compound chat plan must order block before replacement."
+        },
+        {
+          "layer": "Agent",
+          "title": "Collect selected card and build review",
+          "refs": [
+            "agent.create_app.structured",
+            "agent.create_app.review_compound",
+            "agent.create_app.message"
+          ],
+          "inspect": "For explicit block-and-replace, compound_approval binds both writes to the same selected card; review text explicitly authorizes replacement after blocking."
+        },
+        {
+          "segment": "confirm"
+        },
+        {
+          "layer": "Conditional block",
+          "title": "Execute block first when combined",
+          "refs": [
+            "agent.create_app.execute",
+            "mcp.create_server.call_tool",
+            "banking.block_card",
+            "banking.BankingService.block_card",
+            "store.SQLiteCardStore.update_card_status"
+          ],
+          "inspect": "Skip this phase for an already-blocked standalone replacement. Failure prevents replacement; uncertain block is not safely retryable by catalogue declaration."
+        },
+        {
+          "layer": "Graph continuation",
+          "title": "Resume block success and select replacement",
+          "refs": [
+            "orchestrator.AgentOrchestrator.resume_execution",
+            "graph.human_confirmation_node",
+            "supervisor.SupervisorAgent.plan_or_route",
+            "evaluator.GroundedPolicyEvaluator._evaluate_post_block"
+          ],
+          "inspect": "Combined approval may continue automatically for the same card. A block-only offer requires a separate customer decision/review."
+        },
+        {
+          "layer": "Agent / policy",
+          "title": "Persist and revalidate replacement",
+          "refs": [
+            "agent.create_app.execute",
+            "evaluator.GroundedPolicyEvaluator.validate_execution",
+            "evaluator.GroundedPolicyEvaluator._evaluate_replacement",
+            "journal.Journal.save"
+          ],
+          "inspect": "Combined continuation resets submission, binds approved reason/card and saves before replacement. Latest successful block result can update stale signed summaries in this same request."
+        },
+        {
+          "segment": "transport"
+        },
+        {
+          "layer": "Cards",
+          "title": "Authorize blocked replacement target",
+          "refs": [
+            "banking.replace_card",
+            "banking.BankingService.replace_card"
+          ],
+          "inspect": "Target must exist, belong to customer and remain blocked. Replacement has its own durable key."
+        },
+        {
+          "layer": "SQLite",
+          "title": "Create or replay replacement snapshot",
+          "refs": [
+            "store.SQLiteCardStore.replace_idempotent",
+            "store.SQLiteCardStore._create_idempotent"
+          ],
+          "inspect": "cards gets new SIM card; account_cards links it. card_issuance_requests stores replacement_created; old card stays blocked."
+        },
+        {
+          "segment": "result"
+        }
+      ],
+      "troubleshoot": "Inspect compound_approval.status (reviewed/confirmed/replacing/complete), block outcome and replacement key separately. This is ordered multi-step execution, not a transaction across both HTTP writes."
+    },
+    {
+      "id": "policy-ingestion",
+      "title": "Approved policy ingestion and reindexing",
+      "trigger": "Run python -m card_chat.policy.pipeline.cli ingest (or update FILE) with the runtime model/collection settings.",
+      "outcome": "Approved Markdown is chunked, embedded and written to Qdrant with policy metadata and an ingestion audit entry.",
+      "notes": [
+        "Ingestion is an operator journey, not a browser request: it has no browser cid/review/operation trace. Breakpoints require launching the CLI under a Python debugger."
+      ],
+      "steps": [
+        {
+          "layer": "CLI / factory",
+          "title": "Select ingestion command and adapters",
+          "refs": [
+            "policycli.main",
+            "factory.build_policy_pipeline"
+          ],
+          "inspect": "Match POLICIES_DIR, QDRANT_URL, POLICY_COLLECTION, embedding provider/model with runtime. Use a configured shell or the Compose invocation in live-policy-runtime.md."
+        },
+        {
+          "layer": "Pipeline / Qdrant",
+          "title": "Initialize collection using embedding dimension",
+          "refs": [
+            "ingestion.PolicyIngestionPipeline.ingest_all",
+            "ingestion.PolicyIngestionPipeline.initialize",
+            "vectors.QdrantVectorStore.initialize"
+          ],
+          "inspect": "This is a separate ingestion process. Runtime startup does not create the collection."
+        },
+        {
+          "layer": "Documents",
+          "title": "Read approved versions and metadata",
+          "refs": [
+            "documents.FileSystemDocumentSource.list_documents",
+            "documents.parse_policy_file"
+          ],
+          "inspect": "Approved flags/status, effective dates, version, required actions and content hash come from Markdown frontmatter/content."
+        },
+        {
+          "layer": "Pipeline",
+          "title": "Validate and chunk document",
+          "refs": [
+            "ingestion.PolicyIngestionPipeline.ingest_document",
+            "ingestion.PolicyIngestionPipeline.validate_document",
+            "ingestion.chunk_policy_markdown"
+          ],
+          "inspect": "Inspect section chunks and metadata; empty documents produce no vectors."
+        },
+        {
+          "layer": "FastEmbed",
+          "title": "Embed policy chunks",
+          "refs": [
+            "embedder.FastEmbedEmbeddingProvider.embed_documents",
+            "embedder.FastEmbedEmbeddingProvider._ensure_model"
+          ],
+          "inspect": "Each embedding input combines policy id/version, section title and content; dimensions must match collection."
+        },
+        {
+          "layer": "Qdrant",
+          "title": "Replace policy points",
+          "refs": [
+            "vectors.QdrantVectorStore.delete_by_policy_id",
+            "vectors.QdrantVectorStore.upsert_chunks"
+          ],
+          "inspect": "Inspect collection points and embedding_model/content_hash payload. Delete then upsert are separate operations, not one atomic cross-request replacement."
+        },
+        {
+          "layer": "Audit / inspect",
+          "title": "Record ingestion and report collection",
+          "refs": [
+            "ingestion.PolicyIngestionPipeline._record_audit",
+            "ingestion.PolicyIngestionPipeline.inspect"
+          ],
+          "inspect": "POLICY_AUDIT_LOG defaults to data/policy_audit.json; it is distinct from Mongo request traces."
+        },
+        {
+          "layer": "Runtime verification",
+          "title": "Read and validate approved index",
+          "refs": [
+            "factory.build_runtime_policy_services",
+            "retriever.HybridPolicyRetriever.check_ready",
+            "retriever.HybridPolicyRetriever._verify_indexed"
+          ],
+          "inspect": "Restart or recheck the live runtime with the new index. Existing workflows can reject changed pinned versions."
+        }
+      ],
+      "troubleshoot": "If interrupted between delete and upsert, runtime can fail closed on missing/stale index; rerun approved ingestion. Check model/cache connectivity, writable audit path and identical ingestion/runtime config."
+    },
+    {
+      "id": "runtime-rag",
+      "title": "Runtime policy retrieval, verified facts and execution gate",
+      "trigger": "Ask for a restricted card action in chat, or confirm an issue/block/unblock/replace proposal.",
+      "outcome": "Approved evidence and verified domain facts produce a structured permit/deny/offer decision; unavailable evidence prevents restricted execution.",
+      "notes": [
+        "This is policy-guided servicing, not an unrestricted document Q&A endpoint. A direct form may stop at blocked-card preflight before the full gate. No single action must touch every component; the journey set covers the distinct components."
+      ],
+      "steps": [
+        {
+          "layer": "Entry / Agent",
+          "title": "Start intent evaluation or confirmation gate",
+          "refs": [
+            "agent.create_app.message",
+            "supervisor.SupervisorAgent.plan_or_route",
+            "agent.create_app.execute",
+            "evaluator.GroundedPolicyEvaluator.validate_execution"
+          ],
+          "inspect": "Chat evaluates before delegation. Direct forms bypass language interpretation but restricted card actions revalidate at execution; create_account optional issuance is not in this restricted-tool list."
+        },
+        {
+          "layer": "Verified facts",
+          "title": "Resolve selected account and signed summaries",
+          "refs": [
+            "supervisor.SupervisorAgent._retrieve_domain_facts",
+            "agent.create_app.lifespan.get_verified_domain_facts"
+          ],
+          "inspect": "Inspect account_number resolution, caller accounts/cards, temporary_freeze, compromised and retrieval_failed."
+        },
+        {
+          "layer": "Agent MCP resource",
+          "title": "Read policy-facts for selected owned account",
+          "refs": [
+            "gateway.connect.RemoteGateway.policy_facts",
+            "mcp.create_server.read_policy_facts",
+            "security.Security.customer",
+            "security.Security.headers"
+          ],
+          "inspect": "This is read_resource, not call_tool. Customer delegation and tools permission constrain account and card ids."
+        },
+        {
+          "layer": "FinCrime read API / SQLite",
+          "title": "Enrich selected cards with block reasons",
+          "refs": [
+            "fincrime.create_app.get_card",
+            "fcservice.FinCrimeService.get_blocked_card",
+            "fcstore.SQLiteFinCrimeStore.get_blocked_card"
+          ],
+          "inspect": "MCP reads /fincrime/cards/{id} only for signed card summaries. A 404 preserves a signed blocked status without inventing reason/eligibility."
+        },
+        {
+          "layer": "Grounded evaluator",
+          "title": "Determine mandatory evidence and pins",
+          "refs": [
+            "evaluator.GroundedPolicyEvaluator.evaluate",
+            "retriever.HybridPolicyRetriever.retrieve",
+            "retriever.HybridPolicyRetriever.retrieve_mandatory"
+          ],
+          "inspect": "Runtime adapter is GroundedPolicyEvaluator, not legacy policy/evaluator.py. Required policy differs by intent; strict restricted checks also require POL-004."
+        },
+        {
+          "layer": "Document + index checks",
+          "title": "Verify active approved documents and index",
+          "refs": [
+            "retriever.HybridPolicyRetriever._active_documents",
+            "retriever.HybridPolicyRetriever._verify_indexed",
+            "documents.FileSystemDocumentSource.list_documents"
+          ],
+          "inspect": "Check one approved version per id, matching content_hash/model metadata. Mandatory lookup cannot be omitted by semantic ranking."
+        },
+        {
+          "layer": "FastEmbed / Qdrant",
+          "title": "Embed safe query and perform semantic search",
+          "refs": [
+            "embedder.FastEmbedEmbeddingProvider.embed_query",
+            "vectors.QdrantVectorStore.search"
+          ],
+          "inspect": "Qdrant query_points returns hits filtered against current approved document/version/hash/model. Exact mandatory-index verification may also issue earlier embedding/search calls."
+        },
+        {
+          "layer": "Evaluator",
+          "title": "Apply rule and interactive branch",
+          "refs": [
+            "evaluator.GroundedPolicyEvaluator._evaluate",
+            "evaluator.GroundedPolicyEvaluator._evaluate_issuance",
+            "evaluator.GroundedPolicyEvaluator._evaluate_replacement",
+            "evaluator.GroundedPolicyEvaluator._evaluate_fincrime_action",
+            "evaluator.GroundedPolicyEvaluator._handle_pending_question_response"
+          ],
+          "inspect": "Inspect permitted/prohibited, required_actions, pending question, evidence_citations and pinned_versions. Semantic similarity is evidence retrieval, not ownership authorization."
+        },
+        {
+          "layer": "Graph / persistence",
+          "title": "Persist decision and choose next step",
+          "refs": [
+            "supervisor.SupervisorAgent.plan_or_route",
+            "checkpoints.DurableSqliteSaver.put",
+            "checkpoints.DurableSqliteSaver.get_tuple"
+          ],
+          "inspect": "Thread owner:cid retains policy_evaluation, retrieved_policies and pins. Decisions can respond, hand off, request a choice or wait for confirmation."
+        },
+        {
+          "layer": "Agent / UI",
+          "title": "Enforce decision before mutation",
+          "refs": [
+            "agent.create_app.execute",
+            "ui.App.request"
+          ],
+          "inspect": "Denied gate returns a Reply without gateway write. Permitted reviewed actions continue through MCP tool and authoritative backend transaction."
+        }
+      ],
+      "troubleshoot": "Inspect graph policy_error and raw caught exception in evaluator/retriever; check FinCrime reachability separately from Qdrant. PolicyRetrievalUnavailable is a safe customer-facing result, not the underlying cause. Changed pinned approved versions require a fresh workflow."
+    },
+    {
+      "id": "async-recovery",
+      "title": "Asynchronous jobs, timeouts, replay and restart recovery",
+      "trigger": "Select Submit and poll; interrupt a response or restart Agent after durable acceptance using synthetic data.",
+      "outcome": "Accepted work is recoverable and retries preserve operation/execution identity according to tool guarantees.",
+      "notes": [],
+      "steps": [
+        {
+          "layer": "Browser / BFF",
+          "title": "Submit with response preference",
+          "refs": [
+            "ui.App.request",
+            "experience.create_app.forward"
+          ],
+          "inspect": "Prefer: respond-async and browser Idempotency-Key are forwarded. Keep exact body/key for the same HTTP submission."
+        },
+        {
+          "layer": "Agent journal",
+          "title": "Persist operation before 202",
+          "refs": [
+            "agent.create_app.submit",
+            "journal.Journal.__init__"
+          ],
+          "inspect": "operations stores owner,cid,kind,request_key,body,delegation,trace,status and request_hash. Changed key/body association returns 409."
+        },
+        {
+          "layer": "Worker",
+          "title": "Restore authorization and execute handler",
+          "refs": [
+            "agent.create_app.schedule",
+            "agent.create_app.run_operation"
+          ],
+          "inspect": "Single worker lock serializes jobs. Saved delegation may expire; state and result commit together after handler completion."
+        },
+        {
+          "layer": "Browser / BFF",
+          "title": "Poll caller-owned operation",
+          "refs": [
+            "ui.App.request",
+            "experience.create_app.status",
+            "agent.create_app.status",
+            "agent.create_app.operation"
+          ],
+          "inspect": "BFF rewrites status_url to /api/operations/{oid}. Poll trace differs from original operations.trace."
+        },
+        {
+          "layer": "Write intent",
+          "title": "Persist exact execution arguments/key",
+          "refs": [
+            "agent.create_app.execute",
+            "agent.create_app.save",
+            "journal.Journal.save"
+          ],
+          "inspect": "For safely retryable tools, submission key survives failures/restart and is reused rather than regenerated."
+        },
+        {
+          "layer": "Backend replay",
+          "title": "Return prior issuance decision without duplicate card",
+          "refs": [
+            "banking.BankingService.create_account",
+            "store.SQLiteCardStore.issue_idempotent",
+            "store.SQLiteCardStore.replace_idempotent"
+          ],
+          "inspect": "Account/card/replacement replay behavior differs from block/unblock tools with no declared safe retry."
+        },
+        {
+          "layer": "Restart (conditional)",
+          "title": "Reschedule durable pending operations",
+          "refs": [
+            "journal.Journal.__init__",
+            "agent.create_app.recover",
+            "agent.create_app.schedule"
+          ],
+          "inspect": "Journal resets running to pending at startup; recover schedules pending after gateway initialization."
+        },
+        {
+          "layer": "Debug records",
+          "title": "Inspect journal, graph and traces",
+          "refs": [
+            "agent.create_app.operation",
+            "checkpoints.DurableSqliteSaver.get_tuple",
+            "telemetry.instrument.request_trace"
+          ],
+          "inspect": "Use cid and request key to recover original execution trace. A succeeded handler may return a business error Reply."
+        }
+      ],
+      "troubleshoot": "Do not delete snapshots or regenerate keys for an uncertain write. An existing completed browser operation returns stored result; retrying tool execution may require reconfirming the fixed reviewed action. An attempted unsafe tool must be checked before a new action."
+    },
+    {
+      "id": "fincrime-api",
+      "title": "Separate FinCrime API mutation and Cards synchronization",
+      "trigger": "Invoke the configured FinCrime API with authorized service/customer headers, or debug its explicit integration tests.",
+      "outcome": "FinCrime records block/audit state and attempts a separate Cards synchronization call.",
+      "notes": [
+        "This integration path is documented separately because the current tools.json/OpenAPI routes all tool writes to Cards. It is not a required hidden phase of UI blocking."
+      ],
+      "steps": [
+        {
+          "layer": "FinCrime HTTP",
+          "title": "Authorize caller and accept block/unblock",
+          "refs": [
+            "security.protect.authenticate",
+            "fincrime.create_app.block_card",
+            "fincrime.create_app.unblock_card"
+          ],
+          "inspect": "This is /fincrime/cards/{card_id}/block or /unblock, not the current UI catalogue target. Supply actual customer delegation; do not paste secrets into docs."
+        },
+        {
+          "layer": "FinCrime domain",
+          "title": "Validate customer and reason restrictions",
+          "refs": [
+            "fcservice.FinCrimeService.block_card",
+            "fcservice.FinCrimeService.unblock_card"
+          ],
+          "inspect": "With an injected Cards service, ownership/card details are checked in-process. Remote mode uses the code-specific boundaries; do not assume identical checks."
+        },
+        {
+          "layer": "FinCrime SQLite",
+          "title": "Persist status, audit and optional retry snapshot",
+          "refs": [
+            "fcstore.SQLiteFinCrimeStore.block_card_idempotent",
+            "fcstore.SQLiteFinCrimeStore.unblock_card_idempotent"
+          ],
+          "inspect": "Inspect blocked_cards, fincrime_audit_log and fincrime_idempotency. Account linkage depends on resolved/supplied account_number."
+        },
+        {
+          "layer": "FinCrime to Cards",
+          "title": "Attempt status synchronization",
+          "refs": [
+            "fcservice.FinCrimeService._sync_to_cards_api",
+            "fcservice.FinCrimeService._sync_unblock_to_cards_api"
+          ],
+          "inspect": "HTTP mode uses /banking/cards/{id}/block or /unblock with generated service headers; in-process mode calls BankingService directly."
+        },
+        {
+          "layer": "Cards / SQLite",
+          "title": "Check owner and update authoritative card status",
+          "refs": [
+            "banking.block_card",
+            "banking.unblock_card",
+            "banking.BankingService.block_card",
+            "banking.BankingService.unblock_card",
+            "store.SQLiteCardStore.update_card_status"
+          ],
+          "inspect": "Verify actual Cards HTTP response and cards.status; FinCrime record commit and Cards update are separate effects."
+        },
+        {
+          "layer": "FinCrime result",
+          "title": "Return snapshot and sync indication",
+          "refs": [
+            "fcservice.FinCrimeService.block_card",
+            "fcservice.FinCrimeService.unblock_card",
+            "fcstore.SQLiteFinCrimeStore.mark_card_synced"
+          ],
+          "inspect": "Current service creates results with synced=True and only marks failure when both synchronization fails and result.synced is false. A failed remote sync can therefore leave synced=True; verify both stores directly."
+        },
+        {
+          "layer": "Later policy read",
+          "title": "Expose block facts to trusted MCP reader",
+          "refs": [
+            "mcp.create_server.read_policy_facts",
+            "fincrime.create_app.get_card",
+            "fcstore.SQLiteFinCrimeStore.get_blocked_card"
+          ],
+          "inspect": "Policy resource can consume stored reason/status; it does not retroactively make cross-service writes atomic."
+        }
+      ],
+      "troubleshoot": "A successful FinCrime response or synced flag alone does not prove Cards changed. Inspect the synchronization call, service audience/client authorization and both SQLite stores. These observed implementation limits are not an automatic repair/reconciliation mechanism."
+    },
+    {
+      "id": "identity",
+      "title": "OIDC browser sign-in and destination-specific service identity",
+      "trigger": "Choose OIDC sign in for the demo identity path, or inspect a protected BFF/Agent/MCP/Cards hop.",
+      "outcome": "Browser identity establishes a BFF session; each service obtains a destination token and carries a separate customer assertion.",
+      "notes": [],
+      "steps": [
+        {
+          "layer": "Experience / browser redirect",
+          "title": "Start authorization-code login",
+          "refs": [
+            "experience.create_app.login",
+            "experience.create_app.store"
+          ],
+          "inspect": "GET /auth/login creates state, nonce and PKCE verifier; redirects browser to Identity. This is separate from local-customer password registration."
+        },
+        {
+          "layer": "Experience / Identity",
+          "title": "Exchange authorization code and validate identity",
+          "refs": [
+            "experience.create_app.complete_login",
+            "experience.create_app.load",
+            "security.Security.verify"
+          ],
+          "inspect": "Check state cookie, one-use pending state, code_verifier, id-token audience/issuer and nonce."
+        },
+        {
+          "layer": "Experience",
+          "title": "Persist session and sign customer assertion",
+          "refs": [
+            "experience.create_app.store",
+            "experience.create_app.session",
+            "security.Security.issue_customer"
+          ],
+          "inspect": "Inspect claims/account provenance. OIDC demo identities do not automatically create banking customers; account creation still checks customers table."
+        },
+        {
+          "layer": "Calling service / Identity",
+          "title": "Obtain destination service access token",
+          "refs": [
+            "security.Security.headers",
+            "security.Security.service_token"
+          ],
+          "inspect": "Client-credentials token is acquired per configured service; X-Customer-Delegation is separate from OAuth token and trace header."
+        },
+        {
+          "layer": "Receiving API",
+          "title": "Verify token, service client and delegation",
+          "refs": [
+            "security.protect.authenticate",
+            "security.Security.verify",
+            "security.Security.customer"
+          ],
+          "inspect": "Inspect audience, scope, azp, delegation sub/accounts/permissions and expiration. BFF banking entry has a special service boundary."
+        },
+        {
+          "layer": "Observability / response",
+          "title": "Return correlation header and authorization result",
+          "refs": [
+            "security.protect.authenticate",
+            "cards.create_app.trace_request"
+          ],
+          "inspect": "Protected services return X-Correlation-ID; Cards also returns X-Trace-ID. Record status and trace without copying tokens."
+        }
+      ],
+      "troubleshoot": "401 usually concerns invalid/expired token or assertion; 403 concerns service client/scope/account permissions. Check destination settings and signing-key consistency; do not assume a browser token can be reused at every API."
+    },
+    {
+      "id": "observability",
+      "title": "Follow a request into structured Mongo logs",
+      "trigger": "Perform any journey with TELEMETRY_SINK=mongo and capture the main request correlation header.",
+      "outcome": "Best-effort structured events and HTTP traces reach indexed Mongo collections independently of business commits.",
+      "notes": [],
+      "steps": [
+        {
+          "layer": "BFF / security",
+          "title": "Establish downstream correlation context",
+          "refs": [
+            "experience.create_app.forward",
+            "experience.create_app.banking_request",
+            "security.Security.headers",
+            "security.protect.authenticate"
+          ],
+          "inspect": "Main Agent forward has a fresh trace; each BFF account/card refresh has another. Existing operation trace identifies original execution, not later polls/replays."
+        },
+        {
+          "layer": "HTTP middleware",
+          "title": "Record route status and duration",
+          "refs": [
+            "telemetry.instrument.request_trace",
+            "cards.create_app.trace_request"
+          ],
+          "inspect": "Route templates, service, status_code, duration_ms and trace_id are emitted; not arbitrary request bodies."
+        },
+        {
+          "layer": "Tagged events",
+          "title": "Select allowed application diagnostics",
+          "refs": [
+            "telemetry.DiagnosticHandler.emit",
+            "banking.diagnostic",
+            "mcp.execute"
+          ],
+          "inspect": "Only tagged supported Agent/MCP events enter this sink; Cards emits domain events. Ordinary exception text remains in service terminals rather than structured Mongo export."
+        },
+        {
+          "layer": "Queue",
+          "title": "Enqueue sanitized record without blocking business write",
+          "refs": [
+            "metrics.event_record",
+            "metrics.MongoTelemetry.emit"
+          ],
+          "inspect": "Bounded queue uses put_nowait. Full queue emits console fallback; it does not roll back Cards state."
+        },
+        {
+          "layer": "Mongo worker",
+          "title": "Index and route records",
+          "refs": [
+            "metrics.MongoTelemetry._run"
+          ],
+          "inspect": "Thread creates seven-day timestamp TTL and trace_id indexes; kind=trace goes to request_traces, other events to application_logs in configured database."
+        },
+        {
+          "layer": "Operator inspection",
+          "title": "Find original operation trace and filter collections",
+          "refs": [
+            "agent.create_app.operation",
+            "metrics.fallback"
+          ],
+          "inspect": "In Compass query trace_id in card_servicing.request_traces and application_logs. For outage read fallback console, original operations.trace and authoritative SQLite."
+        }
+      ],
+      "troubleshoot": "Missing Mongo documents can mean sink=none/stdout, queue delay/full, credentials/connection failure or TTL expiry. These are operational logs, not a durable banking audit ledger. Do not infer commit outcome from log absence."
+    }
+  ]
+}

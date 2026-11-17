@@ -292,7 +292,7 @@ npm --prefix frontend run build
 
 ## Documentation Index
 
-- [End-to-End Debugging Walkthrough](docs/debugging-account-and-card.md) — Follow account and card creation through linked functions, breakpoints, traces, logs, databases and recovery steps.
+- [End-to-End Debugging Journeys](docs/debugging-account-and-card.md) — Major banking, policy/RAG, identity and recovery flows with diagrams, ordered walkthroughs and a method-based generated breakpoint index. Refresh with `python scripts/generate_debugging_guide.py`; validate with `--check`.
 - [Architecture & Sequence Diagrams](docs/architecture.md) — Comprehensive multi-agent sequence diagrams, boundaries, and database layouts.
 - [Tool Catalogue & MCP](docs/tool-catalogue.md) — Catalogue compilation, tool definitions, and agent access policies.
 - [Customer Banking Experience](docs/customer-banking.md) — Step-by-step UI flows, session security, and API endpoints.

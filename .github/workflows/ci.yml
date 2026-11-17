@@ -13,6 +13,7 @@ jobs:
         with:
           python-version: "3.12"
       - run: python -m pip install -e ".[dev,chat]"
+      - run: python scripts/generate_debugging_guide.py --check
       - run: python -m pytest
       - run: python scripts/export_cards_openapi.py --check
       - run: python scripts/render_chat_diagrams.py --check
