@@ -6,7 +6,7 @@ def test_azure_compose_service_boundaries_and_private_storage():
     document = yaml.safe_load(Path('compose.azure.yaml').read_text())
     services = document['services']
     assert set(services) == {'frontend', 'experience', 'cards-agent', 'fincrime-agent', 'mcp-server',
-                             'cards-api', 'fincrime-api', 'identity', 'qdrant'}
+                             'cards-api', 'fincrime-api', 'identity', 'identity-db', 'qdrant'}
     for name, service in services.items():
         assert 'container_name' not in service
         assert 'healthcheck' in service
@@ -28,3 +28,11 @@ def test_local_compose_keeps_mongo():
     services = yaml.safe_load(Path('compose.yaml').read_text())['services']
     assert 'mongodb' in services
     assert services['cards-api']['environment']['TELEMETRY_SINK'] == '${TELEMETRY_SINK:-mongo}'
+
+
+def test_keycloak_uses_private_supported_database():
+    services = yaml.safe_load(Path('compose.azure.yaml').read_text())['services']
+    assert services['identity']['environment']['KC_DB'] == 'mariadb'
+    assert 'ports' not in services['identity-db']
+    assert services['identity-db']['volumes'] == ['identity_db_data:/var/lib/mysql']
+    assert services['identity']['depends_on']['identity-db']['condition'] == 'service_healthy'

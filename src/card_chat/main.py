@@ -442,8 +442,16 @@ def create_app(model=None, gateway=None, *, config=None, policy_retriever=None):
         save(cid, c)
         return result
 
+    def begin_next_action(c):
+        # Keep uncertain writes fixed to their reviewed arguments/key. Completed
+        # operations remain replayable in the journal, independently of this draft.
+        if c.submission and c.submission['result'] is not None:
+            c.submission, c.proposal, c.review, c.draft = None, None, None, {}
+            c.compound_approval = None
+
     async def message(cid: str, body: Message, c):
         async with c.lock:
+            begin_next_action(c)
             if c.submission:
                 return reply(c, 'This submission is fixed. Use its confirmation button for a supported retry, or start a new conversation.')
             # Every new turn invalidates any previous review before interpreting updates.
@@ -598,6 +606,7 @@ def create_app(model=None, gateway=None, *, config=None, policy_retriever=None):
             return result
 
     async def structured(cid, body, c):
+        begin_next_action(c)
         if c.submission:
             return reply(c, 'This submission is fixed. Retry it safely or start a new conversation.')
         c.review, c.proposal = None, None

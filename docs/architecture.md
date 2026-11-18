@@ -1,5 +1,7 @@
 # Architecture and technology stack
 
+This document and its embedded diagrams are maintained manually. CI does not generate or update them.
+
 Use [setup guide](getting-started.md) for current [Docker](getting-started.md#1-run-and-debug-using-local-docker-containers) and [native](getting-started.md#2-run-and-debug-natively-on-your-computer) prerequisites, configuration, run/debug commands and switching steps. Architecture and API behavior are shared by both modes; process locations and persistence paths differ.
 
 ## Runtime boundaries
@@ -209,4 +211,4 @@ Docker named volumes (`cards_data`, `fincrime_data`, `agent_data`, `experience_d
 
 ## Further references
 
-[HTTP contracts and identity](http-stack.md), [end-to-end trace](chat-end-to-end.md), [catalogue](tool-catalogue.md), [health checks](health-checks.md), [adapter configuration](infrastructure-adapters.md), [SVG diagrams](diagrams/index.html), and [Docker attach reference](docker-debugging.md).
+[HTTP contracts and identity](http-stack.md), [end-to-end trace](chat-end-to-end.md), [catalogue](tool-catalogue.md), [health checks](health-checks.md), [adapter configuration](infrastructure-adapters.md), and [Docker attach reference](docker-debugging.md).

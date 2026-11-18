@@ -214,7 +214,6 @@ Tests require neither Docker nor cloud credentials:
 ```powershell
 python -m pytest
 python scripts/export_cards_openapi.py --check
-python scripts/render_chat_diagrams.py --check
 ```
 
 For a browser demonstration with a scripted model and isolated HTTP/MCP processes:
@@ -293,7 +292,7 @@ history, proposals and submission keys are in memory; use a single chat worker
 without reload. Redis/RabbitMQ are provisioned for future work, outside creation.
 The `/items` routes remain simple API learning examples.
 
-## Catalogue, diagrams and CI
+## Catalogue, documentation and CI
 
 The versioned [tool catalogue](../src/card_chat/tools.json) references stable OpenAPI
 operation IDs. Claude selects from discovered tools, asks questions, and proposes
@@ -301,24 +300,20 @@ one action. The workflow validates and requires confirmation before a write.
 For supported JSON-body/path-parameter operations, adding an entry and restarting
 chat requires no server/agent/UI branch. See [catalogue authoring](tool-catalogue.md).
 
-Open the [offline sequence-diagram viewer](diagrams/index.html) locally:
-
-```powershell
-Start-Process .\docs\diagrams\index.html
-```
+Read the diagrams directly in [architecture.md](architecture.md); maintain
+that document and its diagrams manually.
 
 The [walkthrough](chat-end-to-end.md) traces every boundary and idempotency.
-To update API/diagram artifacts after changing their source:
+To update the API export after changing its source:
 
 ```powershell
 python scripts/export_cards_openapi.py
-python scripts/render_chat_diagrams.py
 ```
 
 [GitHub Actions CI](../.github/workflows/ci.yml) runs on pushes and pull requests:
-install dependencies, run pytest, check OpenAPI freshness, then check SVG freshness
-and code references. It does not rewrite Markdown/SVGs, deploy, or make live Claude
-calls. Commit updated sources and generated artifacts together.
+install dependencies, check debugging-guide freshness, run pytest, check OpenAPI
+freshness, and test/build the frontend. Architecture Markdown and its embedded
+diagrams are maintained manually; CI does not generate or update them.
 
 ## Troubleshooting and further reading
 

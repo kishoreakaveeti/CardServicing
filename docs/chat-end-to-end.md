@@ -56,4 +56,4 @@ For a concrete walkthrough with linked function breakpoints, correlation IDs, da
 
 Use **Debug Full Stack (Docker)** to attach to container processes; use **Debug Full Stack (Local)** to launch native ones. Set breakpoints in React `submit`/`supply`/`confirm`, Experience `forward`, Agent `interpret_turn`/`structured`/`execute`, MCP `call_tool`/`execute`, and Cards/SQLite issuance. Startup alone does not hit request handlers. Long pauses may trigger timeouts; continue and retry the same reviewed submission.
 
-The [diagram viewer](diagrams/index.html) includes startup/discovery, context, confirmation, retries, adapters, HTTP identity/jobs, private model context and customer banking. Definitions are in `docs/diagrams/card-chat-flows.json`; regenerate with `python scripts/render_chat_diagrams.py`. The issuance transaction also has a [Mermaid diagram](card-issuance.md#transaction-and-migration).
+Architecture and sequence diagrams are maintained directly in [Markdown](architecture.md). The issuance transaction also has a [Mermaid diagram](card-issuance.md#transaction-and-migration).

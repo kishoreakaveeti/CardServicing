@@ -74,7 +74,7 @@ docs/local-infrastructure.md. Those edits were preserved; current-stack links
 were added to the retained walkthroughs. No AGENTS.md instructions were found.
 
 Before editing: **95 tests passed**, with one existing Starlette/httpx
-deprecation warning. `render_chat_diagrams.py --check` passed. No baseline
+deprecation warning. The former SVG freshness check passed at that time; it has since been retired. No baseline
 failure was observed.
 
 ## Executed checks

@@ -195,13 +195,11 @@ percentage reduction in live Claude tokens, latency or cost.
 
 ```powershell
 .\.venv\Scripts\python.exe -m pytest -q
-.\.venv\Scripts\python.exe scripts/render_chat_diagrams.py --check
 .\scripts\stack.ps1 -Build
 .\.venv\Scripts\python.exe scripts/smoke_stack.py
 ```
 
-The [private-input sequence diagram](diagrams/07-private-inputs-and-model-context.svg)
-traces the new boundary. The old inline Python chat UI script now points to this
+The [Markdown architecture diagrams](architecture.md) describe the privacy boundary. The old inline Python chat UI script now points to this
 React flow, so it no longer encourages private values in chat. The isolated
 `smoke_chat.py` harness uses structured inputs and requires a separately running
 test MCP endpoint; authenticated Compose verification uses `smoke_stack.py`.

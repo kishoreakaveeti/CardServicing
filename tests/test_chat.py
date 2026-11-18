@@ -291,3 +291,89 @@ def test_agent_passes_copied_context_and_tools():
         assert isinstance(await agent.interpret_turn(history,collected,tools),CustomerReply)
         assert history and collected and tools
     asyncio.run(scenario())
+
+
+@pytest.mark.parametrize('first_tool,body', [
+    ('create_card', BODY),
+    ('create_account', {'account_type': 'transaction', 'issue_card': True}),
+])
+def test_completed_action_allows_lost_card_in_same_conversation(first_tool, body):
+    model, gateway = StubModel(), Gateway()
+    customer = {**LOCAL_CUSTOMER, 'cards': [{'id': 'synthetic-active-card',
+        'account_number': BODY['account_number'], 'card_number': 'SIM-' + 'a' * 32,
+        'status': 'active'}]}
+    app = create_app(model, gateway, config={'LOCAL_CUSTOMER': customer})
+    with TestClient(app) as client:
+        cid = client.post('/conversations').json()['id']
+        path = f'/conversations/{cid}'
+        review = prepare_review(client, cid, body, first_tool).json()
+        confirmation = {'review': review['review']}
+        original = client.post(path + '/confirm', json=confirmation,
+                               headers={'Idempotency-Key': 'completed-action'})
+        assert original.status_code == 200 and 'succeeded' in original.json()['message']
+        assert len(gateway.calls) == 1
+
+        model.outputs.append(ProposedToolCall('block_card', {}))
+        followup = client.post(path + '/messages', json={'text': 'oh my god my card is lost'})
+        assert followup.status_code == 200
+        assert followup.json()['input_tool'] == 'block_card'
+        assert not followup.json()['can_confirm']
+        assert model.seen_context[-1][1] == {'tool': 'block_card', 'arguments': {}}
+        snapshot = client.portal.call(app.state.orchestrator.workflow.aget_state,
+            {'configurable': {'thread_id': f'isolated-test:{cid}'}})
+        assert snapshot.values['current_handoff'].target_agent == 'fincrime_agent'
+        assert len(gateway.calls) == 1  # Reporting loss never bypasses confirmation.
+
+        # Old request-key replays still return their durable result, without
+        # replacing the new draft or making another banking call.
+        replay = client.post(path + '/confirm', json=confirmation,
+                             headers={'Idempotency-Key': 'completed-action'})
+        assert replay.json() == original.json()
+        assert client.post(path + '/confirm', json=confirmation).status_code == 409
+        assert len(gateway.calls) == 1
+        blocked = prepare_review(client, cid, {'card_id': 'selected', 'reason': 'lost'}, 'block_card').json()
+        assert blocked['can_confirm'] and blocked['review'] != review['review']
+        assert blocked['confirmation_label'] == 'Block this card'
+        assert len(gateway.calls) == 1
+        completed = client.post(path + '/confirm', json={'review': blocked['review']}).json()
+        assert completed['usage']['completed_actions'] == 2
+        assert len(gateway.calls) == 2 and gateway.calls[-1][0] == 'block_card'
+        assert gateway.calls[0][2] != gateway.calls[1][2]
+
+
+def test_completed_action_allows_another_structured_action():
+    model, gateway = StubModel(), Gateway()
+    with TestClient(create_app(model, gateway)) as client:
+        cid = client.post('/conversations').json()['id']
+        path = f'/conversations/{cid}'
+        first = prepare_review(client, cid).json()
+        assert 'succeeded' in client.post(path + '/confirm', json={'review': first['review']}).json()['message']
+        second = prepare_review(client, cid, {**BODY, 'additional_card': True}).json()
+        assert second['can_confirm'] and second['review'] != first['review']
+        assert client.post(path + '/confirm', json={'review': first['review']}).status_code == 409
+        assert 'succeeded' in client.post(path + '/confirm', json={'review': second['review']}).json()['message']
+        assert len(gateway.calls) == 2
+        assert gateway.calls[0][2] != gateway.calls[1][2]
+        assert not model.seen_tools
+
+
+def test_uncertain_submission_stays_locked_until_successful_retry():
+    model, gateway = StubModel(), Gateway()
+    gateway.fail = True
+    with TestClient(create_app(model, gateway)) as client:
+        cid = client.post('/conversations').json()['id']
+        path = f'/conversations/{cid}'
+        review = prepare_review(client, cid).json()
+        confirmation = {'review': review['review']}
+        assert 'retry' in client.post(path + '/confirm', json=confirmation).json()['message']
+        for response in (
+            client.post(path + '/messages', json={'text': 'oh my god my card is lost'}),
+            prepare_review(client, cid, {**BODY, 'additional_card': True}),
+        ):
+            assert 'fixed' in response.json()['message']
+            assert response.json()['review'] == review['review']
+        assert len(gateway.calls) == 1 and not model.seen_tools
+        assert 'succeeded' in client.post(path + '/confirm', json=confirmation).json()['message']
+        assert gateway.calls[0] == gateway.calls[1]
+        model.outputs.append(CustomerReply('How else can I help?'))
+        assert client.post(path + '/messages', json={'text': 'Thank you'}).json()['message'] == 'How else can I help?'

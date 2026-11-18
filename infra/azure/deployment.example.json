@@ -1,0 +1,19 @@
+{
+  "SubscriptionId": "REPLACE-WITH-SUBSCRIPTION-UUID",
+  "DeploymentId": "cardservicing-demo-change-me",
+  "ResourceGroup": "rg-cardservicing-demo",
+  "Location": "australiaeast",
+  "VmName": "cardservicing-demo",
+  "VmSize": "Standard_B4ms",
+  "AdminUsername": "azureuser",
+  "SshPrivateKey": "~/.ssh/cardservicing-demo",
+  "SshSourceCidr": "REPLACE-WITH-YOUR-PUBLIC-IP/32",
+  "StorageAccount": "REPLACEWITHGLOBALLYUNIQUENAME",
+  "StorageContainer": "telemetry",
+  "AppDomain": "REPLACE-WITH-YOUR-APPLICATION-DOMAIN",
+  "IdentityDomain": "REPLACE-WITH-YOUR-IDENTITY-DOMAIN",
+  "AcmeEmail": "REPLACE-WITH-YOUR-EMAIL",
+  "AnthropicKeyFile": "~/.secrets/cardservicing-anthropic-key.txt",
+  "ModelId": "claude-sonnet-4-5",
+  "OsDiskSizeGB": 128
+}

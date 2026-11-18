@@ -10,7 +10,7 @@ adapter, MCP discovery, confirmation and retry workflow are unchanged.
 
 ## Configuration boundary
 
-![Startup-selected adapters](diagrams/05-startup-adapter-selection.svg)
+See the [architecture overview](architecture.md) for diagrams maintained directly in Markdown.
 
 The normal `card_servicing.main:app` entry point selects adapters during FastAPI
 lifespan startup. `config.load_config()` merges root `.env` with `os.environ`;

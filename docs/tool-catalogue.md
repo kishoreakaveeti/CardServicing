@@ -21,7 +21,7 @@ python scripts/export_cards_openapi.py
 python scripts/export_cards_openapi.py --check
 ```
 
-CI checks the export after tests, before checking diagrams. It checks that the
+CI checks the export after tests. It checks that the
 committed contract matches the router; it does not modify or commit files.
 The stable ID changes the OpenAPI identifier from its former generated name;
 the REST URL, request/response payloads, status codes and headers are unchanged.
@@ -235,7 +235,6 @@ Run:
 ```powershell
 python -m pytest
 python scripts/export_cards_openapi.py --check
-python scripts/render_chat_diagrams.py --check
 # Against a separately running API:
 python scripts/smoke_chat.py --api-url http://127.0.0.1:8010 --lose-first-response
 python scripts/smoke_chat.py --api-url http://127.0.0.1:8010 --live --lose-first-response
@@ -250,6 +249,6 @@ blocking operation were not run; the two-tool proof uses a stub model. The API
 adapter-switching tests remain in the suite; Docker rebuild/runtime was not
 repeated for this chat-only refactor.
 
-When behavior changes, update [the walkthrough](chat-end-to-end.md), the editable
-[sequence definitions](diagrams/card-chat-flows.json), regenerate SVGs and commit
-them together. CI checks freshness and code anchors, not prose semantics.
+When behavior changes, manually update [the walkthrough](chat-end-to-end.md) and
+the diagrams in [architecture.md](architecture.md). CI does not generate or
+update the architecture document or separate diagram assets.

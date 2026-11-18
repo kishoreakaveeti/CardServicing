@@ -1,0 +1,24 @@
+name: card-servicing-edge
+services:
+  proxy:
+    image: caddy:2.10.2-alpine
+    restart: unless-stopped
+    network_mode: host
+    environment:
+      APP_DOMAIN: ${APP_DOMAIN:?Set APP_DOMAIN}
+      IDENTITY_DOMAIN: ${IDENTITY_DOMAIN:?Set IDENTITY_DOMAIN}
+      ACME_EMAIL: ${ACME_EMAIL:?Set ACME_EMAIL}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    healthcheck:
+      test: [CMD, wget, -q, -O, /dev/null, http://127.0.0.1:2019/config/]
+      interval: 10s
+      timeout: 3s
+      retries: 12
+volumes:
+  caddy_data:
+    name: card-servicing-azure-caddy-data
+  caddy_config:
+    name: card-servicing-azure-caddy-config

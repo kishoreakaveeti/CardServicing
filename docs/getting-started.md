@@ -381,7 +381,6 @@ Automated checks from the repository root need no running Docker stack:
 ```powershell
 .\.venv\Scripts\python.exe -m pytest -q
 .\.venv\Scripts\python.exe scripts/export_cards_openapi.py --check
-.\.venv\Scripts\python.exe scripts/render_chat_diagrams.py --check
 Push-Location frontend
 npm.cmd ci
 npm.cmd test
@@ -417,7 +416,7 @@ Verification scope: automated tests cover authentication, ownership, direct/conv
 - [Customer banking](customer-banking.md), [card issuance](card-issuance.md)
 - [Mongo logging](mongodb-logging.md), [SQLite persistence](card-persistence.md)
 - [Tool catalogue](tool-catalogue.md), [end-to-end trace](chat-end-to-end.md)
-- [Docker debugging](docker-debugging.md), [diagram viewer](diagrams/index.html)
+- [Docker debugging](docker-debugging.md), [architecture diagrams](architecture.md)
 
 Use `compose.yaml` plus optional `compose.debug.yaml` for the current application. `compose.infra.yaml`, `compose.api.yaml` and [legacy host setup](legacy-host-setup.md) describe earlier API-only learning configurations. Redis/RabbitMQ from that earlier stack are not required by the current banking flow. Do not infer current VS Code profile names from historical guides.
 

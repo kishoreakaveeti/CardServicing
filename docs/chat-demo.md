@@ -21,4 +21,4 @@ Use **Debug Full Stack (Docker)** for container attach, or **Debug Full Stack (L
 
 Conversations, private bindings, reviews and accepted operations persist in the Agent SQLite journal. Session records persist in the BFF database; account/card data persists in Cards SQLite. Mongo holds redacted operational diagnostics, not business records. Database state differs between native files and Docker named volumes.
 
-For details see [customer banking](customer-banking.md), [card issuance](card-issuance.md), [end-to-end trace](chat-end-to-end.md), [model privacy](model-privacy.md), [tool catalogue](tool-catalogue.md) and [diagrams](diagrams/index.html). Earlier free-text credential collection and removed two-process debug profiles are not current behavior.
+For details see [customer banking](customer-banking.md), [card issuance](card-issuance.md), [end-to-end trace](chat-end-to-end.md), [model privacy](model-privacy.md), [tool catalogue](tool-catalogue.md) and [architecture diagrams](architecture.md). Earlier free-text credential collection and removed two-process debug profiles are not current behavior.

@@ -13,8 +13,7 @@ entry points, health checks and Compose service names. Frontend 8080,
 Keycloak 8081 and Mongo host port 27018 are published on loopback in normal mode. No MCP child
 process or stdio transport exists in the application flow.
 
-The [HTTP identity and jobs diagram](diagrams/06-http-auth-and-jobs.svg) shows
-the complete stack; the other generated diagrams follow individual workflow steps.
+The [architecture overview](architecture.md) and [end-to-end walkthrough](chat-end-to-end.md) describe the stack with diagrams maintained directly in Markdown.
 
 ## Run and debug
 
@@ -279,7 +278,6 @@ catalogue entry is sufficient for discovery, review, dispatch and rendering.
 ```powershell
 .\.venv\Scripts\python.exe -m pytest -q
 .\.venv\Scripts\python.exe scripts/export_cards_openapi.py --check
-.\.venv\Scripts\python.exe scripts/render_chat_diagrams.py --check
 .\scripts\stack.ps1 -Build
 .\.venv\Scripts\python.exe scripts/smoke_stack.py
 .\.venv\Scripts\python.exe scripts/verify_identity_import.py

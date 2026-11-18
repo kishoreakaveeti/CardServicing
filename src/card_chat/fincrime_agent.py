@@ -73,22 +73,18 @@ def create_app(model=None, *, config=None):
 
     @asynccontextmanager
     async def lifespan(app):
+        app.state.model = model or make_model(config)
+        app.state.agent = FinCrimeAgent(app.state.model)
         try:
-            app.state.model = model or make_model(config)
-            app.state.agent = FinCrimeAgent(app.state.model)
-        except Exception as e:
-            logger.warning("FinCrimeAgent model initialization failed: %s; falling back to stub", e)
-            from card_chat.provider import StubModel
-            app.state.model = StubModel()
-            app.state.agent = FinCrimeAgent(app.state.model)
-        yield
+            yield
+        finally:
+            await app.state.model.close()
 
     app = FastAPI(title="FinCrime Agent Service", version="1.0", lifespan=lifespan)
     if config.get("OIDC_ISSUER") and config.get("ALLOW_INSECURE_LOCAL") != "1":
-        try:
-            protect(app, config, ["agent", "mcp"], ["agent:invoke", "tools:execute"], "agent-service", customer=False)
-        except Exception as e:
-            logger.warning("Could not enable security protection on fincrime-agent: %s", e)
+        protect(app, config, ["agent", "mcp"], ["agent:invoke", "tools:execute"], "agent-service", customer=False)
+    from card_chat.observability import instrument
+    instrument(app, config, 'fincrime-agent')
 
     @app.get("/health")
     @app.get("/health/ready")

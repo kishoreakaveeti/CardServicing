@@ -8,13 +8,16 @@ from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 from cryptography.hazmat.primitives import serialization
 
 ROOT = Path(__file__).resolve().parents[1]
-directory = ROOT / 'data' / 'identity'
+directory = Path(os.environ.get('IDENTITY_OUTPUT_DIR', ROOT / 'data' / 'identity'))
 directory.mkdir(parents=True, exist_ok=True)
-env = ROOT / '.env.stack'
+env = Path(os.environ.get('STACK_ENV_FILE', ROOT / '.env.stack'))
 values = dict(dotenv_values(env)) if env.exists() else {name: secrets.token_urlsafe(32) for name in
           ['EXPERIENCE_SECRET', 'AGENT_SECRET', 'MCP_SECRET', 'BROWSER_SECRET',
            'IDENTITY_ADMIN_PASSWORD', 'DEMO_PASSWORD']}
-original = dotenv_values(ROOT / '.env')
+for name in ('EXPERIENCE_SECRET', 'AGENT_SECRET', 'MCP_SECRET', 'BROWSER_SECRET',
+             'IDENTITY_ADMIN_PASSWORD', 'DEMO_PASSWORD', 'KEYCLOAK_DB_PASSWORD', 'KEYCLOAK_DB_ROOT_PASSWORD'):
+    values.setdefault(name, secrets.token_urlsafe(32))
+original = {} if os.environ.get('IGNORE_LOCAL_ENV') == '1' else dotenv_values(ROOT / '.env')
 # Keep original Mongo credentials when migrating an existing development setup.
 values.setdefault('MONGO_USER', original.get('MONGO_USER') or 'card_servicing')
 values.setdefault('MONGO_PASSWORD', original.get('MONGO_PASSWORD') or secrets.token_urlsafe(32))
@@ -71,4 +74,7 @@ if not (directory / 'delegation-private.pem').exists():
         serialization.Encoding.PEM, serialization.PublicFormat.SubjectPublicKeyInfo))
 (directory / 'realm.json').write_text(json.dumps(realm, indent=2), encoding='utf-8')
 env.write_text('\n'.join(f'{key}={value}' for key, value in values.items()) + '\n', encoding='utf-8')
+if os.name != 'nt':
+    env.chmod(0o600)
+
 print('Prepared .env.stack and data/identity, preserving existing credentials and keys. Secrets were not printed.')

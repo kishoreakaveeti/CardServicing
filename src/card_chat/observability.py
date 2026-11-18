@@ -19,7 +19,8 @@ class DiagnosticHandler(logging.Handler):
         self.names = {'agent': {'card_chat.main', 'card_chat.provider', 'card_chat.agent',
                                 'card_chat.orchestration.supervisor', 'card_chat.orchestration.specialists',
                                 'card_chat.orchestration.graph', 'card_chat.pii.gateway'},
-                      'mcp': {'card_chat.mcp_server'}}.get(service, set())
+                      'mcp': {'card_chat.mcp_server'},
+                      'fincrime-agent': {'card_chat.provider', 'card_chat.fincrime_agent'}}.get(service, set())
 
     def emit(self, record):
         if record.name not in self.names:
