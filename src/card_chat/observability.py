@@ -9,7 +9,7 @@ from time import perf_counter
 from uuid import uuid4
 
 from card_servicing.config import InfrastructureSettings
-from card_servicing.telemetry import MongoTelemetry, NullTelemetry, StdoutTelemetry
+from card_servicing.telemetry import AzureBlobTelemetry, MongoTelemetry, NullTelemetry, StdoutTelemetry
 
 
 class DiagnosticHandler(logging.Handler):
@@ -62,7 +62,7 @@ def instrument(app, config, service):
     async def lifespan(application):
         selected = InfrastructureSettings.from_mapping(
             {**config, 'TELEMETRY_SINK': config.get('TELEMETRY_SINK', 'none')}, select_store=False)
-        sinks = {'mongo': MongoTelemetry, 'stdout': StdoutTelemetry}
+        sinks = {'mongo': MongoTelemetry, 'azure_blob': AzureBlobTelemetry, 'stdout': StdoutTelemetry}
         sink = (NullTelemetry() if selected.telemetry_sink == 'none'
                 else sinks[selected.telemetry_sink](selected.telemetry_config))
         application.state.telemetry = sink

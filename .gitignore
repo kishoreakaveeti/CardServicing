@@ -12,3 +12,5 @@ coverage.xml
 frontend/node_modules/
 frontend/dist/
 .env.stack
+
+.env.azure

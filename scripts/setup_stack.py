@@ -1,5 +1,6 @@
 """Generate ignored local demo credentials, Keycloak realm and delegation keys."""
 import json
+import os
 from pathlib import Path
 import secrets
 from dotenv import dotenv_values
@@ -42,7 +43,7 @@ clients[2]['protocolMappers'].append(fincrime_audience)
 clients.append({'clientId': 'experience-browser', 'secret': values['BROWSER_SECRET'],
     'enabled': True, 'protocol': 'openid-connect', 'publicClient': False,
     'standardFlowEnabled': True, 'directAccessGrantsEnabled': False,
-    'redirectUris': ['http://localhost:8080/auth/callback'],
+    'redirectUris': [os.environ.get('PUBLIC_ORIGIN', 'http://localhost:8080').rstrip('/') + '/auth/callback'],
     'defaultClientScopes': ['profile'],
     'attributes': {'pkce.code.challenge.method': 'S256'},
     'protocolMappers': [mapper('username', 'oidc-usermodel-property-mapper',
@@ -51,7 +52,7 @@ clients.append({'clientId': 'experience-browser', 'secret': values['BROWSER_SECR
         mapper('accounts', 'oidc-usermodel-attribute-mapper',
         {'user.attribute': 'accounts', 'claim.name': 'accounts', 'jsonType.label': 'String',
          'multivalued': 'true', 'id.token.claim': 'true', 'access.token.claim': 'false'})]})
-realm = {'realm': 'cards', 'enabled': True, 'sslRequired': 'none', 'registrationAllowed': False,
+realm = {'realm': 'cards', 'enabled': True, 'sslRequired': os.environ.get('KEYCLOAK_SSL_REQUIRED', 'none'), 'registrationAllowed': False,
          'accessTokenLifespan': 300, 'clients': clients,
          'clientScopes': [{'name': permission, 'protocol': 'openid-connect',
                            'attributes': {'include.in.token.scope': 'true', 'display.on.consent.screen': 'false'}}

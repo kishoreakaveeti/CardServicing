@@ -299,3 +299,7 @@ npm --prefix frontend run build
 - [Card Issuance & Idempotency](docs/card-issuance.md) — Concurrency control, retry policies, and existing-card handling.
 - [Model Privacy & Data Boundaries](docs/model-privacy.md) — Zero-trust model context isolation and private argument binding.
 - [Getting Started & Operations Guide](docs/getting-started.md) — In-depth setup, ports, troubleshooting, and container debugging reference.
+
+Azure VM deployment preparation: see [Azure Compose](docs/azure-compose.md) for the
+standalone `compose.azure.yaml`, Blob telemetry, HTTPS/OIDC settings and scaling
+limitations. The existing local Compose commands are unchanged.

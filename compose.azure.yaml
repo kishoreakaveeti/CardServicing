@@ -1,0 +1,214 @@
+# Standalone deployment: do not merge with compose.yaml.
+name: ${COMPOSE_PROJECT_NAME:-card-servicing-azure}
+x-python: &python
+  build: {context: ., target: runtime}
+  command: [python, scripts/service_entrypoint.py]
+  restart: unless-stopped
+  healthcheck:
+    test: [CMD, python, -c, "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=3)"]
+    interval: 5s
+    timeout: 4s
+    retries: 30
+    start_period: 15s
+x-oidc: &oidc
+  OIDC_ISSUER: ${OIDC_ISSUER:?Set public issuer URL}
+  OIDC_JWKS_URL: ${OIDC_JWKS_URL:-http://identity:8080/realms/cards/protocol/openid-connect/certs}
+  OIDC_TOKEN_URL: ${OIDC_TOKEN_URL:-http://identity:8080/realms/cards/protocol/openid-connect/token}
+  DELEGATION_PUBLIC_KEY: /keys/delegation-public.pem
+x-telemetry: &telemetry
+  TELEMETRY_SINK: ${TELEMETRY_SINK:-azure_blob}
+  AZURE_STORAGE_ACCOUNT_URL: ${AZURE_STORAGE_ACCOUNT_URL:?Set Azure storage account URL}
+  AZURE_STORAGE_CONTAINER: ${AZURE_STORAGE_CONTAINER:-telemetry}
+  AZURE_STORAGE_CONNECTION_STRING: ${AZURE_STORAGE_CONNECTION_STRING:-}
+  AZURE_CLIENT_ID: ${AZURE_CLIENT_ID:-}
+  ACCOUNT_HASH_KEY: ${ACCOUNT_HASH_KEY:-}
+  ACCOUNT_HASH_KEY_VERSION: ${ACCOUNT_HASH_KEY_VERSION:-v1}
+services:
+  frontend:
+    restart: unless-stopped
+    build: {context: ./frontend, target: runtime}
+    environment:
+      EXPERIENCE_UPSTREAM: ${EXPERIENCE_UPSTREAM:-experience:8000}
+      DNS_RESOLVER: ${DNS_RESOLVER:-127.0.0.11}
+    ports: ["127.0.0.1:8080:8080"]
+    depends_on:
+      experience: {condition: service_healthy}
+    healthcheck:
+      test: [CMD, wget, -q, --spider, http://127.0.0.1:8080/health]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+  experience:
+    <<: *python
+    environment:
+      <<: [*oidc, *telemetry]
+      APP_MODULE: card_chat.experience:app
+      STARTUP_CHECK_URLS: ${EXPERIENCE_STARTUP_CHECK_URLS:-http://cards-agent:8000/health http://identity:9000/health/ready}
+      AGENT_URL: ${AGENT_URL:-http://cards-agent:8000}
+      CARD_API_BASE_URL: ${CARD_API_BASE_URL:-http://cards-api:8000}
+      PUBLIC_ORIGIN: ${PUBLIC_ORIGIN:?Set public HTTPS origin}
+      COOKIE_SECURE: "true"
+      OIDC_AUTHORIZE_URL: ${OIDC_AUTHORIZE_URL:?Set public authorization URL}
+      SERVICE_CLIENT_ID: experience-service
+      SERVICE_CLIENT_SECRET: ${EXPERIENCE_SECRET:?Run scripts/setup-stack.ps1}
+      BROWSER_CLIENT_SECRET: ${BROWSER_SECRET:?Run scripts/setup-stack.ps1}
+      DELEGATION_PRIVATE_KEY: /keys/delegation-private.pem
+      SESSION_DB: ${SESSION_DB:-/data/sessions.db}
+    volumes:
+      - experience_data:/data
+      - ${IDENTITY_CONFIG_DIR:-./data/identity}/delegation-private.pem:/keys/delegation-private.pem:ro
+    depends_on:
+      cards-agent: {condition: service_healthy}
+  cards-agent:
+    <<: *python
+    environment:
+      <<: [*oidc, *telemetry]
+      APP_MODULE: card_chat.main:app
+      STARTUP_CHECK_URLS: ${AGENT_STARTUP_CHECK_URLS:-http://mcp-server:8000/health http://qdrant:6333/readyz http://identity:9000/health/ready}
+      MCP_URL: ${MCP_URL:-http://mcp-server:8000/mcp}
+      FINCRIME_AGENT_URL: ${FINCRIME_AGENT_URL:-http://fincrime-agent:8000}
+      FINCRIME_API_BASE_URL: ${FINCRIME_API_BASE_URL:-http://fincrime-api:8000}
+      MODEL_PROVIDER: ${STACK_MODEL_PROVIDER:-anthropic}
+      MODEL_ID: ${MODEL_ID:-}
+      ANTHROPIC_PROMPT_CACHE: ${ANTHROPIC_PROMPT_CACHE:-false}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      SERVICE_CLIENT_ID: agent-service
+      SERVICE_CLIENT_SECRET: ${AGENT_SECRET:?Run scripts/setup-stack.ps1}
+      AGENT_DB: ${AGENT_DB:-/data/agent.db}
+      QDRANT_URL: ${QDRANT_URL:-http://qdrant:6333}
+      EMBEDDING_PROVIDER: ${EMBEDDING_PROVIDER:-fastembed}
+      FASTEMBED_MODEL: ${FASTEMBED_MODEL:-BAAI/bge-small-en-v1.5}
+      POLICY_COLLECTION: ${POLICY_COLLECTION:-banking_policies}
+      POLICY_AUDIT_LOG: ${POLICY_AUDIT_LOG:-/data/policy_audit.json}
+      POLICY_VECTOR_STORE: ${POLICY_VECTOR_STORE:-qdrant}
+      POLICIES_DIR: /app/policies
+    volumes:
+      - agent_data:/data
+      - ${POLICIES_HOST_DIR:-./policies}:/app/policies:ro
+      - ${IDENTITY_CONFIG_DIR:-./data/identity}/delegation-public.pem:/keys/delegation-public.pem:ro
+    depends_on:
+      mcp-server: {condition: service_healthy}
+      fincrime-agent: {condition: service_healthy}
+      qdrant: {condition: service_healthy}
+  fincrime-agent:
+    build: {context: ., dockerfile: Dockerfile.fincrime-agent, target: runtime}
+    command: [python, scripts/service_entrypoint.py]
+    restart: unless-stopped
+    healthcheck:
+      test: [CMD, python, -c, "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=3)"]
+      interval: 5s
+      timeout: 4s
+      retries: 30
+      start_period: 15s
+    environment:
+      <<: [*oidc, *telemetry]
+      APP_MODULE: card_chat.fincrime_agent:app
+      STARTUP_CHECK_URLS: ${FINCRIME_AGENT_STARTUP_CHECK_URLS:-http://identity:9000/health/ready}
+      MODEL_PROVIDER: ${STACK_MODEL_PROVIDER:-anthropic}
+      MODEL_ID: ${MODEL_ID:-}
+      ANTHROPIC_PROMPT_CACHE: ${ANTHROPIC_PROMPT_CACHE:-false}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      SERVICE_CLIENT_ID: agent-service
+      SERVICE_CLIENT_SECRET: ${AGENT_SECRET:?Run scripts/setup-stack.ps1}
+    volumes:
+      - ${IDENTITY_CONFIG_DIR:-./data/identity}/delegation-public.pem:/keys/delegation-public.pem:ro
+  mcp-server:
+    <<: *python
+    environment:
+      <<: [*oidc, *telemetry]
+      APP_MODULE: card_chat.mcp_server:app
+      STARTUP_CHECK_URLS: ${MCP_STARTUP_CHECK_URLS:-http://cards-api:8000/health/ready http://fincrime-api:8000/health http://identity:9000/health/ready}
+      CARD_API_BASE_URL: ${CARD_API_BASE_URL:-http://cards-api:8000}
+      FINCRIME_API_BASE_URL: ${FINCRIME_API_BASE_URL:-http://fincrime-api:8000}
+      MCP_RESOURCE: ${MCP_RESOURCE:-http://mcp-server:8000/mcp}
+      SERVICE_CLIENT_ID: mcp-service
+      SERVICE_CLIENT_SECRET: ${MCP_SECRET:?Run scripts/setup-stack.ps1}
+    volumes:
+      - ${IDENTITY_CONFIG_DIR:-./data/identity}/delegation-public.pem:/keys/delegation-public.pem:ro
+    depends_on:
+      cards-api: {condition: service_healthy}
+      fincrime-api: {condition: service_healthy}
+      identity: {condition: service_healthy}
+  fincrime-api:
+    build: {context: ., dockerfile: Dockerfile.fincrime-api, target: runtime}
+    command: [python, scripts/service_entrypoint.py]
+    restart: unless-stopped
+    healthcheck:
+      test: [CMD, python, -c, "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=3)"]
+      interval: 5s
+      timeout: 4s
+      retries: 20
+    environment:
+      <<: [*oidc, *telemetry]
+      APP_MODULE: fincrime_servicing.main:app
+      STARTUP_CHECK_URLS: ${FINCRIME_API_STARTUP_CHECK_URLS:-http://cards-api:8000/health/ready}
+      CARD_API_BASE_URL: ${CARD_API_BASE_URL:-http://cards-api:8000}
+      FINCRIME_DB: ${FINCRIME_DB:-/data/fincrime.db}
+      SERVICE_CLIENT_ID: mcp-service
+      SERVICE_CLIENT_SECRET: ${MCP_SECRET:?Run scripts/setup-stack.ps1}
+    volumes:
+      - fincrime_data:/data
+      - ${IDENTITY_CONFIG_DIR:-./data/identity}/delegation-public.pem:/keys/delegation-public.pem:ro
+    depends_on:
+      cards-api: {condition: service_healthy}
+  cards-api:
+    <<: *python
+    environment:
+      <<: [*oidc, *telemetry]
+      APP_MODULE: card_servicing.main:app
+      CARD_STORE: sqlite
+      SQLITE_PATH: ${SQLITE_PATH:-/data/cards.db}
+    volumes:
+      - cards_data:/data
+      - ${IDENTITY_CONFIG_DIR:-./data/identity}/delegation-public.pem:/keys/delegation-public.pem:ro
+    healthcheck:
+      test: [CMD, python, -c, "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health/ready', timeout=3)"]
+      interval: 5s
+      timeout: 4s
+      retries: 20
+  identity:
+    restart: unless-stopped
+    image: quay.io/keycloak/keycloak:26.4.7
+    command: [start, --import-realm]
+    environment:
+      KC_HOSTNAME: ${IDENTITY_PUBLIC_URL:?Set public HTTPS identity URL}
+      KC_HTTP_ENABLED: "true"
+      KC_PROXY_HEADERS: xforwarded
+      KC_HOSTNAME_BACKCHANNEL_DYNAMIC: "true"
+      KC_HEALTH_ENABLED: "true"
+      KC_BOOTSTRAP_ADMIN_USERNAME: admin
+      KC_BOOTSTRAP_ADMIN_PASSWORD: ${IDENTITY_ADMIN_PASSWORD:?Run scripts/setup-stack.ps1}
+    ports: ["127.0.0.1:8081:8080"]
+    volumes:
+      - ${IDENTITY_CONFIG_DIR:-./data/identity}/realm.json:/opt/keycloak/data/import/realm.json:ro
+      - identity_data:/opt/keycloak/data
+    healthcheck:
+      test: [CMD, bash, -c, "exec 3<>/dev/tcp/127.0.0.1/9000; printf 'GET /health/ready HTTP/1.0\r\n\r\n' >&3; grep -q '200 OK' <&3"]
+      interval: 5s
+      timeout: 5s
+      retries: 60
+      start_period: 30s
+  qdrant:
+    restart: unless-stopped
+    image: qdrant/qdrant:v1.13.4
+    volumes:
+      - qdrant_data:/qdrant/storage
+    healthcheck:
+      test: [CMD, bash, -c, "exec 3<>/dev/tcp/127.0.0.1/6333; printf 'GET /readyz HTTP/1.0\r\n\r\n' >&3; grep -q '200 OK' <&3"]
+      interval: 5s
+      timeout: 4s
+      retries: 20
+      start_period: 5s
+volumes:
+  agent_data:
+    name: ${AGENT_VOLUME:-card-servicing-azure-agent}
+  experience_data:
+    name: ${EXPERIENCE_VOLUME:-card-servicing-azure-experience}
+  cards_data:
+    name: ${CARDS_VOLUME:-card-servicing-azure-cards}
+  fincrime_data:
+    name: ${FINCRIME_VOLUME:-card-servicing-azure-fincrime}
+  identity_data:
+    name: ${IDENTITY_VOLUME:-card-servicing-azure-identity}
+  qdrant_data:
+    name: ${QDRANT_VOLUME:-card-servicing-azure-qdrant}

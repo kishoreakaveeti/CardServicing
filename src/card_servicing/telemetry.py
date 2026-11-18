@@ -142,3 +142,122 @@ class MongoTelemetry(AccountDiagnostics):
             self.thread.join(timeout=3)
             if self.thread.is_alive():
                 fallback({'event': 'telemetry_shutdown_timeout', 'pending': self.queue.qsize()})
+
+
+class AzureBlobTelemetry(AccountDiagnostics):
+    """Bounded, lossy diagnostics queue; all remote I/O stays on a worker.
+
+    One immutable NDJSON blob per batch. A failed upload reuses its name so an
+    ambiguous timeout cannot produce duplicate batches. No SDK exception text
+    (which can contain URLs or credentials) is logged.
+    """
+    def __init__(self, config, queue_size=1000, batch_size=100, flush_seconds=1.0,
+                 client_factory=None):
+        super().__init__(config)
+        self.queue = Queue(maxsize=queue_size)
+        self.batch_size = batch_size
+        self.flush_seconds = flush_seconds
+        self.stopping = Event()
+        self.thread = None
+        self.client_factory = client_factory
+        self.credential = None
+
+    def start(self):
+        if self.thread and self.thread.is_alive():
+            raise RuntimeError('Telemetry worker already running')
+        self.stopping.clear()
+        self.thread = Thread(target=self._run, name='blob-telemetry', daemon=True)
+        self.thread.start()
+
+    def emit(self, kind, event, **fields):
+        fields.setdefault('service', self.config.get('TELEMETRY_SERVICE', 'cards-api'))
+        record = event_record(kind, event, fields)
+        try:
+            self.queue.put_nowait(record)
+        except Full:
+            fallback({'event': 'telemetry_queue_full', 'sink': 'azure_blob'})
+
+    def _client(self):
+        if self.client_factory:
+            return self.client_factory()
+        from azure.storage.blob import BlobServiceClient
+        options = dict(connection_timeout=2, read_timeout=2, retry_total=0,
+                       retry_connect=0, retry_read=0, retry_status=0)
+        connection = self.config.get('AZURE_STORAGE_CONNECTION_STRING')
+        if connection:
+            return BlobServiceClient.from_connection_string(connection, **options)
+        from azure.identity import ManagedIdentityCredential
+        self.credential = ManagedIdentityCredential(
+            client_id=self.config.get('AZURE_CLIENT_ID'),
+            connection_timeout=2, read_timeout=2, retry_total=0)
+        return BlobServiceClient(self.config['AZURE_STORAGE_ACCOUNT_URL'],
+                                 credential=self.credential, **options)
+
+    def _upload(self, client, records):
+        from time import sleep
+        from azure.core.exceptions import ResourceExistsError
+        from azure.storage.blob import ContentSettings
+        now = datetime.now(timezone.utc)
+        name = f"events/{now:%Y/%m/%d/%H}/{uuid4().hex}.ndjson"
+        payload = '\n'.join(json.dumps(record, default=str) for record in records) + '\n'
+        for attempt in range(3):
+            try:
+                client.get_blob_client(self.config['AZURE_STORAGE_CONTAINER'], name).upload_blob(
+                    payload.encode('utf-8'), overwrite=False, timeout=3,
+                    content_settings=ContentSettings(content_type='application/x-ndjson'))
+                return
+            except ResourceExistsError:
+                return  # A previous attempt committed before its response was lost.
+            except Exception as exc:
+                if attempt == 2 or self.stopping.is_set():
+                    fallback({'event': 'azure_blob_telemetry_failed',
+                              'error_type': type(exc).__name__, 'count': len(records)})
+                    return
+                sleep(0.1 * 2 ** attempt)
+
+    def _run(self):
+        from time import monotonic
+        client = None
+        try:
+            while not self.stopping.is_set() or not self.queue.empty():
+                try:
+                    first = self.queue.get(timeout=0.1)
+                except Empty:
+                    continue
+                batch = [first]
+                deadline = monotonic() + self.flush_seconds
+                while len(batch) < self.batch_size:
+                    try:
+                        batch.append(self.queue.get(timeout=max(0, min(0.1, deadline - monotonic()))))
+                    except Empty:
+                        if self.stopping.is_set() or monotonic() >= deadline:
+                            break
+                # Console I/O is also isolated from transaction/request threads.
+                for record in batch:
+                    try:
+                        print(json.dumps(record, default=str), file=sys.stdout, flush=True)
+                    except (OSError, ValueError):
+                        pass
+                try:
+                    if client is None:
+                        client = self._client()
+                    self._upload(client, batch)
+                except Exception as exc:
+                    fallback({'event': 'azure_blob_telemetry_failed',
+                              'error_type': type(exc).__name__, 'count': len(batch)})
+                    self.stopping.wait(0.5)
+                finally:
+                    for _ in batch:
+                        self.queue.task_done()
+        finally:
+            if client is not None:
+                client.close()
+            if self.credential is not None:
+                self.credential.close()
+
+    def close(self):
+        self.stopping.set()
+        if self.thread:
+            self.thread.join(timeout=5)
+            if self.thread.is_alive():
+                fallback({'event': 'telemetry_shutdown_timeout', 'pending': self.queue.qsize()})

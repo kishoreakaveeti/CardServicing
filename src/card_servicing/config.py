@@ -44,8 +44,8 @@ class InfrastructureSettings:
         sink = config.get('TELEMETRY_SINK', 'mongo') if select_telemetry else 'injected'
         if select_store and store != 'sqlite':
             raise ConfigurationError('CARD_STORE must be sqlite')
-        if select_telemetry and sink not in ('mongo', 'stdout', 'none'):
-            raise ConfigurationError('TELEMETRY_SINK must be mongo, stdout or none')
+        if select_telemetry and sink not in ('mongo', 'azure_blob', 'stdout', 'none'):
+            raise ConfigurationError('TELEMETRY_SINK must be mongo, azure_blob, stdout or none')
         path = None
         if select_store:
             raw_path = required_text(config, 'SQLITE_PATH', 'data/cards.db')
@@ -56,10 +56,30 @@ class InfrastructureSettings:
             except (ValueError, OSError):
                 raise ConfigurationError('SQLITE_PATH must be a valid filesystem path') from None
         telemetry_config = {}
-        if sink in ('mongo', 'stdout'):
+        if sink in ('mongo', 'azure_blob', 'stdout'):
             # No model key or unrelated infrastructure secrets are handed to telemetry.
             telemetry_config = {key: config[key] for key in ('ACCOUNT_HASH_KEY', 'ACCOUNT_HASH_KEY_VERSION')
                                 if config.get(key) is not None}
+        if sink == 'azure_blob':
+            from urllib.parse import urlparse
+            url = required_text(config, 'AZURE_STORAGE_ACCOUNT_URL')
+            parsed = urlparse(url)
+            if parsed.scheme != 'https' or not parsed.hostname or parsed.username or parsed.password or parsed.query or parsed.fragment or parsed.path not in ('', '/'):
+                raise ConfigurationError('AZURE_STORAGE_ACCOUNT_URL must be an HTTPS account URL without credentials')
+            container = required_text(config, 'AZURE_STORAGE_CONTAINER', 'telemetry')
+            if not re.fullmatch(r'[a-z0-9](?:[a-z0-9]|-(?!-)){1,61}[a-z0-9]', container):
+                raise ConfigurationError('AZURE_STORAGE_CONTAINER must be a valid container name')
+            telemetry_config.update({'AZURE_STORAGE_ACCOUNT_URL': url, 'AZURE_STORAGE_CONTAINER': container})
+            connection = config.get('AZURE_STORAGE_CONNECTION_STRING')
+            if connection:
+                parts = dict(part.split('=', 1) for part in connection.split(';') if '=' in part)
+                endpoint = parts.get('BlobEndpoint')
+                if (parts.get('DefaultEndpointsProtocol', 'https').lower() != 'https' or
+                        (endpoint and urlparse(endpoint).scheme != 'https')):
+                    raise ConfigurationError('AZURE_STORAGE_CONNECTION_STRING must use HTTPS')
+            for key in ('AZURE_STORAGE_CONNECTION_STRING', 'AZURE_CLIENT_ID', 'TELEMETRY_SERVICE'):
+                if config.get(key):
+                    telemetry_config[key] = required_text(config, key)
         if sink == 'mongo':
             host = required_text(config, 'MONGODB_HOST', '127.0.0.1')
             try:

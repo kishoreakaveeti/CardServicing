@@ -13,7 +13,7 @@ from card_servicing.config import CardSettings, InfrastructureSettings, load_con
 from card_servicing.cards import router as cards_router
 from card_servicing.store import CardStore
 from card_servicing.persistence import SQLiteCardStore
-from card_servicing.telemetry import MongoTelemetry, NullTelemetry, StdoutTelemetry
+from card_servicing.telemetry import AzureBlobTelemetry, MongoTelemetry, NullTelemetry, StdoutTelemetry
 from card_servicing.ports import CardStorePort, StorageUnavailable, TelemetryPort
 
 
@@ -27,7 +27,7 @@ def configured_adapters(card_store, telemetry):
     if card_store is None:
         card_store = SQLiteCardStore(str(settings.sqlite_path))
     if telemetry is None:
-        sinks = {'mongo': MongoTelemetry, 'stdout': StdoutTelemetry}
+        sinks = {'mongo': MongoTelemetry, 'azure_blob': AzureBlobTelemetry, 'stdout': StdoutTelemetry}
         telemetry = (NullTelemetry() if settings.telemetry_sink == 'none'
                      else sinks[settings.telemetry_sink](settings.telemetry_config))
     return card_store, telemetry
