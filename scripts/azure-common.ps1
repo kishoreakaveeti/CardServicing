@@ -28,8 +28,14 @@ function Get-AzureSshSourceCidr {
 }
 
 function Initialize-AzureAnthropicKey([string]$Path) {
-    if (Test-Path -LiteralPath $Path -PathType Leaf) { return }
-    if (Test-Path -LiteralPath $Path) { throw 'AnthropicKeyFile must name a file, not a directory.' }
+    $replaceExisting = Test-Path -LiteralPath $Path -PathType Leaf
+    if ($replaceExisting) {
+        $answer = ([string](Read-Host 'An Anthropic key is saved. Change it? [y/N]')).Trim()
+        if ($answer -notmatch '^(y|yes)$') {
+            Write-Host 'Reusing the saved Anthropic key.'
+            return
+        }
+    } elseif (Test-Path -LiteralPath $Path) { throw 'AnthropicKeyFile must name a file, not a directory.' }
     $secret = Read-Host 'Paste your Anthropic API key (hidden; saved securely for future deployments)' -AsSecureString
     $pointer = [IntPtr]::Zero
     $plainKey = $null
@@ -51,8 +57,16 @@ function Initialize-AzureAnthropicKey([string]$Path) {
         if ($env:OS -eq 'Windows_NT') {
             Set-PrivateWindowsAccess $temporaryKey
         } else { Invoke-Native 'chmod' @('600',$temporaryKey) | Out-Null }
-        # Same-volume move preserves the restricted file ACL and never overwrites an existing key.
-        [IO.File]::Move($temporaryKey, [IO.Path]::GetFullPath($Path))
+        if ($replaceExisting) {
+            # Validate/stage first, then atomically replace. Keep the old key on failure;
+            # do not create a plaintext backup or loosen destination permissions.
+            if ($env:OS -eq 'Windows_NT') { Set-PrivateWindowsAccess $Path }
+            else { Invoke-Native 'chmod' @('600',$Path) | Out-Null }
+            # Windows PowerShell converts $null string arguments to an empty path.
+            [IO.File]::Replace($temporaryKey, [IO.Path]::GetFullPath($Path), [NullString]::Value)
+        } else {
+            [IO.File]::Move($temporaryKey, [IO.Path]::GetFullPath($Path))
+        }
         Write-Host 'Protected Anthropic key saved. Continuing deployment.'
     } finally {
         if ($pointer -ne [IntPtr]::Zero) { [Runtime.InteropServices.Marshal]::ZeroFreeBSTR($pointer) }

@@ -40,7 +40,8 @@ foreach ($target in @($path,$file)) {
 '''.replace('TEST_PATH', path))
 
 
-def test_create_reuses_legacy_state_without_budget_parameters(tmp_path):
+@pytest.mark.parametrize('model_override', [None,'claude-haiku-4-5-20251001'])
+def test_create_reuses_legacy_state_without_budget_parameters(tmp_path,model_override):
     import json
     scripts = tmp_path/'scripts'
     infra = tmp_path/'infra'/'azure'
@@ -54,7 +55,7 @@ def test_create_reuses_legacy_state_without_budget_parameters(tmp_path):
         'SubscriptionId':'11111111-2222-3333-4444-555555555555',
         'ResourceGroup':'rg-cardservicing-demo','VmName':'vm-cardservicing-demo',
         'Location':'australiaeast','DnsLabel':'cardservicing-test',
-        'AppDomain':'old.test','IdentityDomain':'old.test',
+        'AppDomain':'old.test','IdentityDomain':'old.test','ModelId':'claude-sonnet-4-5',
         'AnthropicKeyFile':str(tmp_path/'fake-api-key'),'SshPrivateKey':str(key),
         'CostControl':{'Amount':10,'Currency':'AUD','Email':'old@owned.test'},
     }))
@@ -76,12 +77,14 @@ param([Parameter(Mandatory)][string]$ConfigPath)
 ''')
     path = str(config).replace("'", "''")
     entry = str(scripts/'azure-create.ps1').replace("'", "''")
+    model_argument = f" -ModelId '{model_override}'" if model_override else ''
     run_ps(f'''
 $script:fixturePath='{path}'
-& '{entry}' -SubscriptionId '11111111-2222-3333-4444-555555555555'
+& '{entry}' -SubscriptionId '11111111-2222-3333-4444-555555555555'{model_argument}
 ''')
     assert (tmp_path/'deployment.json.reached').read_text() == 'app-deployment'
     assert 'CostControl' not in json.loads(config.read_text())
+    assert json.loads(config.read_text())['ModelId'] == (model_override or 'claude-haiku-5-5')
 
 
 @pytest.mark.parametrize('scenario', ['matching', 'conflicting', 'unavailable', 'private', 'ipv6'])
@@ -111,34 +114,44 @@ if ($scenario -eq 'matching') {
 '''.replace('SCENARIO', scenario))
 
 
-@pytest.mark.parametrize('scenario', ['missing', 'existing', 'invalid'])
+@pytest.mark.parametrize('scenario', ['missing', 'existing', 'existing-enter', 'replace', 'replace-invalid', 'invalid'])
 def test_secure_key_prompt_and_reuse(tmp_path, scenario):
     path = str(tmp_path/'secrets'/'key.txt').replace("'", "''")
     output = run_ps(r'''
 $path='KEY_PATH'
 $scenario='SCENARIO'
 $script:prompts=0
+$script:confirmationPrompts=0
 $fakeKey='test-only-not-a-real-api-key-123456789'
-if ($scenario -eq 'existing') {
+if ($scenario -in @('existing','existing-enter','replace','replace-invalid')) {
  New-Item -ItemType Directory -Force (Split-Path $path) | Out-Null
  [IO.File]::WriteAllText($path,'existing-key-do-not-overwrite')
 }
 function Read-Host {
  param($Prompt,[switch]$AsSecureString)
- if (-not $AsSecureString) {throw 'Key prompt was not masked'}
+ if (-not $AsSecureString) {
+  if ($Prompt -notlike '*Change it?*') {throw 'Key prompt was not masked'}
+  $script:confirmationPrompts++
+  if ($scenario -like 'replace*') {return 'Y'}
+  if ($scenario -eq 'existing-enter') {return ''}
+  return 'N'
+ }
  $script:prompts++
- $value=if ($scenario -eq 'invalid') {'bad'} else {$fakeKey}
+ $value=if ($scenario -in @('invalid','replace-invalid')) {'bad'} else {$fakeKey}
  return ConvertTo-SecureString $value -AsPlainText -Force
 }
 $failed=$false
-try {Initialize-AzureAnthropicKey $path} catch {$failed=$true}
-if ($failed -ne ($scenario -eq 'invalid')) {throw 'Unexpected key setup result'}
-if ($scenario -eq 'existing') {
- if ($script:prompts -or [IO.File]::ReadAllText($path) -ne 'existing-key-do-not-overwrite') {throw 'Existing key overwritten or prompted'}
+try {Initialize-AzureAnthropicKey $path} catch {$failed=$true; Write-Host $_.Exception.Message}
+if ($failed -ne ($scenario -in @('invalid','replace-invalid'))) {throw 'Unexpected key setup result'}
+if ($scenario -in @('existing','existing-enter','replace-invalid')) {
+ if ([IO.File]::ReadAllText($path) -ne 'existing-key-do-not-overwrite') {throw 'Existing key changed without a valid replacement'}
+ if ($script:confirmationPrompts -ne 1) {throw 'Missing Y/N prompt'}
+ if ($scenario -ne 'replace-invalid' -and $script:prompts) {throw 'Unexpected key-entry prompt'}
 } elseif ($scenario -eq 'invalid') {
  if (Test-Path -LiteralPath $path) {throw 'Invalid key was persisted'}
 } else {
  if ($script:prompts -ne 1 -or [IO.File]::ReadAllText($path) -ne $fakeKey) {throw 'Key not provisioned'}
+ if ($script:confirmationPrompts -ne $(if ($scenario -eq 'replace') {1} else {0})) {throw 'Unexpected confirmation prompt'}
  if ($env:OS -eq 'Windows_NT') {
   $acl=Get-Acl -LiteralPath $path
   $owner=[Security.Principal.WindowsIdentity]::GetCurrent().Name

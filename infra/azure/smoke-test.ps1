@@ -44,12 +44,19 @@ if ($httpRule) {
 }
 $networkReport += @{check='nsg-allowlist';status=$(if ($badRules.Count -or -not $correct) {'FAIL'} else {'PASS'});
     evidence=$(if ($badRules.Count -or -not $correct) {'SSH/HTTPS rules differ from the required allowlist'} else {'No additional custom inbound allow rules in the dedicated NSG'})}
+$remoteFailed = $false
 try { Invoke-Remote $address 'sudo bash /opt/cardservicing/app/infra/azure/control.sh verify' -Stream }
-finally {
-    $report = Invoke-Remote $address 'sudo cat /opt/cardservicing/state/smoke-report.json'
-    $combined = @($report -join "`n" | ConvertFrom-Json) + $networkReport
-    $output = Join-Path $script:StateDir 'smoke-report.json'
-    [IO.File]::WriteAllText($output, ($combined | ConvertTo-Json -Depth 8), [Text.UTF8Encoding]::new($false))
-    Write-Host "Report: $output"
-    if (@($combined | Where-Object status -eq 'FAIL').Count) { throw 'Smoke verification failed. Inspect the non-sensitive evidence report.' }
+catch { $remoteFailed = $true; Write-Host 'Remote verification failed; collecting its evidence report.' }
+$report = Invoke-Remote $address 'sudo cat /opt/cardservicing/state/smoke-report.json'
+$combined = @(ConvertFrom-DeploymentSmokeReport ($report -join "`n")) + @(foreach ($row in $networkReport) { [pscustomobject]$row })
+if ($remoteFailed) {
+    $combined += [pscustomobject]@{check='remote-verification';status='FAIL';evidence='Remote checker exited unsuccessfully; inspect the failed checks and VM verification output.'}
+}
+$output = Join-Path $script:StateDir 'smoke-report.json'
+[IO.File]::WriteAllText($output, (ConvertTo-Json -InputObject $combined -Depth 8), [Text.UTF8Encoding]::new($false))
+Write-Host "Report: $output"
+$failures = @($combined | Where-Object { $_.status -eq 'FAIL' })
+foreach ($row in $failures) { Write-Host ("FAIL: {0} - {1}" -f $row.check,$row.evidence) }
+if ($failures.Count) {
+    throw ('Smoke verification failed: ' + (($failures | ForEach-Object { $_.check }) -join ', ') + '. Inspect ' + $output)
 }

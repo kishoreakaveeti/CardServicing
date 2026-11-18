@@ -6,6 +6,21 @@ $script:RepoRoot = (Resolve-Path (Join-Path $PSScriptRoot '../..')).Path
 function Write-DeploymentStage([string]$Message) {
     Write-Host ("`n[{0}] {1}" -f (Get-Date -Format 'HH:mm:ss'), $Message) -ForegroundColor Cyan
 }
+function ConvertFrom-DeploymentSmokeReport([string]$Json) {
+    if ([string]::IsNullOrWhiteSpace($Json) -or -not $Json.Trim().StartsWith('[')) { throw 'Remote smoke report must be a nonempty JSON array.' }
+    $decoded = ConvertFrom-Json -InputObject $Json -ErrorAction Stop
+    # Language foreach explicitly enumerates the decoded array in Windows PS 5.1.
+    # @(... | ConvertFrom-Json) instead retains a wrapped array without row properties.
+    $rows = @(foreach ($row in $decoded) {
+        if ($null -eq $row -or -not $row.PSObject.Properties['check'] -or
+            -not $row.PSObject.Properties['status'] -or -not $row.PSObject.Properties['evidence'] -or
+            $row.check -isnot [string] -or $row.evidence -isnot [string] -or
+            $row.status -notin @('PASS','FAIL','NOT TESTED')) { throw 'Remote smoke report contains an invalid check/status/evidence row.' }
+        [pscustomobject]@{check=$row.check;status=$row.status;evidence=$row.evidence}
+    })
+    if (-not $rows.Count) { throw 'Remote smoke report contains no checks.' }
+    return $rows
+}
 function Assert-DeploymentVmSize {
     $c = $script:Cfg
     if ($c.VmSize -eq 'Standard_B4ms') {
@@ -188,15 +203,69 @@ function Get-SshOptions {
         '-o',('UserKnownHostsFile=' + $script:KnownHosts),'-o','ConnectTimeout=10','-o','ServerAliveInterval=30')
 }
 function Invoke-Remote([string]$Address, [string]$Command, [switch]$Stream) {
-    Invoke-Native 'ssh' ((Get-SshOptions) + @(("{0}@{1}" -f $script:Cfg.AdminUsername,$Address),$Command)) -Stream:$Stream
+    Invoke-Native 'ssh' (@('-n','-T') + (Get-SshOptions) + @(("{0}@{1}" -f $script:Cfg.AdminUsername,$Address),$Command)) -Stream:$Stream
 }
 function Send-File([string]$Address, [string]$Source, [string]$Destination) {
     Invoke-Native 'scp' ((Get-SshOptions) + @($Source,("{0}@{1}:{2}" -f $script:Cfg.AdminUsername,$Address,$Destination))) | Out-Null
 }
+function Test-SshReady([string]$Address, [int]$TimeoutSeconds=20) {
+    $ssh = Get-Command ssh -CommandType Application -ErrorAction Stop | Select-Object -First 1
+    $arguments = @('-n','-T') + (Get-SshOptions) + @('-o','ConnectionAttempts=1','-o','ServerAliveCountMax=1',
+        ('{0}@{1}' -f $script:Cfg.AdminUsername,$Address),'true')
+    $info = New-Object Diagnostics.ProcessStartInfo
+    $info.FileName = $ssh.Source
+    $info.UseShellExecute = $false
+    $info.CreateNoWindow = $true
+    $info.RedirectStandardInput = $true
+    $info.RedirectStandardOutput = $true
+    $info.RedirectStandardError = $true
+    if ($info.PSObject.Properties['ArgumentList']) {
+        foreach ($argument in $arguments) { $info.ArgumentList.Add($argument) }
+    } else {
+        # Windows PowerShell/.NET Framework requires Windows-native argument quoting.
+        $info.Arguments = (@(foreach ($argument in $arguments) {
+            $quoted = [regex]::Replace([string]$argument, '(\\*)"', '$1$1\"')
+            '"' + [regex]::Replace($quoted, '(\\+)$', '$1$1') + '"'
+        }) -join ' ')
+    }
+    $process = New-Object Diagnostics.Process
+    $process.StartInfo = $info
+    $started = $false
+    try {
+        $started = $process.Start()
+        if (-not $started) { throw 'Could not start the SSH readiness probe.' }
+        # The probe never needs console input. This avoids OpenSSH/PowerShell stdin hangs.
+        $process.StandardInput.Close()
+        $stdout = $process.StandardOutput.ReadToEndAsync()
+        $stderr = $process.StandardError.ReadToEndAsync()
+        if (-not $process.WaitForExit($TimeoutSeconds * 1000)) {
+            Write-Host "SSH probe exceeded $TimeoutSeconds seconds; stopping this probe and retrying."
+            return $false
+        }
+        $null = $stdout.GetAwaiter().GetResult()
+        $null = $stderr.GetAwaiter().GetResult()
+        if ($process.ExitCode -ne 0) { Write-Host "SSH probe returned exit code $($process.ExitCode); retrying." }
+        return $process.ExitCode -eq 0
+    } finally {
+        # Only stop the child created above, never another SSH or deployment process.
+        if ($started -and -not $process.HasExited) { $process.Kill(); $null = $process.WaitForExit(2000) }
+        $process.Dispose()
+    }
+}
 function Wait-Ssh([string]$Address) {
     $deadline = (Get-Date).AddMinutes(5)
+    $timer = [Diagnostics.Stopwatch]::StartNew()
+    $attempt = 0
     do {
-        try { Invoke-Remote $Address 'true' | Out-Null; return } catch { Start-Sleep -Seconds 5 }
+        $attempt++
+        Write-Host ("[{0}] Waiting for SSH: attempt {1}, {2:N0}s elapsed (five-minute timeout)." -f (Get-Date -Format 'HH:mm:ss'),$attempt,$timer.Elapsed.TotalSeconds)
+        $remaining = [Math]::Max(1,[int][Math]::Ceiling(($deadline - (Get-Date)).TotalSeconds))
+        if (Test-SshReady $Address ([Math]::Min(20,$remaining))) {
+            Write-Host 'SSH is ready. Continuing to the next deployment step.'
+            return
+        }
+        $remaining = [Math]::Max(0,[int][Math]::Ceiling(($deadline - (Get-Date)).TotalSeconds))
+        if ($remaining) { Start-Sleep -Seconds ([Math]::Min(5,$remaining)) }
     } while ((Get-Date) -lt $deadline)
     throw 'SSH readiness timed out. Verify the configured source CIDR and your SSH key.'
 }

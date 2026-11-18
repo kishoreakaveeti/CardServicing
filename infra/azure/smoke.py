@@ -1,4 +1,5 @@
 """Public HTTPS smoke using only fresh synthetic customers; never print payloads."""
+from contextlib import contextmanager
 from html.parser import HTMLParser
 import json
 import os
@@ -33,20 +34,20 @@ def record(report,name,status,evidence):
     print(status+': '+name,flush=True)
 
 
+@contextmanager
 def sign_in_oidc(origin,identity,password):
-    client=httpx.Client(base_url=origin,follow_redirects=True,timeout=120)
-    page=client.get('/auth/login')
-    form=Form()
-    form.feed(page.text)
-    assert form.action and urlparse(form.action).hostname==urlparse(identity).hostname
-    result=client.post(form.action,data={**form.fields,'username':'alex.synthetic','password':password})
-    assert result.status_code==200 and result.url.host==urlparse(origin).hostname
-    session=client.get('/api/session')
-    assert session.status_code==200
-    assert any(c.name=='card_session' and c.secure for c in client.cookies.jar)
-    client.headers.update({'Origin':origin,'X-CSRF-Token':session.json()['csrf']})
-    return client
-
+    with httpx.Client(base_url=origin,follow_redirects=True,timeout=120) as client:
+        page=client.get('/auth/login')
+        form=Form()
+        form.feed(page.text)
+        assert form.action and urlparse(form.action).hostname==urlparse(identity).hostname
+        result=client.post(form.action,data={**form.fields,'username':'alex.synthetic','password':password})
+        assert result.status_code==200 and result.url.host==urlparse(origin).hostname
+        session=client.get('/api/session')
+        assert session.status_code==200
+        assert any(c.name=='card_session' and c.secure for c in client.cookies.jar)
+        client.headers.update({'Origin':origin,'X-CSRF-Token':session.json()['csrf']})
+        yield client
 
 def operation(client,path,body,key=None):
     response=client.post(path,json=body,headers={'Idempotency-Key':key or uuid4().hex})

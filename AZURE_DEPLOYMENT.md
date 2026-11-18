@@ -50,9 +50,12 @@ A real Anthropic API key and accessible model are required by the existing app.
 There is no silent stub fallback. **No separate key-file setup command is required.**
 The single create script prompts for the key with hidden input when the configured
 file is missing, validates its format, saves it with current-user-only Windows file
-permissions and continues deployment. Future runs reuse the saved key without
-asking again. Existing keys are not overwritten. An empty/invalid entry stops
-before provisioning; rerun create and paste the key without quotes.
+permissions and continues deployment. If a saved key exists, it asks
+`An Anthropic key is saved. Change it? [y/N]`. Enter **Y** to paste a replacement
+in the hidden prompt, or **N/Enter** to reuse it. A missing file always triggers
+the key prompt. Replacement is atomic after validation; an empty/invalid entry
+stops before provisioning and preserves the old key. Rerun create and paste the
+key without quotes. No separate key-update command is required.
 
 The default file is `~/.secrets/cardservicing-anthropic-key.txt`; override its path
 with `-AnthropicKeyFile` if needed. The script does not change permissions on other
@@ -265,6 +268,21 @@ saved size only affects a new VM. Never destroy data just to change a VM size.
 **SSH:** verify your current egress CIDR and that the VM is running. Never disable
 host key checking. Start/create refresh the host key through authenticated Azure.
 
+If an older invocation stays at `Waiting for SSH: attempt 1` for minutes, stop
+that invocation with Ctrl+C until the PowerShell prompt returns, then rerun the
+updated script. Readiness probes now detach terminal input and enforce a
+20-second per-attempt process timeout within the five-minute wait. Only that
+probe's own timed-out child is terminated. Other scripted remote commands also
+detach terminal input; file transfers and their SSH protocol remain unchanged.
+The fix's readiness probe connected to the running VM in 1.1 seconds; local
+tests cover stdin closure, exit-code handling, retries and termination of a
+deliberately hung fake probe.
+
+The existing application can remain healthy while deployment waits here. Its
+running model is unchanged until source/configuration upload and container
+recreation at stage 8. A saved Haiku setting alongside a running Sonnet container
+therefore indicates the new deployment has not applied its configuration yet.
+
 ```powershell
 az network nsg rule list -g $rg --nsg-name "$vm-nsg" --subscription $subscriptionId -o table
 Test-NetConnection $ip -Port 22
@@ -323,6 +341,30 @@ editing a hostname. A DNS label collision needs a different `-DnsLabel` before
 initial identity setup. Same-origin routing preserves `/auth/callback` for the BFF.
 
 **Qdrant and full readiness:**
+
+**PowerShell `Where-Object ... status cannot be resolved`:** Windows PowerShell
+5.1 can wrap `ConvertFrom-Json` arrays when they are collected directly from a
+pipeline. The updated checker explicitly flattens and validates each report row,
+prints the names of failed checks and preserves remote checker failures. This
+error alone does not mean the containers are down; inspect the actual reported
+checks. Updated login and isolation probes avoid double-opening an HTTP client
+and count only the ten application services when Caddy shares their Compose project.
+
+**Anthropic `NotFoundError` / HTTP 404:** the configured model may no longer be
+available to your key. The deployment default is now `claude-haiku-5-5`, matching
+the local `.env`. Saved older Azure Sonnet 4.5/4.6 defaults are migrated to Haiku
+on the next create run when no `-ModelId` override is provided. Other custom
+saved selections are retained. An explicit `-ModelId` always takes precedence:
+
+```powershell
+.\scripts\azure-create.ps1 -SubscriptionId $subscriptionId -ModelId 'claude-haiku-5-5'
+```
+
+This reuses the existing VM/volumes and updates the model configuration. Choose
+N/Enter at the saved-key prompt if the key itself is unchanged. Do not rotate an
+otherwise valid key merely because a model ID is unavailable. Model availability
+is account-specific; the running deployment's read-only models query confirmed
+`claude-haiku-5-5` is available to its current key and matches the local `.env` model selection. See [Anthropic model IDs](https://platform.claude.com/docs/en/about-claude/models/model-ids-and-versions).
 
 ```powershell
 ssh @sshOptions $target 'cd /opt/cardservicing/app && sudo docker compose --env-file /opt/cardservicing/state/.env.azure -f compose.azure.yaml logs --tail 80 qdrant cards-agent'
@@ -413,7 +455,7 @@ checks terminate execution. Scope is subscription + resource group; keep it stab
 
 | Script | Required | Optional / defaults | Behavior / example |
 | --- | --- | --- | --- |
-| `scripts/azure-create.ps1` | `SubscriptionId` | `ResourceGroup=rg-cardservicing-demo`, `Location=australiaeast`, `VmName=vm-cardservicing-demo`, `VmSize=Standard_B4ms`, `DnsLabel=cardservicing-<hash>`, `SshSourceCidr=automatic detection, prompt on failure`, `AnthropicKeyFile=~/.secrets/cardservicing-anthropic-key.txt`, `ModelId=claude-sonnet-4-5`, `AcmeEmail=operator@<hostname>` | Create/redeploy current source; volumes preserved. `.\scripts\azure-create.ps1 -SubscriptionId $subscriptionId` |
+| `scripts/azure-create.ps1` | `SubscriptionId` | `ResourceGroup=rg-cardservicing-demo`, `Location=australiaeast`, `VmName=vm-cardservicing-demo`, `VmSize=Standard_B4ms`, `DnsLabel=cardservicing-<hash>`, `SshSourceCidr=automatic detection, prompt on failure`, `AnthropicKeyFile=~/.secrets/cardservicing-anthropic-key.txt`, `ModelId=claude-haiku-5-5`, `AcmeEmail=operator@<hostname>` | Create/redeploy current source; volumes preserved. `.\scripts\azure-create.ps1 -SubscriptionId $subscriptionId` |
 | `scripts/azure-stop.ps1` | `SubscriptionId` | `ResourceGroup` as above | Graceful stop + verified deallocation; preserves data. `.\scripts\azure-stop.ps1 -SubscriptionId $subscriptionId` |
 | `scripts/azure-start.ps1` | `SubscriptionId` | `ResourceGroup`, `RestartContainers` switch | Existing VM only; starts and verifies, preserves data. `.\scripts\azure-start.ps1 -SubscriptionId $subscriptionId` |
 | `scripts/azure-status.ps1` | `SubscriptionId` | `ResourceGroup` | Resource/power/container status; no data changes. `.\scripts\azure-status.ps1 -SubscriptionId $subscriptionId` |
@@ -509,7 +551,10 @@ Docker output streams immediately; silent operations print a `Still running`
 message every 15 seconds, identifying the operation and elapsed time. During
 stage 4, portal refreshes will not show newly created application resources.
 Azure operations can also take several minutes; their names and completion times
-are printed. Remote bootstrap prints installation/build/configuration milestones.
+are printed. `Azure operation completed: vm run-command invoke` confirms only
+that VM Run Command finished (normally fetching the SSH host key). It does not
+mean deployment is complete. The next SSH readiness wait now prints attempts and
+elapsed time, followed by stage 8 source upload/deployment and stage 9 checks. Remote bootstrap prints installation/build/configuration milestones.
 A final application URL is printed only after required health checks pass.
 
 An already-running PowerShell invocation does not pick up edited script code;
@@ -551,7 +596,7 @@ remaining outside the app group for your manual review.
 
 ## Validation evidence and remaining gates
 
-The deployment suite passed **39 local tests**, including reuse of
+The deployment/report/setup suites passed **50 local tests**, including reuse of
 saved configuration from the cancelled budget attempt, progress/heartbeat behavior,
 exit-code preservation, interruption cleanup and secret-safe console output.
 This includes a real Linux container regression using an already-cached Cards
@@ -559,6 +604,14 @@ Agent image with networking disabled: restrictive extraction reproduced the poli
 import failure, and the exact patched bootstrap restored non-root policy imports
 while preserving private state permissions. It also verifies that the default VM
 size skips SKU enumeration and undersized custom overrides are rejected.
+The focused Linux permission regression was validated separately. The updated
+report suite checks Windows PowerShell array flattening, malformed report refusal,
+OIDC client lifetime and service-scoped container isolation. Targeted live checks
+confirmed login, policy retrieval and isolation; full model-backed smoke verification
+still requires updating the unavailable model and rerunning deployment/checks.
+The later SSH wait fix passed **46 focused SSH/deployment/setup tests** (including
+four SSH child-process/retry tests), plus a live readiness probe. No model calls,
+container restarts or infrastructure changes were made to test that wait fix.
 
 Run local tests with:
 

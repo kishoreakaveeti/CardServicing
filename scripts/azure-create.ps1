@@ -9,7 +9,7 @@ param(
     [string]$DnsLabel,
     [string]$SshSourceCidr,
     [string]$AnthropicKeyFile,
-    [string]$ModelId = 'claude-sonnet-4-5',
+    [string]$ModelId = 'claude-haiku-5-5',
     [string]$AcmeEmail
 )
 . "$PSScriptRoot/azure-common.ps1"
@@ -45,6 +45,10 @@ if (Test-Path -LiteralPath $path) {
         DnsLabel=$DnsLabel; AppDomain=$hostName; IdentityDomain=$hostName; AcmeEmail=$AcmeEmail
         AnthropicKeyFile=$AnthropicKeyFile; ModelId=$ModelId; OsDiskSizeGB=128
     }
+}
+if (-not $PSBoundParameters.ContainsKey('ModelId') -and $c.ModelId -in @('claude-sonnet-4-5','claude-sonnet-4-6')) {
+    $c.ModelId = $ModelId
+    Write-Host "Updating the previous Azure model default to $ModelId."
 }
 $c.PSObject.Properties.Remove('CostControl') # Discard obsolete local settings; no Azure budget API is used.
 if ($c.DnsLabel -notmatch '^[a-z][a-z0-9-]{1,61}[a-z0-9]$') { throw 'Invalid Azure DNS label.' }
