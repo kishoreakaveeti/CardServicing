@@ -1,22 +1,11 @@
 {
     email {$ACME_EMAIL}
-    auto_https disable_redirects
 }
 https://{$APP_DOMAIN} {
-    tls {
-        issuer acme {
-            disable_http_challenge
-        }
-    }
     reverse_proxy 127.0.0.1:8080
     header Strict-Transport-Security "max-age=31536000"
 }
 https://{$IDENTITY_DOMAIN} {
-    tls {
-        issuer acme {
-            disable_http_challenge
-        }
-    }
     reverse_proxy 127.0.0.1:8081
     header Strict-Transport-Security "max-age=31536000"
 }

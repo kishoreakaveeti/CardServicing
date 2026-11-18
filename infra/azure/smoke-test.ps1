@@ -7,7 +7,7 @@ Assert-Login
 $address = Get-VmAddress
 $networkReport = @()
 $unexpected = @()
-foreach ($port in @(80,8000,8080,8081,3306,6333,6334,27017,5672,6379)) {
+foreach ($port in @(8000,8080,8081,3306,6333,6334,27017,5672,6379)) {
     $tcp = New-Object Net.Sockets.TcpClient
     try {
         $attempt = $tcp.BeginConnect($address, $port, $null, $null)
@@ -15,9 +15,9 @@ foreach ($port in @(80,8000,8080,8081,3306,6333,6334,27017,5672,6379)) {
     } finally { $tcp.Dispose() }
 }
 $networkReport += @{check='external-port-isolation';status=$(if ($unexpected.Count) {'FAIL'} else {'PASS'});
-    evidence=$(if ($unexpected.Count) {'Unexpected public TCP ports: ' + ($unexpected -join ',')} else {'Operator-side probes found no public HTTP, backend, database, vector or broker ports'})}
+    evidence=$(if ($unexpected.Count) {'Unexpected public TCP ports: ' + ($unexpected -join ',')} else {'Operator-side probes found no public backend, database, vector or broker ports'})}
 $nsg = Invoke-Az -Arguments @('network','nsg','show','-g',$c.ResourceGroup,'-n',($c.VmName + '-nsg'))
-$badRules = @($nsg.securityRules | Where-Object { $_.direction -eq 'Inbound' -and $_.access -eq 'Allow' -and $_.name -notin @('SSH-operator','HTTPS') })
+$badRules = @($nsg.securityRules | Where-Object { $_.direction -eq 'Inbound' -and $_.access -eq 'Allow' -and $_.name -notin @('SSH-operator','HTTPS','HTTP') })
 function Rule-Values($Rule, [string[]]$Names) {
     foreach ($name in $Names) {
         $property = $Rule.PSObject.Properties[$name]
@@ -26,6 +26,7 @@ function Rule-Values($Rule, [string[]]$Names) {
 }
 $sshRule = $nsg.securityRules | Where-Object name -eq 'SSH-operator' | Select-Object -First 1
 $httpsRule = $nsg.securityRules | Where-Object name -eq 'HTTPS' | Select-Object -First 1
+$httpRule = $nsg.securityRules | Where-Object name -eq 'HTTP' | Select-Object -First 1
 $correct = $false
 if ($sshRule -and $httpsRule) {
     $sshSources = @(Rule-Values $sshRule @('sourceAddressPrefix','sourceAddressPrefixes'))
@@ -36,6 +37,10 @@ if ($sshRule -and $httpsRule) {
         $httpsPorts.Count -eq 1 -and $httpsPorts[0] -eq '443' -and
         $sshRule.protocol -eq 'Tcp' -and $httpsRule.protocol -eq 'Tcp' -and
         $sshRule.access -eq 'Allow' -and $httpsRule.access -eq 'Allow'
+}
+if ($httpRule) {
+    $httpPorts = @(Rule-Values $httpRule @('destinationPortRange','destinationPortRanges'))
+    $correct = $correct -and $httpPorts.Count -eq 1 -and $httpPorts[0] -eq '80' -and $httpRule.protocol -eq 'Tcp'
 }
 $networkReport += @{check='nsg-allowlist';status=$(if ($badRules.Count -or -not $correct) {'FAIL'} else {'PASS'});
     evidence=$(if ($badRules.Count -or -not $correct) {'SSH/HTTPS rules differ from the required allowlist'} else {'No additional custom inbound allow rules in the dedicated NSG'})}

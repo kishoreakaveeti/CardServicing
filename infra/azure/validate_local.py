@@ -13,6 +13,41 @@ from uuid import uuid4
 ROOT = Path(__file__).resolve().parents[2]
 
 
+def run_with_progress(command, *, code=None, capture=False, label='Docker operation'):
+    """Stream child output while keeping long silent operations visibly alive."""
+    started = time.monotonic()
+    if not capture:
+        print(f'[{time.strftime("%H:%M:%S")}] Starting {label}', flush=True)
+    process = subprocess.Popen(command, cwd=ROOT, stdin=subprocess.PIPE if code is not None else None,
+                               text=True, stdout=subprocess.PIPE if capture else None)
+    try:
+        first = True
+        while True:
+            try:
+                if first:
+                    first = False
+                    stdout, _ = process.communicate(input=code, timeout=15)
+                else:
+                    stdout, _ = process.communicate(timeout=15)
+                break
+            except subprocess.TimeoutExpired:
+                elapsed = int(time.monotonic() - started)
+                print(f'[{time.strftime("%H:%M:%S")}] Still running {label} ({elapsed}s elapsed). '
+                      'LOCAL preflight; this run has not provisioned Azure resources yet.', flush=True)
+        if process.returncode:
+            raise subprocess.CalledProcessError(process.returncode, label)
+        return stdout.strip() if capture else None
+    except BaseException:
+        if process.poll() is None:
+            process.terminate()
+            try:
+                process.communicate(timeout=10)
+            except subprocess.TimeoutExpired:
+                process.kill()
+                process.communicate()
+        raise
+
+
 def main():
     token = uuid4().hex[:12]
     project = 'cardservicing-check-' + token
@@ -21,13 +56,15 @@ def main():
     os.chmod(directory, 0o700)
     report = []
     containers = []
+    print(f'Local preflight project: {project}. No Azure resources are provisioned by this check.', flush=True)
+    print(f'Local validation report: {directory / "report.json"}', flush=True)
     def docker(*args, code=None, capture=False):
         args = list(args)
         if code is not None:
             args.insert(args.index('run') + 1, '-T' if args[0] == 'compose' else '-i')
-        result = subprocess.run(['docker', *map(str, args)], cwd=ROOT, input=code,
-            text=True, stdout=subprocess.PIPE if capture else None, check=True)
-        return result.stdout.strip() if capture else None
+        verb = next((value for value in ('build','run','up','exec','restart','config','info','inspect','pull','logs') if value in args), 'operation')
+        label = 'Docker ' + ('Compose ' if args[0] == 'compose' else '') + verb
+        return run_with_progress(['docker', *map(str, args)], code=code, capture=capture, label=label)
     def passed(name, evidence):
         report.append(dict(check=name, status='PASS', evidence=evidence))
         print('PASS:', name, flush=True)
@@ -61,11 +98,21 @@ def main():
     compose = ['compose','--env-file',str(env_path),'--env-file',str(identity_env),
                '-f','compose.azure.yaml','-f',str(override)]
     try:
+        for filename in ('Caddyfile', 'Caddyfile.single'):
+            docker('run','--rm','--env','APP_DOMAIN=bank.validation.invalid',
+                   '--env','IDENTITY_DOMAIN=identity.validation.invalid',
+                   '--env','ACME_EMAIL=operator@validation.invalid',
+                   '--mount',f'type=bind,source={ROOT / "infra/azure" / filename},target=/etc/caddy/Caddyfile,readonly',
+                   'caddy:2.10.2-alpine','caddy','validate','--config','/etc/caddy/Caddyfile')
+        passed('caddy-config', 'Both shared Azure hostname and custom-domain Caddy configurations validated')
         assert docker('info','--format','{{.OSType}}',capture=True) == 'linux', 'Select a Linux Docker engine'
         docker(*compose, 'config','--quiet')
         passed('compose-cli', 'Real Docker Compose configuration validation')
         docker(*compose, 'build')
         passed('linux-builds', 'All seven independent application images built')
+        docker('run','--rm','--network','none','--workdir','/data','--entrypoint','python',
+               project+'-cards-agent','-m','card_chat.policy.pipeline.cli','--help')
+        passed('policy-cli-import', 'Policy ingestion CLI imports as the image non-root user from /data')
         mount = 'type=bind,source=' + str(ROOT) + ',target=/work'
         docker('run','--rm','--user','0','--mount',mount,
             '-e','IDENTITY_OUTPUT_DIR=/work/data/' + project + '/identity',

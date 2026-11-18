@@ -18,6 +18,8 @@ case "${1:-}" in
         "${app[@]}" config --quiet
         "${edge[@]}" config --quiet
         "${app[@]}" build
+        echo 'Checking policy CLI imports as the non-root application user before ingestion.'
+        "${app[@]}" run --rm --no-deps --workdir /data --entrypoint python cards-agent -m card_chat.policy.pipeline.cli --help
         # Verify actual Nginx envsubst configuration before publishing a proxy.
         "${app[@]}" run --rm --no-deps frontend sh -c '/docker-entrypoint.d/20-envsubst-on-templates.sh && nginx -t'
         "${app[@]}" up -d --wait --wait-timeout 360 identity qdrant
@@ -46,6 +48,19 @@ case "${1:-}" in
         df -h /var/lib/docker
         free -h
         ;;
+    verify-resume)
+        # Check the previous successful deployment's synthetic customer BEFORE
+        # full smoke generates a new customer/snapshot. This crosses VM shutdown.
+        test -s "$root/state/smoke-customer.json"
+        "${app[@]}" run --rm --no-deps --user 0 --entrypoint python \
+            -v "$root:/deployment" fincrime-api /deployment/app/infra/azure/smoke.py --persistence
+        python3 - <<'PY'
+import json
+from pathlib import Path
+rows = json.loads(Path('/opt/cardservicing/state/restart-report.json').read_text())
+assert rows and all(row['status'] == 'PASS' for row in rows), 'Resume persistence failed'
+PY
+        ;;
     verify)
         trap 'status=$?; trap - ERR; python3 infra/azure/report.py "$root/state/smoke-report.json" || true; exit "$status"' ERR
         rm -f -- "$root/state/"{public,internal,agent,restart,blob,isolation}-report.json "$root/state/smoke-customer.json"
@@ -62,5 +77,5 @@ case "${1:-}" in
         ;;
     backup) python3 infra/azure/backup_data.py backup "${2:?age recipient required}" ;;
     restore) python3 infra/azure/backup_data.py restore "${2:?backup path required}" "${3:?age identity path required}" ;;
-    *) echo 'Expected deploy/start/restart/stop/status/verify/backup/restore' >&2; exit 2 ;;
+    *) echo 'Expected deploy/start/restart/stop/status/verify/verify-resume/backup/restore' >&2; exit 2 ;;
 esac

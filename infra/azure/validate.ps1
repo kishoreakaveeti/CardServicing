@@ -11,4 +11,5 @@ if (-not (Get-Command docker -ErrorAction SilentlyContinue)) { throw 'Docker CLI
 # Host Python is needed only for Docker subprocess orchestration (stdlib only).
 $python = Get-Command python -ErrorAction SilentlyContinue
 if (-not $python) { throw 'Install Python 3.10+ for the standard-library-only Docker preflight runner.' }
-Invoke-Native $python.Source @((Join-Path $PSScriptRoot 'validate_local.py')) -Stream
+Write-Host 'Local preflight is running on this computer, not Azure. Progress and Docker build output follow.'
+Invoke-Native $python.Source @('-u',(Join-Path $PSScriptRoot 'validate_local.py')) -Stream

@@ -100,7 +100,7 @@ def persistence(origin):
         client.headers['X-CSRF-Token']=response.json()['csrf']
         cid=operation(client,'/api/conversations',{})['id']
         assert snapshot(tools(client,'/api/conversations/'+cid))==saved['snapshot']
-    return 'Synthetic login, account/card selection and unblocked card state survived service restarts'
+    return 'Saved synthetic login and account/card selection survived the restart'
 
 
 def main():
@@ -171,6 +171,12 @@ def main():
             card=selection(tools(client,path),'unblock_card','card_id')
             execute(client,path,'unblock_card',{}, {'card_id':card})
             record(report,'card-unblocking','PASS','Policy-authorized temporary-freeze reversal completed and replay matched')
+            proposed=operation(client,path+'/messages',{'text':'Please block my card and reissue a new one'})
+            assert proposed.get('input_tool')=='block_card'
+            card=selection(tools(client,path),'block_card','card_id')
+            replaced=execute(client,path,'block_card',{'reason':'lost'}, {'card_id':card})
+            assert replaced.get('usage',{}).get('completed_actions',0)>=2
+            record(report,'card-replacement','PASS','Reviewed lost-card blocking and replacement completed with idempotent replay')
             record(report,'langgraph-anthropic','PASS','Live natural-language routing produced expected FinCrime tools and reported nonzero model calls')
             saved={'username':username,'password':password,'snapshot':snapshot(tools(client,path))}
             assert saved['snapshot']

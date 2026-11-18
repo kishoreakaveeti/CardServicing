@@ -3,6 +3,24 @@ Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 $script:RepoRoot = (Resolve-Path (Join-Path $PSScriptRoot '../..')).Path
 
+function Write-DeploymentStage([string]$Message) {
+    Write-Host ("`n[{0}] {1}" -f (Get-Date -Format 'HH:mm:ss'), $Message) -ForegroundColor Cyan
+}
+function Assert-DeploymentVmSize {
+    $c = $script:Cfg
+    if ($c.VmSize -eq 'Standard_B4ms') {
+        Write-Host 'Using Standard_B4ms: 4 vCPU / 16 GiB. Skipping the slow SKU catalogue query; Azure validates availability/quota during VM creation.'
+        return
+    }
+    Write-Host 'Checking CPU/RAM for the custom VM size; the Azure SKU catalogue query can take time.'
+    $skus = @(Invoke-Az @('vm','list-skus','--location',$c.Location,'--resource-type','virtualMachines','--size',$c.VmSize,'--all'))
+    $sku = $skus | Where-Object name -eq $c.VmSize | Select-Object -First 1
+    if (-not $sku) { throw "Configured VM size $($c.VmSize) was not found in $($c.Location)." }
+    $memory = [double](($sku.capabilities | Where-Object name -eq 'MemoryGB').value)
+    $cpus = [int](($sku.capabilities | Where-Object name -eq 'vCPUs').value)
+    if ($memory -lt 16 -or $cpus -lt 4) { throw 'This stack requires at least 4 vCPUs and 16 GiB RAM.' }
+}
+
 function Invoke-Native([string]$Program, [string[]]$Arguments, [switch]$Stream) {
     $saved = $ErrorActionPreference
     $ErrorActionPreference = 'Continue'
@@ -16,6 +34,23 @@ function Invoke-Native([string]$Program, [string[]]$Arguments, [switch]$Stream) 
     if ($code -ne 0) { throw "$Program failed with exit code $code." }
     return $result
 }
+function Set-PrivateWindowsAccess([string]$Path) {
+    # Persist only the DACL. Set-Acl can request audit/SACL privileges even when
+    # the caller only intended to restrict ordinary file access.
+    $item = Get-Item -LiteralPath $Path -Force
+    $sid = [Security.Principal.WindowsIdentity]::GetCurrent().User.Value
+    $sections = [Security.AccessControl.AccessControlSections]::Access
+    if ($item.PSIsContainer) {
+        $acl = New-Object Security.AccessControl.DirectorySecurity
+        $sddl = "D:P(A;OICI;FA;;;$sid)"
+    } else {
+        $acl = New-Object Security.AccessControl.FileSecurity
+        $sddl = "D:P(A;;FA;;;$sid)"
+    }
+    $acl.SetSecurityDescriptorSddlForm($sddl, $sections)
+    if ($PSVersionTable.PSVersion.Major -le 5) { $item.SetAccessControl($acl) }
+    else { [IO.FileSystemAclExtensions]::SetAccessControl($item, $acl) }
+}
 function Read-Deployment([string]$ConfigPath) {
     $resolved = (Resolve-Path -LiteralPath $ConfigPath).Path
     $c = Get-Content -LiteralPath $resolved -Raw | ConvertFrom-Json
@@ -27,7 +62,7 @@ function Read-Deployment([string]$ConfigPath) {
     }
     $id = [guid]::Empty
     if (-not [guid]::TryParse($c.SubscriptionId, [ref]$id)) { throw 'SubscriptionId must be a UUID.' }
-    if ($c.Location -ne 'australiaeast') { throw 'This demo deployment requires australiaeast.' }
+    if ($c.Location -notmatch '^[a-z][a-z0-9]+$') { throw 'Invalid Azure region.' }
     foreach ($field in @('DeploymentId','ResourceGroup','VmName','VmSize')) {
         if ($c.$field -notmatch '^[A-Za-z0-9][A-Za-z0-9_.-]{2,63}$') { throw "Unsafe identifier: $field" }
     }
@@ -35,7 +70,6 @@ function Read-Deployment([string]$ConfigPath) {
     foreach ($field in @('AppDomain','IdentityDomain')) {
         if ($c.$field -notmatch '^(?=.{4,253}$)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$' -or $c.$field -match '\.invalid$|\.example$|example\.com$|localhost') { throw "Use an owned public DNS hostname: $field" }
     }
-    if ($c.AppDomain -eq $c.IdentityDomain) { throw 'Application and identity hostnames must differ.' }
     if ($c.AcmeEmail -notmatch '^[A-Za-z0-9_.+%-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$') { throw 'Invalid AcmeEmail.' }
     if ($c.StorageAccount -notmatch '^[a-z0-9]{3,24}$' -or $c.StorageContainer -notmatch '^[a-z0-9](?:[a-z0-9]|-(?!-)){1,61}[a-z0-9]$') { throw 'Invalid storage account/container name.' }
     if ($c.SshSourceCidr -notmatch '^(\d{1,3}\.){3}\d{1,3}/(2[4-9]|3[0-2])$') { throw 'SSH source must be a restricted IPv4 CIDR (/24 to /32), preferably your public IP/32.' }
@@ -52,13 +86,7 @@ function Read-Deployment([string]$ConfigPath) {
     $script:StateDir = Join-Path $script:RepoRoot ('.azure/' + $c.DeploymentId)
     New-Item -ItemType Directory -Force $script:StateDir | Out-Null
     if ($env:OS -eq 'Windows_NT') {
-        $acl = New-Object System.Security.AccessControl.DirectorySecurity
-        $acl.SetAccessRuleProtection($true, $false)
-        $rule = New-Object System.Security.AccessControl.FileSystemAccessRule(
-            [Security.Principal.WindowsIdentity]::GetCurrent().Name, 'FullControl',
-            'ContainerInherit,ObjectInherit', 'None', 'Allow')
-        $acl.AddAccessRule($rule)
-        Set-Acl -LiteralPath $script:StateDir -AclObject $acl
+        Set-PrivateWindowsAccess $script:StateDir
     } else {
         Invoke-Native 'chmod' @('700', $script:StateDir) | Out-Null
     }
@@ -77,10 +105,24 @@ function Assert-Tools([switch]$Docker) {
     }
 }
 function Invoke-Az([string[]]$Arguments) {
-    $result = Invoke-Native 'az' ($Arguments + @('--subscription', $script:Cfg.SubscriptionId, '--only-show-errors','--output','json'))
+    # Only operation names are logged: never full arguments, REST bodies or token output.
+    $visible = $Arguments[0] -ne 'account'
+    $label = ($Arguments | Select-Object -First 3 | Where-Object { -not $_.StartsWith('-') }) -join ' '
+    $timer = [Diagnostics.Stopwatch]::StartNew()
+    if ($visible) { Write-Host ("[{0}] Azure: {1} ..." -f (Get-Date -Format 'HH:mm:ss'), $label) }
+    try {
+        $result = Invoke-Native 'az' ($Arguments + @('--subscription', $script:Cfg.SubscriptionId, '--only-show-errors','--output','json'))
+    } catch {
+        if ($visible) { Write-Host ("Azure operation failed after {0:N0}s: {1}" -f $timer.Elapsed.TotalSeconds, $label) }
+        throw
+    }
+    if ($visible) { Write-Host ("[{0}] Azure operation completed ({1:N0}s): {2}" -f (Get-Date -Format 'HH:mm:ss'), $timer.Elapsed.TotalSeconds, $label) }
     if ($result) { return ($result -join "`n" | ConvertFrom-Json) }
 }
 function Assert-Login {
+    try { Invoke-Native 'az' @('account','show','--output','none','--only-show-errors') | Out-Null }
+    catch { Invoke-Native 'az' @('login','--output','none','--only-show-errors') | Out-Null }
+    Invoke-Native 'az' @('account','set','--subscription',$script:Cfg.SubscriptionId) | Out-Null
     $account = Invoke-Az -Arguments @('account','show')
     if ($account.id -ne $script:Cfg.SubscriptionId -or $account.state -ne 'Enabled') { throw 'Run az login and verify the configured subscription.' }
 }
@@ -124,6 +166,13 @@ function Get-VmAddress {
     if (-not $publicIp.ipAddress) { throw 'VM has no allocated public address.' }
     return $publicIp.ipAddress
 }
+function Assert-OwnedVm {
+    if (-not (Get-OwnedGroup)) { throw 'Dedicated resource group does not exist.' }
+    Assert-ExpectedResources
+    $vm = Invoke-Az @('vm','show','-g',$script:Cfg.ResourceGroup,'-n',$script:Cfg.VmName)
+    if (-not $vm.tags -or -not $vm.tags.PSObject.Properties['cardservicingDeployment'] -or
+        $vm.tags.cardservicingDeployment -ne $script:Cfg.DeploymentId) { throw 'VM ownership does not match. Refusing lifecycle action.' }
+}
 function Set-TrustedHost([string]$Address) {
     # Host key comes from the authenticated Azure control plane, not ssh-keyscan.
     $result = Invoke-Az -Arguments @('vm','run-command','invoke','-g',$script:Cfg.ResourceGroup,'-n',$script:Cfg.VmName,
@@ -153,4 +202,21 @@ function Wait-Ssh([string]$Address) {
 }
 function Write-CostReminder {
     Write-Host 'Deallocation stops VM compute billing; managed disks, static public IP and Blob storage can still incur costs.'
+}
+
+function Wait-VmState([string]$State) {
+    $deadline = (Get-Date).AddMinutes(15)
+    do {
+        $view = Invoke-Az @('vm','get-instance-view','-g',$script:Cfg.ResourceGroup,'-n',$script:Cfg.VmName)
+        if ($view.instanceView.statuses.code -contains ('PowerState/' + $State)) { return }
+        Start-Sleep -Seconds 10
+    } while ((Get-Date) -lt $deadline)
+    throw "VM did not reach $State within 15 minutes."
+}
+function Get-DeploymentRemainders {
+    return @(Invoke-Az @('resource','list') | Where-Object {
+        $_.tags -and (
+            ($_.tags.PSObject.Properties['cardservicingDeployment'] -and $_.tags.cardservicingDeployment -eq $script:Cfg.DeploymentId) -or
+            ($_.tags.PSObject.Properties['application'] -and $_.tags.application -eq 'cardservicing-demo'))
+    })
 }

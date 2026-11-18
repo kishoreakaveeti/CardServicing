@@ -43,3 +43,8 @@ public_cfg = {key: value for key, value in cfg.items() if key != 'AnthropicApiKe
 existing.write_text(json.dumps(public_cfg, indent=2))
 existing.chmod(0o600)
 print('Initialized deployment-owned credentials, callback, issuer and managed-identity telemetry.')
+
+# Azure's free public IP hostname serves identity paths and the application.
+if cfg['AppDomain'] == cfg['IdentityDomain']:
+    (ROOT / 'app/infra/azure/Caddyfile').write_text(
+        (ROOT / 'app/infra/azure/Caddyfile.single').read_text())

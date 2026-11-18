@@ -1,8 +1,8 @@
 # Azure VM Docker Compose
 
 The automated deployment and lifecycle commands are in
-[infra/azure/README.md](../infra/azure/README.md). Start there for prerequisites,
-owned DNS names, Azure permissions, secrets, HTTPS, backups and exact commands.
+[AZURE_DEPLOYMENT.md](../AZURE_DEPLOYMENT.md). Start there for prerequisites,
+free Azure DNS, Azure permissions, secrets, HTTPS, backups and exact commands.
 Nothing is provisioned until you explicitly run `infra/azure/deploy.ps1`.
 
 `compose.azure.yaml` is standalone; do not merge it with `compose.yaml`.
@@ -18,8 +18,8 @@ SQLite databases or an Azure managed database. Existing local Keycloak stays on
 its development configuration. Never blindly delete an old identity volume;
 manual H2 deployments with identity data need an explicit export/import plan.
 
-Caddy is configured separately by `infra/azure/compose.proxy.yaml`. Only HTTPS
-and source-restricted SSH are exposed publicly. Frontend and Keycloak publish
+Caddy is configured separately by `infra/azure/compose.proxy.yaml`. Only HTTP,
+HTTPS and source-restricted SSH are exposed publicly. Frontend and Keycloak publish
 loopback backend ports; all banking APIs, agents, MCP, Qdrant and MariaDB remain
 private. Public HTTPS issuer, callback origin, JWKS/token URLs and proxy headers
 are kept distinct. The public issuer must match tokens exactly.

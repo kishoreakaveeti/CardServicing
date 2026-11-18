@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
 umask 077
+progress() { printf '[%s] %s\n' "$(date -u +%H:%M:%SZ)" "$1"; }
+progress 'Remote VM bootstrap started: installing Ubuntu prerequisites (may take several minutes).'
 # Run only by deploy.ps1 after explicitly selected Azure resources exist.
 source_home=$(getent passwd "${SUDO_USER:?Run using sudo}" | cut -d: -f6)
 upload="$source_home/.cardservicing-upload"
@@ -10,7 +12,8 @@ install -d -m 700 "$root/state"
 # Apt repository signature verification follows Docker's official Ubuntu guide.
 export DEBIAN_FRONTEND=noninteractive
 apt-get update -qq
-apt-get install -y -qq ca-certificates curl gnupg python3 rsync age
+apt-get install -y -qq ca-certificates curl gnupg python3 rsync age git
+progress 'Installing Docker Engine and Docker Compose from the signed Docker repository.'
 install -m 0755 -d /etc/apt/keyrings
 curl --fail --silent --show-error --retry 3 https://download.docker.com/linux/ubuntu/gpg -o /etc/apt/keyrings/docker.asc
 chmod a+r /etc/apt/keyrings/docker.asc
@@ -32,18 +35,28 @@ if [[ $(docker info --format '{{.DockerRootDir}}') != /var/lib/docker ]]; then
     echo 'Docker data root must be /var/lib/docker on the persistent managed OS disk; refusing an implicit storage migration.' >&2
     exit 1
 fi
-# Azure NSG permits only operator SSH and public 443. No container backend is
+# Azure NSG permits only operator SSH and public 80/443. No container backend is
 # published on a public interface. SSH remains key-only.
 printf '%s\n' 'PasswordAuthentication no' 'KbdInteractiveAuthentication no' 'PermitRootLogin no' > /etc/ssh/sshd_config.d/10-cardservicing.conf
 sshd -t
 systemctl reload ssh
 stage=$(mktemp -d "$root/release.XXXXXXXX")
+progress 'Preparing source release; existing persistent volumes and credentials are retained.'
 trap 'rm -rf -- "$stage"; rm -f -- "$upload/bootstrap.json" "$upload/release.tar.gz"' EXIT
 # The tar is an allowlisted source artifact created by our deployment client.
 python3 - "$upload/release.tar.gz" "$stage" <<'PY'
 import sys, tarfile
+from pathlib import Path
 with tarfile.open(sys.argv[1]) as archive:
     archive.extractall(sys.argv[2], filter='data')
+# data_filter intentionally skips directory modes. With umask 077 this leaves
+# root-only directories, which COPY preserves inside non-root application images.
+# This stage contains allowlisted source only, never credentials or live volumes.
+source = Path(sys.argv[2])
+source.chmod(0o755)
+for path in source.rglob('*'):
+    if not path.is_symlink():
+        path.chmod(0o755 if path.is_dir() or path.stat().st_mode & 0o111 else 0o644)
 PY
 # Quiesce the existing app before replacing its source. Volumes/state stay intact.
 if [[ -f "$root/app/infra/azure/control.sh" ]]; then
@@ -58,6 +71,7 @@ cd "$root/app"
 export COMPOSE_PARALLEL_LIMIT=1
 # First image needs no realm credentials; the image does not contain secrets.
 docker build --target runtime -f Dockerfile.fincrime-api -t card-servicing-azure-fincrime-api .
+progress 'Initializing deployment-owned credentials and identity configuration (values are not logged).'
 docker run --rm --user 0 --mount "type=bind,source=$root,target=/deployment" \
     --entrypoint python card-servicing-azure-fincrime-api \
     /deployment/app/infra/azure/configure.py
@@ -70,6 +84,7 @@ chmod 640 "$root/state/identity/realm.json"
 chmod 644 "$root/state/identity/delegation-public.pem"
 chmod 755 "$root/state/identity"
 # Parent state is root-only, but Docker bind mounts are resolved by the daemon.
+progress 'Building/starting the full application, ingesting policies and configuring HTTPS. Docker output follows.'
 bash infra/azure/control.sh deploy
 cat > /etc/systemd/system/cardservicing.service <<'UNIT'
 [Unit]
@@ -88,6 +103,7 @@ TimeoutStopSec=180
 [Install]
 WantedBy=multi-user.target
 UNIT
+progress 'Enabling automatic service recovery after reboot.'
 systemctl daemon-reload
 systemctl enable cardservicing
 systemctl start cardservicing
