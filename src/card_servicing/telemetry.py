@@ -39,6 +39,7 @@ EVENT_FIELDS = frozenset({
     'service', 'tool', 'model_calls', 'input_tokens', 'output_tokens',
     'cache_read_input_tokens', 'cache_creation_input_tokens', 'completed_actions',
     'outcome', 'tokens_reported',
+    'policy_id', 'version', 'score', 'query', 'action', 'intent', 'action_order',
 })
 
 

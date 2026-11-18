@@ -305,7 +305,7 @@ def create_app(model=None, gateway=None, *, config=None, policy_retriever=None):
         suffix = ('Click the confirmation button to retry the same submission safely.' if spec.safe_retry
                   else 'The outcome may be uncertain. This action cannot be safely retried; check its status first.')
         try:
-            # Execute the reviewed snapshot directly. Confirmation makes no model call.
+            # Execute the reviewed snapshot directly. Any grounded recommendation happens only after success.
             calling_agent = None
             if hasattr(spec.entry, 'agents') and spec.entry.agents:
                 calling_agent = spec.entry.agents[0]
@@ -356,8 +356,18 @@ def create_app(model=None, gateway=None, *, config=None, policy_retriever=None):
             if hasattr(app.state, 'orchestrator'):
                 thread_id = f"{owner()}:{cid}"
                 resumed_turn = await app.state.orchestrator.resume_execution(
-                    thread_id, owner(), cid, submission['tool'], result, ok=True, message=text
+                    thread_id, owner(), cid, submission['tool'], result, ok=True, message=text,
+                    arguments=submission['arguments'],
+                    allowed_tools={name: tool.definition() for name, tool in permitted().items()}
                 )
+
+            if proposal.name == 'block_card' and resumed_turn is not None:
+                snapshot = await app.state.orchestrator.workflow.aget_state(
+                    {'configurable': {'thread_id': f'{owner()}:{cid}'}})
+                recommendation = (snapshot.values.get('policy_evaluation') or {}).get('recommendation') or {}
+                for key, value in recommendation.get('usage', {}).items():
+                    if key in c.usage and type(value) is int and value >= 0:
+                        c.usage[key] += value
 
             if isinstance(resumed_turn, ProposedToolCall):
                 if (proposal.name == 'block_card' and approval and approval.get('status') == 'confirmed'
@@ -395,8 +405,12 @@ def create_app(model=None, gateway=None, *, config=None, policy_retriever=None):
 
             if isinstance(resumed_turn, CustomerReply) and resumed_turn.text and resumed_turn.text != text:
                 if issuance_outcome != 'already_exists':
-                    text = f"{text} {resumed_turn.text}"
+                    text = resumed_turn.text if resumed_turn.text.startswith(text) else f"{text} {resumed_turn.text}"
 
+            # Persist the complete successful reply, including any grounded
+            # next-step wording, so duplicate confirmation never regenerates it.
+            if c.submission and c.submission['result'] is not None:
+                c.submission['result'] = text
             response = reply(c, text)
             if proposal.name in ('view_accounts', 'view_cards'):
                 response['data'] = data

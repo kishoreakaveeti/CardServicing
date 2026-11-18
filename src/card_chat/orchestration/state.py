@@ -29,6 +29,7 @@ class BankingWorkflowState(TypedDict, total=False):
     pinned_policies: dict[str, str]
     policy_evaluation: dict[str, Any] | None
     policy_error: str | None
+    policy_planning: dict[str, Any] | None
 
     # Interactive customer questions and expected responses
     pending_customer_question: dict[str, Any] | None

@@ -1,9 +1,29 @@
 # Live policy runtime
 
+For model-generated search and an ordered travel assistance plan, see the
+[overseas lost-card demonstration](overseas-policy-planning.md).
+
 The FastAPI lifespan composes one `HybridPolicyRetriever` and one
 `GroundedPolicyEvaluator` through `card_chat.policy.factory`. The orchestrator
 passes these same instances to its existing LangGraph supervisor. The graph's
 nodes and durable confirmation/resume protocol are unchanged.
+
+## Model-grounded next steps
+
+After a confirmed block, or when a blocked card prevents additional issuance,
+the supervisor retrieves approved policy evidence and calls the provider's
+`recommend_policy` method. Anthropic receives bounded redacted passages, policy
+metadata and three verified boolean facts. It proposes an offer or abstention,
+customer-facing wording and exact supporting quotations. The application validates
+the response, binds any target card/account on the server and checkpoints the
+recommendation and its citations. No model-generated tool call executes banking
+operations. See [policy-grounded next steps](policy-grounded-next-steps.md) for
+configuration, the temporary-freeze experiment, limits and validation.
+
+The live evaluator's `evaluate_constraints` method checks eligibility, restrictions,
+mandatory evidence and policy-version pins. It does not generate proactive offers.
+The older direct evaluator interface retains deterministic suggestions for legacy
+isolated compatibility tests; it is not the live recommendation path.
 
 The previous runtime path was `main → SQLite PolicyStore → legacy PolicyEvaluator`;
 the supervisor also constructed a store when none was supplied. The new path is

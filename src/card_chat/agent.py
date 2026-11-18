@@ -5,6 +5,7 @@ from typing import Any
 
 from card_chat.provider import Model
 from card_chat.turns import CustomerReply, ProposedToolCall
+from card_chat.orchestration.contracts import HandoffResult
 from card_chat.model_context import build_context
 from card_chat.orchestration.supervisor import SupervisorAgent
 from card_chat.orchestration.graph import create_banking_workflow
@@ -170,6 +171,7 @@ class AgentOrchestrator:
             "action_plan": prior_state.get("action_plan", []),
             "pending_customer_question": prior_state.get("pending_customer_question"),
             "pinned_policies": prior_state.get("pinned_policies", {}),
+            "policy_planning": None,
             "verified_domain_facts": prior_state.get("verified_domain_facts", {}),
             # Domain events are consumed during execution resumption, not replayed
             # as fresh events when another customer message starts a graph run.
@@ -215,6 +217,8 @@ class AgentOrchestrator:
         ok: bool = True,
         error: str | None = None,
         message: str = "",
+        arguments: dict | None = None,
+        allowed_tools: dict | None = None,
     ) -> CustomerReply | ProposedToolCall | None:
         """Resume LangGraph workflow with actual execution result from the trusted execution layer."""
         config = {"configurable": {"thread_id": thread_id}}
@@ -226,13 +230,37 @@ class AgentOrchestrator:
         except Exception:
             state_snap = None
 
-        if not state_snap or not state_snap.next:
-            return None
-
-        # Verify customer authorization/isolation
-        if owner and state_snap.values.get("owner") and state_snap.values.get("owner") != owner:
-            logger.warning("Unauthorized resume attempt on workflow %s by owner %s", thread_id, owner)
+        # Verify isolation before both ordinary resume and a direct-form completion.
+        previous = state_snap.values if state_snap else {}
+        if owner and previous.get("owner") and previous["owner"] != owner:
             raise PermissionError("Cross-customer workflow access denied.")
+        if not state_snap or not state_snap.next:
+            if not (ok and tool_name == 'block_card' and arguments is not None and allowed_tools is not None):
+                return None
+            # A secure-form action can complete without an earlier model turn.
+            # Seed only its verified completion, never a new executable proposal.
+            data = result.get('result', {}) if isinstance(result, dict) else {}
+            reason = data.get('last_block_reason') or data.get('reason') or arguments.get('reason', '')
+            state = {**previous, 'owner': owner, 'session_id': session_id, 'workflow_id': thread_id,
+                     'verified_draft': {'tool': tool_name, 'arguments': arguments},
+                     'allowed_tools': allowed_tools, 'planned_intents': [], 'iteration_count': 0,
+                     'pending_customer_question': None, 'active_agent': 'fincrime_agent',
+                     'proposed_tool': None, 'last_domain_event': 'card_blocked_success',
+                     'action_plan': [{'intent': tool_name, 'target_agent': 'fincrime_agent',
+                         'status': 'completed', 'tool_proposal': {'name': tool_name, 'arguments': arguments},
+                         'result': data, 'error': None}],
+                     'handoff_history': [HandoffResult(source_agent='fincrime_agent', status='success',
+                                                     message=message, data=data)]}
+            facts = await self.supervisor._retrieve_domain_facts(state, tool_name)
+            facts.update(has_blocked_card=True,
+                         blocked_card_id=data.get('card_id') or data.get('id') or arguments.get('card_id'),
+                         last_block_reason=reason,
+                         is_temporary_freeze=any(word in reason.lower() for word in ('freeze', 'frozen', 'temporary')),
+                         is_permanently_compromised=any(word in reason.lower() for word in ('lost','stolen','fraud','compromised','destroyed')))
+            state['verified_domain_facts'] = facts
+            update = await self.supervisor.plan_or_route(state)
+            await self.workflow.aupdate_state(config, {**state, **update}, as_node='supervisor')
+            return CustomerReply(update.get('final_response') or message)
 
         resume_payload = {
             "status": "confirmed",
@@ -241,6 +269,7 @@ class AgentOrchestrator:
             "data": result.get("result") if isinstance(result, dict) else result,
             "message": message,
             "error": error,
+            "arguments": arguments,
         }
 
         from langgraph.types import Command

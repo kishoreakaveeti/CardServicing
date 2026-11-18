@@ -17,6 +17,8 @@ logger = logging.getLogger(__name__)
 def route_supervisor_next(state: BankingWorkflowState) -> str:
     """Conditional edge router for supervisor decisions."""
     next_step = state.get("next_step")
+    if next_step in ('policy_search', 'policy_plan', 'supervisor'):
+        return next_step
     if next_step == "cards_agent":
         return "cards_agent"
     elif next_step == "fincrime_agent":
@@ -54,6 +56,11 @@ async def human_confirmation_node(state: BankingWorkflowState) -> dict[str, Any]
     exec_msg = confirmation_payload.get("message", "") if isinstance(confirmation_payload, dict) else ""
     exec_error = confirmation_payload.get("error") if isinstance(confirmation_payload, dict) else None
     tool_name = confirmation_payload.get("tool") or (proposal.get("name") if proposal else None)
+
+    if isinstance(confirmation_payload, dict) and isinstance(confirmation_payload.get('arguments'), dict):
+        # Actual schema-validated secure-form arguments from the trusted executor,
+        # not the earlier model's potentially incomplete proposal.
+        proposal = {'name': tool_name, 'arguments': confirmation_payload['arguments']}
 
     active_agent = state.get("active_agent") or (current_handoff.target_agent if current_handoff else "supervisor")
 
@@ -121,18 +128,22 @@ async def human_confirmation_node(state: BankingWorkflowState) -> dict[str, Any]
     last_event = state.get("last_domain_event")
     if tool_name == "block_card":
         last_event = "card_blocked_success"
+        verified_facts['has_blocked_card'] = True
         if proposal and proposal.get("arguments"):
             verified_facts["last_blocked_card_id"] = proposal["arguments"].get("card_id")
             verified_facts["blocked_card_id"] = proposal["arguments"].get("card_id")
             verified_facts["last_block_reason"] = proposal["arguments"].get("reason", "lost card")
             verified_facts["is_temporary_freeze"] = any(
-                term in verified_facts['last_block_reason'].lower() for term in ('freeze', 'frozen'))
+                term in verified_facts['last_block_reason'].lower() for term in ('freeze', 'frozen', 'temporary'))
             verified_facts["has_blocked_card"] = True
         if isinstance(exec_data, dict):
             verified_facts['blocked_card_id'] = exec_data.get('card_id') or exec_data.get('id') or verified_facts.get('blocked_card_id')
             verified_facts['last_block_reason'] = exec_data.get('last_block_reason') or exec_data.get('reason') or verified_facts.get('last_block_reason', 'lost card')
             verified_facts['is_temporary_freeze'] = any(
-                term in verified_facts['last_block_reason'].lower() for term in ('freeze', 'frozen'))
+                term in verified_facts['last_block_reason'].lower() for term in ('freeze', 'frozen', 'temporary'))
+        verified_facts['is_permanently_compromised'] = any(
+            term in verified_facts.get('last_block_reason', '').lower()
+            for term in ('lost', 'stolen', 'fraud', 'compromised', 'destroyed'))
     elif tool_name == "unblock_card":
         last_event = "card_unblocked_success"
         data = exec_data if isinstance(exec_data, dict) else {}
@@ -177,6 +188,19 @@ def create_banking_workflow(
     builder.add_node("cards_agent", cards_node.execute)
     builder.add_node("fincrime_agent", fincrime_node.execute)
     builder.add_node("human_confirmation", human_confirmation_node)
+    from card_chat.policy.planning import retrieve_for_plan, propose_plan
+
+    async def search(state):
+        return await retrieve_for_plan(supervisor, state)
+
+    async def plan(state):
+        return await propose_plan(supervisor, state)
+
+    builder.add_node('policy_search', search)
+    builder.add_node('policy_plan', plan)
+    for node in ('policy_search', 'policy_plan'):
+        builder.add_conditional_edges(node, route_supervisor_next,
+            {'policy_plan': 'policy_plan', 'supervisor': 'supervisor', END: END})
 
     # Set entry point
     builder.set_entry_point("supervisor")
@@ -189,6 +213,7 @@ def create_banking_workflow(
             "cards_agent": "cards_agent",
             "fincrime_agent": "fincrime_agent",
             "human_confirmation": "human_confirmation",
+            "policy_search": "policy_search",
             END: END,
         },
     )

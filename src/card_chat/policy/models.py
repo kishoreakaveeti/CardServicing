@@ -89,3 +89,4 @@ class PolicyEvaluationResult(BaseModel):
     planned_intents: list[str] = Field(default_factory=list)
     policy_error: str | None = None
     evidence_citations: list[dict[str, Any]] = Field(default_factory=list)
+    recommendation: dict[str, Any] | None = None

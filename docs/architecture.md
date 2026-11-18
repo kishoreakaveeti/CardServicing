@@ -2,6 +2,11 @@
 
 This document and its embedded diagrams are maintained manually. CI does not generate or update them.
 
+The [overseas lost-card planning flow](overseas-policy-planning.md) extends the
+same graph with model-generated policy search and a cited ordered plan. Card
+blocking retains the existing MCP/API security boundary; assistance checks are
+explicitly synthetic and human handoff is manual.
+
 Use [setup guide](getting-started.md) for current [Docker](getting-started.md#1-run-and-debug-using-local-docker-containers) and [native](getting-started.md#2-run-and-debug-natively-on-your-computer) prerequisites, configuration, run/debug commands and switching steps. Architecture and API behavior are shared by both modes; process locations and persistence paths differ.
 
 ## Runtime boundaries
@@ -11,6 +16,10 @@ flowchart LR
     U[React chat and secure forms] --> B[Experience BFF]
     B --> A[Agent Orchestrator and durable jobs]
     A --> L[Provider: stub or Anthropic]
+    A --> P[Approved policy retrieval and deterministic guards]
+    P --> Q[(Qdrant policy index)]
+    P -->|Redacted evidence and verified boolean facts| L
+    L -->|Cited next-step proposal| P
     A --> M[Remote HTTP MCP]
     M --> C[Cards banking API]
     M --> FC[FinCrime servicing API]
@@ -38,7 +47,7 @@ flowchart LR
 | Agent Orchestrator | Routes turns between specialized agents and enforces cross-agent dependency rules (e.g. pre-issuance blocking check) | `card_chat.agent.AgentOrchestrator` |
 | Card Servicing Agent | Specializes in customer accounts, card viewing, and new card issuance | `card_chat.agent.CardServicingAgent` |
 | FinCrime Agent | Specializes in risk protection, fraud mitigation, and card blocking | `card_chat.agent.FinCrimeAgent` |
-| Provider | Hosted Anthropic Messages or limited deterministic stub | `card_chat.provider` |
+| Provider | Hosted Anthropic Messages, cited policy next-step recommendations, or explicit offline stub | `card_chat.provider` |
 | Official SDK MCP server | Catalogue-derived tool registration and shared HTTP execution adapter | `card_chat.mcp_server:app` |
 | Cards FastAPI / BankingService | Credential verification, customer/account/card ownership and banking APIs | `card_servicing.main:app`, `banking.py` |
 | SQLiteCardStore | Card generation, atomic retry/existing-card decisions, status updates and additive migrations | `card_servicing.persistence` |
@@ -199,7 +208,7 @@ Username/password registration generates a customer UUID and salted scrypt hash.
 
 Service access tokens and signed customer delegation remain separate. Database ownership is rechecked in the Cards service; neither the model nor a stale delegated account list can grant account access. The provider receives sanitized intent and scoped opaque references rather than raw identifiers, tool results or credentials. State-changing proposals require an explicit reviewed snapshot and confirmation.
 
-The default stub is credential-free and supports only a few deterministic intents. Rich language interpretation uses Anthropic. Direct selections, form submissions and confirmations do not need model calls.
+The default stub is credential-free and supports only a few deterministic intents. Rich language interpretation uses Anthropic. Direct selections, form submissions and reviewed banking writes do not need model calls. A successful block can trigger a separate model-grounded follow-up recommendation; cached replays do not regenerate it.
 
 ## Deployment and observability
 
@@ -212,3 +221,5 @@ Docker named volumes (`cards_data`, `fincrime_data`, `agent_data`, `experience_d
 ## Further references
 
 [HTTP contracts and identity](http-stack.md), [end-to-end trace](chat-end-to-end.md), [catalogue](tool-catalogue.md), [health checks](health-checks.md), [adapter configuration](infrastructure-adapters.md), and [Docker attach reference](docker-debugging.md).
+
+Policy-grounded follow-up design and testing: [policy-grounded next steps](policy-grounded-next-steps.md).

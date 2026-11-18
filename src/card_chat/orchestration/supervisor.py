@@ -81,6 +81,8 @@ class SupervisorAgent:
         self.policy_evaluator = policy_evaluator
         self.facts_retriever_fn = facts_retriever_fn
         self.check_blocked_fn = check_blocked_fn
+        from card_chat.policy.recommendations import PolicyNextStepPlanner
+        self.policy_next_step = PolicyNextStepPlanner(model)
 
     async def _retrieve_domain_facts(self, state: BankingWorkflowState, intent: str) -> dict[str, Any]:
         """Retrieve verified banking facts via authorized services and domain functions."""
@@ -120,6 +122,44 @@ class SupervisorAgent:
         facts.setdefault('is_temporary_freeze', facts.get('temporary_freeze', False))
         facts.setdefault('is_permanently_compromised', facts.get('compromised', False))
         return facts
+
+    async def _evaluate_policy(self, intent, user_text, facts, state, *, after_block=False):
+        constraints = getattr(self.policy_evaluator, 'evaluate_constraints', None)
+        evaluate = constraints or self.policy_evaluator.evaluate
+        result = evaluate(intent, user_text, facts,
+            last_domain_event='card_blocked_success' if after_block else None,
+            pinned_policies=state.get('pinned_policies', {}))
+        # Legacy SQLite evaluators exist only for isolated compatibility tests.
+        # Live factory composition always injects the retrieval-backed adapter.
+        needs_recommendation = after_block or (
+            intent in ('issue_card', 'create_card') and facts.get('has_blocked_card')
+            and not result.permitted)
+        if not constraints or not needs_recommendation or result.policy_error:
+            return result
+        before_calls = getattr(self.model, 'policy_calls', 0)
+        try:
+            result = await self.policy_next_step.recommend(result, facts,
+                'after_block' if after_block else 'restricted_issuance', state.get('allowed_tools', {}))
+            emit_agent_trace('policy_recommendation', tool=result.recommendation['action'],
+                             outcome='accepted', model_calls=result.recommendation['usage']['model_calls'])
+            return result
+        except Exception as exc:
+            # Banking success is already committed for after_block. Never turn
+            # recommendation failure into a retry of that successful write.
+            logger.warning('policy_recommendation_unavailable error_type=%s', type(exc).__name__)
+            emit_agent_trace('policy_recommendation', outcome='unavailable', error_type=type(exc).__name__)
+            return result.model_copy(update={
+                'pending_question': None, 'policy_error': 'PolicyRecommendationUnavailable',
+                'decision_reason': 'A policy-grounded next step is unavailable. Please try a new request.',
+                'recommendation': {'status': 'unavailable', 'error_type': type(exc).__name__,
+                    'stage': 'after_block' if after_block else 'restricted_issuance',
+                    'mode': getattr(self.model, 'policy_recommendation_mode', 'model'),
+                    'usage': {'model_calls': max(0, getattr(self.model, 'policy_calls', 0) - before_calls),
+                              **({key: value for key, value in getattr(self.model, 'last_usage', {}).items()
+                                  if key in ('input_tokens','output_tokens','cache_read_input_tokens','cache_creation_input_tokens')
+                                  and type(value) is int and value >= 0}
+                                 if getattr(self.model, 'policy_calls', 0) > before_calls else {})}},
+            })
 
     async def plan_or_route(self, state: BankingWorkflowState) -> dict[str, Any]:
         """Supervisor node entry point in the LangGraph workflow."""
@@ -255,6 +295,16 @@ class SupervisorAgent:
                     "can_confirm": True,
                 }
             if last_result.status == "success":
+                if state.get('policy_planning') and state.get('last_domain_event') == 'card_blocked_success':
+                    from card_chat.policy.planning import complete_assistance
+                    try:
+                        text = await complete_assistance(self, state, last_result.message)
+                    except Exception as exc:
+                        emit_agent_trace('policy_planning', outcome='unavailable', error_type=type(exc).__name__)
+                        text = last_result.message + ' Further policy assistance is unavailable. Please contact specialist support.'
+                    return {'next_step': 'respond', 'final_response': text,
+                            'policy_planning': {**state['policy_planning'], 'completed': True},
+                            'active_agent': None, 'planned_intents': []}
                 # Mark current action completed (if not already marked by human_confirmation_node)
                 for item in action_plan:
                     if item.get("status") in ("awaiting_confirmation", "executing") and (
@@ -270,8 +320,7 @@ class SupervisorAgent:
                     target_agent = get_target_agent_for_intent(next_intent)
 
                     facts = await self._retrieve_domain_facts(state, next_intent)
-                    decision = self.policy_evaluator.evaluate(
-                        next_intent, '', facts, pinned_policies=state.get('pinned_policies', {}))
+                    decision = await self._evaluate_policy(next_intent, '', facts, state)
                     policy_updates = {
                         'retrieved_policies': decision.retrieved_policies,
                         'pinned_policies': decision.pinned_versions,
@@ -327,9 +376,7 @@ class SupervisorAgent:
                         if "last_block_reason" not in facts:
                             facts["last_block_reason"] = "lost card" if "lost" in last_result.message.lower() else "temporary freeze"
 
-                        eval_result = self.policy_evaluator.evaluate(
-                            None, "", facts, last_domain_event="card_blocked_success", pinned_policies=state.get("pinned_policies", {})
-                        )
+                        eval_result = await self._evaluate_policy(None, '', facts, state, after_block=True)
                         if eval_result.pending_question:
                             return {
                                 "iteration_count": iterations,
@@ -344,7 +391,7 @@ class SupervisorAgent:
                             }
                         return {
                             'iteration_count': iterations, 'active_agent': None, 'next_step': 'respond',
-                            'final_response': last_result.message + (' ' + eval_result.decision_reason if eval_result.policy_error else ''),
+                            'final_response': last_result.message + (' ' + eval_result.decision_reason if eval_result.policy_error or eval_result.recommendation else ''),
                             'pinned_policies': eval_result.pinned_versions,
                             'retrieved_policies': eval_result.retrieved_policies,
                             'policy_evaluation': eval_result.model_dump(), 'action_plan': action_plan,
@@ -375,9 +422,17 @@ class SupervisorAgent:
                 }
 
         # 3. Analyze intent and detect compound requests
-        target_agent, detected_intents, direct_reply = await self._classify_and_plan(
-            user_text, allowed_tools, state.get("verified_draft", {})
-        )
+        from card_chat.policy.planning import needs_policy_planning
+        planning = state.get('policy_planning')
+        if needs_policy_planning(user_text) and not planning:
+            emit_agent_trace('policy_planning', intent='overseas_lost_card', outcome='retrieval_required')
+            return {'next_step': 'policy_search', 'iteration_count': iterations}
+        if planning and planning.get('plan') and needs_policy_planning(user_text):
+            target_agent, detected_intents, direct_reply = 'fincrime_agent', ['block_card'], None
+        else:
+            target_agent, detected_intents, direct_reply = await self._classify_and_plan(
+                user_text, allowed_tools, state.get("verified_draft", {})
+            )
 
         if direct_reply or not detected_intents:
             return {
@@ -405,9 +460,7 @@ class SupervisorAgent:
 
         # 4. Policy Retrieval and Evaluation stage
         facts = await self._retrieve_domain_facts(state, primary_intent)
-        eval_result = self.policy_evaluator.evaluate(
-            primary_intent, user_text, facts, pinned_policies=state.get("pinned_policies", {})
-        )
+        eval_result = await self._evaluate_policy(primary_intent, user_text, facts, state)
 
         state_policy_updates = {
             "retrieved_policies": eval_result.retrieved_policies,
@@ -494,6 +547,8 @@ class SupervisorAgent:
         """Classify user intent and detect compound requests using LLM first, with rule fallback."""
         clean_text = user_text.strip()
         lower = clean_text.lower()
+        if lower.rstrip('.!') in ('block my card', 'please block my card') and 'block_card' in allowed_tools:
+            return 'fincrime_agent', ['block_card'], None
         draft_tool = verified_draft.get("tool")
 
         # 1. Deterministic routing for explicit UI selections / verified drafts

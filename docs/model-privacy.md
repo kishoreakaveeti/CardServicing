@@ -5,9 +5,17 @@ Structured model usage and tool metrics now go to MongoDB when enabled. Prompts,
 Customer registration/login credentials travel only through secure BFF forms to the Cards credential service. They never become conversation drafts, model arguments or tool results. Pre-login intent calls expose only registration/login form openers. `Reply.data` account/card lists are shown by React and excluded from model history. See [Customer banking](customer-banking.md) for session and ownership boundaries.
 
 The HTTP services, durable jobs, remote MCP catalogue and Cards contract remain
-separate. The model boundary now has one shared `build_context` projection,
-used by the agent and defensively repeated in the Anthropic adapter. The browser
+separate. Ordinary conversation calls use the shared `build_context` projection,
+repeated defensively in the Anthropic adapter. Policy recommendations use a
+separate typed projection containing redacted policy passages and verified
+boolean facts, with the outbound privacy gate still enforced. The browser
 does not send private identifiers through the model conversation.
+
+The [overseas assistance planner](overseas-policy-planning.md) additionally sends
+the sanitized customer request to generate a semantic policy query and then
+interpret redacted passages. After the confirmed card block, the model receives
+only coarse completion/simulation statuses, without private form fields or raw
+banking result bodies. The same outbound privacy gate applies at every stage.
 
 ## Create a simulated card
 
@@ -22,10 +30,14 @@ No full account number is returned to React.
 
 Chat is the primary entry point for intent, questions and safe corrections.
 The secondary **Choose an action manually** panel retains a structured-only flow
-that makes **zero model calls**, even with the Anthropic adapter configured.
+that makes **zero model calls for the reviewed banking write**, even with the
+Anthropic adapter configured. After a successful block, a separate policy-grounded
+model call can recommend a follow-up journey. It receives no private form values
+or banking result payloads; see [policy-grounded next steps](policy-grounded-next-steps.md).
 After completing the form, "Create the card using these details" can produce a
-model proposal using opaque references. Confirmation and eligible replay still
-make zero additional calls. The result displays the actual `SIM-...` card and
+model proposal using opaque references. Creation confirmation and eligible replay still
+make zero additional calls. A replay never regenerates a previously stored
+post-block recommendation. The result displays the actual `SIM-...` card and
 reference returned by Cards, using catalogue labels and the same renderer for
 immediate replies and polled jobs.
 

@@ -43,6 +43,40 @@ class GroundedPolicyEvaluator(PolicyEvaluator):
     def __init__(self, retriever: PolicyRetriever):
         self._retriever = retriever
 
+    def validate_assistance_plan(self, plan, passages, allowed_tools):
+        """An advisory plan grants no tool authority; all writes retain API guards."""
+        permitted = {'block_card', 'check_digital_card_eligibility',
+                     'check_emergency_cash_eligibility', 'request_specialist_handoff'}
+        actions = plan.get('actions', [])
+        active = self._retriever.retrieve_mandatory(policy_id='POL-005')
+        governing = [e for e in active if e.policy_id == 'POL-005']
+        rules_ok = (len({e.version for e in governing}) == 1 and bool(governing) and
+            all(e.conditions.get('rules_version') == e.version and
+                e.conditions.get('simulation_only') is True and
+                e.conditions.get('return_window_hours') == 48 and
+                {'never_freeze_account', 'require_card_block_confirmation',
+                 'no_real_digital_issuance_or_cash_disbursement'}.issubset(e.restrictions)
+                for e in governing))
+        seen, results = set(), []
+        for index, item in enumerate(actions):
+            name = item['action']
+            evidence = [p for p in passages if p['policy_id'] == item['policy_id']
+                        and p['version'] == item['version'] and
+                        ' '.join(item['quote'].split()) in ' '.join(p['text'].split())]
+            valid = (rules_ok and name in permitted and name not in seen and bool(evidence)
+                     and item['policy_id'] == 'POL-005'
+                     and item['version'] == governing[0].version
+                     and 'block_card' in allowed_tools
+                     and actions[0]['action'] == 'block_card'
+                     and (name != 'block_card' or (index == 0 and item['requires_confirmation']))
+                     and (name not in ('check_digital_card_eligibility', 'check_emergency_cash_eligibility')
+                          or item['requires_confirmation'] is False)
+                     and (name != 'request_specialist_handoff' or
+                          (item['requires_confirmation'] and index == len(actions)-1)))
+            seen.add(name)
+            results.append({'action': name, 'outcome': 'validated' if valid else 'rejected'})
+        return results or [{'action': 'none', 'outcome': 'rejected'}]
+
     def evaluate(self, intent=None, user_text="", facts=None, state=None, pending_question=None,
                  last_domain_event=None, pinned_policies=None, **kwargs):
         if isinstance(user_text, dict) and facts is None:
@@ -68,6 +102,21 @@ class GroundedPolicyEvaluator(PolicyEvaluator):
             if required and getattr(self._retriever, 'strict_index', False) and 'POL-004' not in {e.policy_id for e in evidence}:
                 raise RuntimeError('Missing mandatory policy POL-004')
             pins = dict(pinned_policies or {})
+            if pending:
+                pending_id = pending.get('policy_id') if isinstance(pending, dict) else pending.policy_id
+                pending_version = pending.get('policy_version') if isinstance(pending, dict) else pending.policy_version
+                pins.setdefault(pending_id, pending_version)
+            if required:
+                # An accepted offer can depend on a policy other than the tool's
+                # primary policy (e.g. POL-003 offer -> POL-002 replacement).
+                # Revalidate every pinned source, even if semantic search omitted it.
+                for policy_id in pins:
+                    if policy_id not in {e.policy_id for e in evidence}:
+                        current = [e for e in self._retriever.retrieve_mandatory(policy_id=policy_id)
+                                   if e.policy_id == policy_id]
+                        if not current:
+                            raise RuntimeError('Pinned approved policy is unavailable')
+                        evidence.extend(current)
             for e in evidence:
                 if e.policy_id in pins and pins[e.policy_id] != e.version:
                     raise RuntimeError(f"Approved policy version changed: {e.policy_id}; restart the workflow")
@@ -88,6 +137,10 @@ class GroundedPolicyEvaluator(PolicyEvaluator):
             return PolicyEvaluationResult(permitted=False, prohibited=True,
                 policy_error="PolicyRetrievalUnavailable",
                 decision_reason="Required approved policies are unavailable. Please try again later.")
+
+    def evaluate_constraints(self, *args, **kwargs):
+        """Live workflow uses the model for offers; retain deterministic write guards."""
+        return self.evaluate(*args, **kwargs, _recommendations=False)
 
     def _evaluate(
         self,
@@ -118,6 +171,9 @@ class GroundedPolicyEvaluator(PolicyEvaluator):
         if not intent:
             event = last_domain_event or state.get("last_domain_event") or facts.get("last_domain_event")
             if event == "card_blocked_success":
+                if not kwargs.get('_recommendations', True):
+                    return PolicyEvaluationResult(permitted=True,
+                        decision_reason='Card blocking confirmed; next-step recommendation pending.')
                 return self._evaluate_post_block(facts, state, _evidence)
             return PolicyEvaluationResult(permitted=True, decision_reason="No intent specified")
 
@@ -128,7 +184,8 @@ class GroundedPolicyEvaluator(PolicyEvaluator):
 
         # 4. Intent-specific policy evaluations
         if intent in ("issue_card", "create_card"):
-            return self._evaluate_issuance(facts, state, evidence, evidence_dicts, pinned)
+            return self._evaluate_issuance(facts, state, evidence, evidence_dicts, pinned,
+                                           recommendations=kwargs.get('_recommendations', True))
 
         if intent == "replace_card":
             return self._evaluate_replacement(facts, state, evidence, evidence_dicts, pinned)
@@ -286,6 +343,7 @@ class GroundedPolicyEvaluator(PolicyEvaluator):
         evidence: list[PolicyEvidence],
         evidence_dicts: list[dict[str, Any]],
         pinned: dict[str, str],
+        recommendations: bool = True,
     ) -> PolicyEvaluationResult:
         has_blocked = facts.get("has_blocked_card", False)
         if not has_blocked:
@@ -328,7 +386,7 @@ class GroundedPolicyEvaluator(PolicyEvaluator):
                 recommended_delegation="respond",
             )
 
-        if is_freeze:
+        if recommendations and is_freeze:
             last4 = facts.get("blocked_card_last4") or (facts.get("blocked_cards", [{}])[0].get("card_number", "card")[-4:] if facts.get("blocked_cards") else "your card")
             card_id = facts.get("blocked_card_id") or (facts.get("blocked_cards", [{}])[0].get("id") or facts.get("blocked_cards", [{}])[0].get("card_id"))
             account = facts.get("account_number") or (facts.get("blocked_cards", [{}])[0].get("account_number") if facts.get("blocked_cards") else None)

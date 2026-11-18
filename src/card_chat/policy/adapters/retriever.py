@@ -98,7 +98,7 @@ class HybridPolicyRetriever(PolicyRetriever):
                         version=doc.version,
                         title=doc.title,
                         section_title="Mandatory Document Rules",
-                        content=doc.raw_content[:1000],
+                        content=doc.raw_content[:4000],
                         source=doc.source,
                         score=1.0,
                         mandatory=True,
