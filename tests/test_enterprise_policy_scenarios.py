@@ -224,6 +224,7 @@ async def test_scenario_b_lost_card_post_block_replacement_offered_and_accepted(
         "account_number": account["account_number"],
         "blocked_card_id": str(card.id),
         "last_blocked_card_last4": card.card_number[-4:],
+        "country_context": {'code':'AU','status':'explicit','source':'customer_declaration'},
         "last_block_reason": "lost",
         "is_temporary_freeze": False,
         "last_domain_event": "card_blocked_success",
@@ -284,6 +285,7 @@ async def test_scenario_b_lost_card_replacement_declined(banking_environment):
         "account_number": account["account_number"],
         "blocked_card_id": str(card.id),
         "last_block_reason": "lost",
+        "country_context": {'code':'AU','status':'explicit','source':'customer_declaration'},
         "last_domain_event": "card_blocked_success",
     }
     eval_result = evaluator.evaluate(intent=None, user_text="", facts=facts, last_domain_event="card_blocked_success")

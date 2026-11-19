@@ -50,6 +50,7 @@ class PolicyEvidence(BaseModel):
     section_title: str
     content: str
     source: str
+    content_hash: str = ''
     score: float = 0.0
     mandatory: bool = False
     effective_date: str = ""
@@ -75,6 +76,8 @@ class PendingCustomerQuestion(BaseModel):
 class PolicyEvaluationResult(BaseModel):
     """Structured result of evaluating retrieved policies against verified domain facts."""
     permitted: bool = True
+    clarification_required: bool = False
+    geographic_decision: dict[str, Any] | None = None
     prohibited: bool = False
     decision_reason: str = ""
     retrieved_policies: list[dict[str, Any]] = Field(default_factory=list)

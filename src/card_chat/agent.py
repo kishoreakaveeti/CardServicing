@@ -132,6 +132,7 @@ class AgentOrchestrator:
         workflow_id: str | None = None,
         session_id: str | None = None,
         owner: str | None = None,
+        country_context: dict | None = None,
     ) -> CustomerReply | ProposedToolCall:
         """Execute a LangGraph multi-agent reasoning turn."""
         policy = self.agent_tools_policy
@@ -157,6 +158,9 @@ class AgentOrchestrator:
 
         # Build LangGraph workflow state, preserving multi-turn context
         initial_state = {
+            'country_context': country_context or prior_state.get('country_context', {}),
+            'geographic_notice': None,
+            'geographic_pending_intents': prior_state.get('geographic_pending_intents', []),
             "owner": owner or prior_state.get("owner", "customer"),
             "session_id": session_id or prior_state.get("session_id", "default"),
             "workflow_id": workflow_id or prior_state.get("workflow_id", stable_thread),

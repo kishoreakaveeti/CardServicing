@@ -30,6 +30,9 @@ class Gateway:
             meta['idempotency_key'] = key
         if agent:
             meta['agent'] = agent
+        from card_chat.security import replacement_context
+        if name == 'replace_card' and replacement_context.get():
+            meta['replacement_context'] = replacement_context.get()
         result = await self.session.call_tool(name, arguments, meta=meta or None)
         if result.isError or not result.structuredContent:
             return {'ok': False, 'error': 'MCP execution failed; the outcome may be uncertain.'}
@@ -55,6 +58,15 @@ async def connect(config=None):
         tools = (await connected.list_tools()).tools
 
     class RemoteGateway(Gateway):
+        async def declare_country(self, workflow, context):
+            # Separate authenticated fact endpoint; never an LLM-visible tool.
+            async with httpx.AsyncClient(timeout=15) as client:
+                response = await client.post(config.get('CARD_API_BASE_URL', 'http://cards-api:8000') +
+                    '/banking/replacement-context', headers=await security.headers(),
+                    json={'workflow': workflow, 'country': context})
+                response.raise_for_status()
+                return response.json()
+
         async def policy_facts(self, account_number):
             if not security.enabled:
                 return None  # Explicit isolated local mode uses injected verified facts.

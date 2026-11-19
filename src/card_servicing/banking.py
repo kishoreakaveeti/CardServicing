@@ -1,9 +1,10 @@
 """Customer banking domain and HTTP adapter; credentials never enter agent tools."""
-from contextlib import closing
+from contextlib import closing, nullcontext
 import hashlib
 import hmac
 import secrets
 import sqlite3
+import json
 from threading import RLock
 from uuid import uuid4
 
@@ -15,6 +16,7 @@ from card_servicing.ports import AccountNotOwned, BlockedCardExists
 from card_servicing.idempotency import IdempotencyConflict
 from card_servicing.persistence import storage_operation
 from card_chat.security import principal
+from card_chat.policy.geography import CountryContext
 
 
 class Credentials(BaseModel):
@@ -53,13 +55,70 @@ CREATE TABLE IF NOT EXISTS banking_requests (
  customer_id TEXT NOT NULL REFERENCES customers(id), request_key TEXT NOT NULL,
  fingerprint TEXT NOT NULL, account_number TEXT NOT NULL REFERENCES accounts(account_number),
  PRIMARY KEY(customer_id, request_key));
+CREATE TABLE IF NOT EXISTS replacement_contexts (
+ customer_id TEXT NOT NULL, workflow TEXT NOT NULL, revision TEXT NOT NULL,
+ country TEXT NOT NULL, policy_version TEXT NOT NULL,
+ artifact_hash TEXT NOT NULL,
+ PRIMARY KEY(customer_id, workflow));
 """
 
 
 class BankingService:
-    def __init__(self, store):
+    def __init__(self, store, geographic_rules=None, telemetry=None, geographic_documents=None):
         self.store = store
         self.lock = RLock()
+        from card_chat.policy.geography import FileRulesSource
+        self.geographic_rules = geographic_rules or FileRulesSource()
+        self.telemetry = telemetry
+        self.geographic_documents = geographic_documents
+
+    @storage_operation
+    def declare_country(self, customer, workflow, country):
+        from card_chat.policy.geography import CountryContext, normalize_country
+        country = CountryContext.model_validate(country)
+        if country.status == 'explicit' and (not country.code or normalize_country(country.code) != country.code):
+            raise HTTPException(422, 'Use a canonical country code')
+        rules = self.geographic_rules.load()
+        from card_chat.policy.geography import local_geographic_decision
+        approved = local_geographic_decision(country.model_dump(), self.geographic_rules,
+            document_source=self.geographic_documents)
+        if approved.decision == 'unavailable':
+            raise HTTPException(503, approved.explanation)
+        revision = uuid4().hex
+        with self.lock, closing(self.store.connect()) as db, db:
+            # A later declaration invalidates older workflow approvals for this
+            # customer, including checkpoints in a different conversation.
+            db.execute('DELETE FROM replacement_contexts WHERE customer_id=?', (customer['sub'],))
+            db.execute('INSERT OR REPLACE INTO replacement_contexts VALUES(?,?,?,?,?,?)',
+                (customer['sub'], workflow, revision, country.model_dump_json(), rules.version, approved.artifact_hash))
+        return {'workflow': workflow, 'revision': revision, 'policy_version': rules.version, 'artifact_hash': approved.artifact_hash}
+
+    def geographic_authorization(self, customer, context, connection=None):
+        from card_chat.policy.geography import local_geographic_decision
+        try:
+            if not customer or not context:
+                raise HTTPException(409, 'Declare your current country before requesting replacement.')
+            with nullcontext(connection) if connection is not None else closing(self.store.connect()) as db:
+                row = db.execute('SELECT revision,country,policy_version,artifact_hash FROM replacement_contexts WHERE customer_id=? AND workflow=?',
+                    (customer['sub'], context.get('workflow'))).fetchone()
+            if not row or row[0] != context.get('revision') or row[2] != context.get('policy_version'):
+                raise HTTPException(409, 'Country review changed. Please review a new replacement request.')
+            decision = local_geographic_decision(json.loads(row[1]), self.geographic_rules, row[2], self.geographic_documents)
+            if decision.artifact_hash != row[3] or context.get('artifact_hash') != row[3]:
+                raise HTTPException(409, 'Approved replacement policy content changed. Please start a new request.')
+            if self.telemetry:
+                self.telemetry.emit('log', 'geographic_policy', service='cards',
+                    outcome=decision.decision, reason_code=decision.reason_code,
+                    policy_id=decision.policy_id, version=decision.version,
+                    artifact_hash=decision.artifact_hash, rule_id=decision.rule_id,
+                    country_code=decision.country_code, evidence_source=decision.evidence_source)
+            if decision.decision != 'allowed':
+                raise HTTPException(403 if decision.decision == 'denied' else 409, decision.explanation)
+            return decision
+        except HTTPException:
+            raise
+        except Exception:
+            raise HTTPException(503, 'Approved geographic replacement policy unavailable') from None
 
     @storage_operation
     def register(self, body):
@@ -164,7 +223,8 @@ class BankingService:
         return {'card_id': str(card.id), 'status': 'created', 'message': 'Card successfully unblocked'}
 
     @storage_operation
-    def replace_card(self, customer, card_id, key, reason='Card lost/compromised', *, with_replay=False):
+    def replace_card(self, customer, card_id, key, reason='Card lost/compromised', *, with_replay=False, geographic_context=None):
+        self.geographic_authorization(customer, geographic_context)
         card = self.store.get_card(card_id)
         if not card:
             raise HTTPException(404, 'Card not found')
@@ -173,7 +233,8 @@ class BankingService:
         if card.status != 'blocked':
             raise HTTPException(400, 'Only blocked or compromised cards are eligible for replacement.')
         try:
-            result, replayed = self.store.replace_idempotent(card_id, customer['sub'] + ':' + key, customer_id=customer['sub'])
+            result, replayed = self.store.replace_idempotent(card_id, customer['sub'] + ':' + key, customer_id=customer['sub'],
+                authorize=lambda db: self.geographic_authorization(customer, geographic_context, db))
         except AccountNotOwned:
             raise HTTPException(404, 'Account not found') from None
         except ValueError as exc:
@@ -281,6 +342,17 @@ class CardBlockInput(BaseModel):
     reason: str = Field(default="Customer requested", min_length=1, max_length=200, title="Reason")
 
 
+class CountryDeclaration(BaseModel):
+    model_config = ConfigDict(extra='forbid')
+    workflow: str = Field(pattern=r'^[a-f0-9]{32}$')
+    country: CountryContext
+
+
+@router.post('/replacement-context', include_in_schema=False)
+def replacement_context(body: CountryDeclaration, request: Request):
+    return service(request).declare_country(customer(), body.workflow, body.country.model_dump())
+
+
 class CardBlockResponse(BaseModel):
     card_id: str = Field(title="Card Id")
     status: str = Field(title="Status")
@@ -306,7 +378,14 @@ def unblock_card(card_id: str, body: CardBlockInput, request: Request):
 @router.post('/cards/{card_id}/replace', operation_id='replace_card', response_model=CardIssuance, status_code=201)
 def replace_card(card_id: str, body: CardReplaceInput, request: Request, response: Response, idempotency_key: str = Header(min_length=1, max_length=128, pattern=r'^[A-Za-z0-9._:-]+$')):
     try:
-        result, replayed = service(request).replace_card(customer(), card_id, idempotency_key, reason=body.reason, with_replay=True)
+        try:
+            context = json.loads(request.headers.get('X-Replacement-Context', 'null'))
+            if context is not None and not isinstance(context, dict):
+                raise ValueError('Invalid context')
+        except (ValueError, TypeError):
+            raise HTTPException(422, 'Invalid replacement context') from None
+        result, replayed = service(request).replace_card(customer(), card_id, idempotency_key, reason=body.reason,
+            with_replay=True, geographic_context=context)
         response.status_code = 201
         response.headers['Idempotency-Replayed'] = str(replayed).lower()
         response.headers['Card-Issuance-Outcome'] = result.outcome

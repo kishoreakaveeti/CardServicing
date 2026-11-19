@@ -127,6 +127,7 @@ class SupervisorAgent:
         constraints = getattr(self.policy_evaluator, 'evaluate_constraints', None)
         evaluate = constraints or self.policy_evaluator.evaluate
         result = evaluate(intent, user_text, facts,
+            **({'state': state} if constraints else {}),
             last_domain_event='card_blocked_success' if after_block else None,
             pinned_policies=state.get('pinned_policies', {}))
         # Legacy SQLite evaluators exist only for isolated compatibility tests.
@@ -134,6 +135,13 @@ class SupervisorAgent:
         needs_recommendation = after_block or (
             intent in ('issue_card', 'create_card') and facts.get('has_blocked_card')
             and not result.permitted)
+        if after_block and hasattr(self.policy_evaluator, 'geographic_decision'):
+            geo, evidence = self.policy_evaluator.geographic_decision(state.get('country_context'), state.get('pinned_policies'))
+            if geo.decision != 'allowed':
+                return result.model_copy(update={'pending_question': None, 'decision_reason': geo.explanation,
+                    'geographic_decision': geo.model_dump(),
+                    'recommendation': {'action': 'none', 'message': geo.explanation},
+                    'retrieved_policies': result.retrieved_policies + [p.model_dump() for p in evidence]})
         if not constraints or not needs_recommendation or result.policy_error:
             return result
         before_calls = getattr(self.model, 'policy_calls', 0)
@@ -197,6 +205,7 @@ class SupervisorAgent:
                 user_text=user_text,
                 facts=facts,
                 pending_question=pending_q,
+                **({'state': state} if hasattr(self.policy_evaluator, 'geographic_decision') else {}),
                 pinned_policies=state.get("pinned_policies", {}),
             )
             if eval_result.recommended_delegation in ("cards_agent", "fincrime_agent"):
@@ -422,6 +431,8 @@ class SupervisorAgent:
                 }
 
         # 3. Analyze intent and detect compound requests
+        from card_chat.policy.geography import declared_country
+        clarified = declared_country(user_text)
         from card_chat.policy.planning import needs_policy_planning
         planning = state.get('policy_planning')
         if needs_policy_planning(user_text) and not planning:
@@ -429,10 +440,59 @@ class SupervisorAgent:
             return {'next_step': 'policy_search', 'iteration_count': iterations}
         if planning and planning.get('plan') and needs_policy_planning(user_text):
             target_agent, detected_intents, direct_reply = 'fincrime_agent', ['block_card'], None
+        elif clarified and state.get('geographic_pending_intents'):
+            detected_intents = list(state['geographic_pending_intents'])
+            target_agent, direct_reply = get_target_agent_for_intent(detected_intents[0]), None
         else:
+            interpretation = {}
             target_agent, detected_intents, direct_reply = await self._classify_and_plan(
-                user_text, allowed_tools, state.get("verified_draft", {})
+                user_text, allowed_tools, state.get("verified_draft", {}), interpretation
             )
+
+        from card_chat.policy.geography import declared_country, RequestInterpretation
+        interpreted = RequestInterpretation.model_validate(interpretation) if 'interpretation' in locals() and interpretation else None
+        # The validated declaration is authoritative input. An incomplete or
+        # mistaken model extraction must not erase a country already supplied.
+        country = clarified or state.get('country_context', {})
+        if clarified and interpreted and declared_country(user_text, interpreted) != clarified:
+            emit_agent_trace('geographic_policy', outcome='model_country_conflict', country_code=clarified.code)
+        if hasattr(country, 'model_dump'):
+            country = country.model_dump()
+        state = {**state, 'country_context': country}
+        geo_updates = {'country_context': country}
+        geographic_notice = ''
+        # Explicit replacement language cannot become additional issuance merely
+        # because a model returned a different tool name.
+        if re.search(r'\b(?:replace|replacement|reissue|re-issue)\b', user_text, re.I):
+            if 'create_account' in detected_intents:
+                return {'next_step':'respond', 'proposed_tool':None, 'planned_intents':[],
+                    'final_response':'A replacement request cannot be changed into account creation. Please request replacement separately under its policy controls.'}
+            detected_intents = ['replace_card' if i in ('issue_card', 'create_card') else i for i in detected_intents]
+            detected_intents = list(dict.fromkeys(detected_intents))
+        if ((state.get('geographic_decision') or {}).get('decision') in ('denied', 'unavailable', 'clarification_required')
+                and any(i in ('issue_card', 'create_card') for i in detected_intents)):
+            return {'next_step': 'respond', 'proposed_tool': None, 'planned_intents': [],
+                'final_response': 'A restricted replacement cannot be changed into additional issuance in this workflow. Please contact specialist support.'}
+        original_intents = list(detected_intents)
+        emit_agent_trace('geographic_policy', outcome='intents_classified', intents=original_intents,
+            country_code=country.get('code'), evidence_source='customer_declaration')
+        if 'replace_card' in detected_intents and hasattr(self.policy_evaluator, 'geographic_decision'):
+            from card_chat.policy.geographic_explanation import explain_geographic_decision, safe_query
+            geo, geo_evidence = self.policy_evaluator.geographic_decision(country, state.get('pinned_policies'),
+                safe_query(interpreted.policy_query if interpreted else ''))
+            geographic_notice = await explain_geographic_decision(self.model, geo, geo_evidence)
+            geo_updates.update(geographic_decision=geo.model_dump(), geographic_notice=geographic_notice,
+                geographic_pending_intents=['replace_card'] if geo.decision == 'clarification_required' else [],
+                pinned_policies={**{p.policy_id: p.version for p in geo_evidence}, **state.get('pinned_policies', {})},
+                retrieved_policies=[p.model_dump() for p in geo_evidence])
+            if geo.decision != 'allowed':
+                detected_intents = [i for i in detected_intents if i not in ('replace_card', 'issue_card', 'create_card')]
+                if not detected_intents:
+                    return {**geo_updates, 'next_step': 'respond', 'final_response': geographic_notice,
+                        'proposed_tool': None, 'planned_intents': [], 'pending_customer_question': None,
+                        'action_plan': [{'intent':'replace_card', 'target_agent':'cards_agent',
+                            'status':'denied', 'error':geo.reason_code}]}
+        state = {**state, **geo_updates}
 
         if direct_reply or not detected_intents:
             return {
@@ -457,14 +517,18 @@ class SupervisorAgent:
             }
             for idx, intent in enumerate(detected_intents)
         ]
+        if 'replace_card' in original_intents and 'replace_card' not in detected_intents:
+            action_plan.append({'intent': 'replace_card', 'target_agent': 'cards_agent',
+                'status': 'denied', 'error': (geo_updates.get('geographic_decision') or {}).get('reason_code')})
 
         # 4. Policy Retrieval and Evaluation stage
         facts = await self._retrieve_domain_facts(state, primary_intent)
         eval_result = await self._evaluate_policy(primary_intent, user_text, facts, state)
 
         state_policy_updates = {
-            "retrieved_policies": eval_result.retrieved_policies,
-            "pinned_policies": eval_result.pinned_versions,
+            **geo_updates,
+            "retrieved_policies": geo_updates.get('retrieved_policies', []) + eval_result.retrieved_policies,
+            "pinned_policies": {**eval_result.pinned_versions, **geo_updates.get('pinned_policies', {})},
             "policy_evaluation": eval_result.model_dump(),
             "verified_domain_facts": facts,
         }
@@ -543,6 +607,7 @@ class SupervisorAgent:
         user_text: str,
         allowed_tools: dict[str, Any],
         verified_draft: dict[str, Any],
+        interpretation=None,
     ) -> tuple[str, list[str], str | None]:
         """Classify user intent and detect compound requests using LLM first, with rule fallback."""
         clean_text = user_text.strip()
@@ -599,7 +664,11 @@ class SupervisorAgent:
                     "For compound requests (e.g. 'block my card and reissue a new one'), use block_card then replace_card. "
                     "Reissue means replace_card, not additional card issuance. List all intents in execution order.\n"
                     "If the customer's request is ambiguous or unsupported, set intents to empty list and provide a clarification reply.\n"
-                    "Respond with a JSON object ONLY: {\"intents\": [\"intent1\", ...], \"reply\": null or \"clarification message\"}."
+                    "Also extract explicitly declared current country, proposed ISO alpha-2 code and country_status "
+                    "(explicit, ambiguous, unknown). Do not infer location from account or delivery address. "
+                    "When the customer already states their current country, extract it and continue the requested intent; do not ask for the country again. "
+                    "Generate policy_query using public geographic replacement policy concepts only. "
+                    "Respond with JSON only: intents, reply, declared_country, proposed_country_code, country_status, policy_query."
                 )
                 response = await self.model.client.messages.create(
                     model=self.model.model,
@@ -609,6 +678,10 @@ class SupervisorAgent:
                 )
                 text = "".join(b.text for b in response.content if b.type == "text").strip()
                 data = json.loads(text)
+                from card_chat.policy.geography import RequestInterpretation
+                data = RequestInterpretation.model_validate(data).model_dump()
+                if interpretation is not None:
+                    interpretation.update(data)
                 raw_intents = data.get("intents", [])
                 if isinstance(raw_intents, str):
                     raw_intents = [raw_intents]

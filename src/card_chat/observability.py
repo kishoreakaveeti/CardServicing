@@ -30,7 +30,7 @@ class DiagnosticHandler(logging.Handler):
         supported_events = (
             'model_usage', 'workflow_usage', 'tool_execution',
             'supervisor_decision', 'agent_handoff', 'workflow_transition', 'pii_sanitization',
-            'policy_recommendation', 'policy_planning'
+            'policy_recommendation', 'policy_planning', 'geographic_policy', 'policy_retrieval'
         )
         if event in supported_events and isinstance(fields, dict):
             from card_chat.security import trace

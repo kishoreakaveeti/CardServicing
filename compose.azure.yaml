@@ -66,6 +66,7 @@ services:
       APP_MODULE: card_chat.main:app
       STARTUP_CHECK_URLS: ${AGENT_STARTUP_CHECK_URLS:-http://mcp-server:8000/health http://qdrant:6333/readyz http://identity:9000/health/ready}
       MCP_URL: ${MCP_URL:-http://mcp-server:8000/mcp}
+      CARD_API_BASE_URL: ${CARD_API_BASE_URL:-http://cards-api:8000}
       FINCRIME_AGENT_URL: ${FINCRIME_AGENT_URL:-http://fincrime-agent:8000}
       FINCRIME_API_BASE_URL: ${FINCRIME_API_BASE_URL:-http://fincrime-api:8000}
       MODEL_PROVIDER: ${STACK_MODEL_PROVIDER:-anthropic}
@@ -160,6 +161,7 @@ services:
       SQLITE_PATH: ${SQLITE_PATH:-/data/cards.db}
     volumes:
       - cards_data:/data
+      - ./policies:/app/policies:ro
       - ${IDENTITY_CONFIG_DIR:-./data/identity}/delegation-public.pem:/keys/delegation-public.pem:ro
     healthcheck:
       test: [CMD, python, -c, "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health/ready', timeout=3)"]

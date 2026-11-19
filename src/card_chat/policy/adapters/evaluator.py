@@ -40,8 +40,34 @@ def is_negative(text: str) -> bool:
 class GroundedPolicyEvaluator(PolicyEvaluator):
     """Evaluates retrieved policy rules against verified domain facts and workflow state."""
 
-    def __init__(self, retriever: PolicyRetriever):
+    def __init__(self, retriever: PolicyRetriever, geographic_rules=None):
         self._retriever = retriever
+        from ..geography import FileRulesSource
+        self.geographic_rules = geographic_rules or FileRulesSource()
+
+    def geographic_decision(self, context=None, pinned=None, query=None):
+        from ..geography import evaluate_geography, GeographicDecision
+        from card_chat.observability import emit_agent_trace
+        evidence = []
+        try:
+            # Hybrid retrieval performs a genuine semantic/vector query as well
+            # as mandatory ID/applicability lookup. Raw conversation is excluded.
+            evidence = self._retriever.retrieve('replace_card', {}, query=query or
+                'geographic international card replacement excluded countries eligibility')
+            decision = evaluate_geography(context, self.geographic_rules.load(), evidence,
+                                         (pinned or {}).get('POL-006'))
+        except Exception:
+            decision = GeographicDecision(decision='unavailable', reason_code='geographic_policy_unavailable',
+                explanation='Replacement policy is unavailable. Card blocking remains available; please contact support or try a new request.')
+        decision.evidence_citations = [{'policy_id': p.policy_id, 'version': p.version,
+            'source': p.source, 'section_title': p.section_title, 'content_hash': p.content_hash}
+            for p in evidence if p.policy_id == 'POL-006' and p.mandatory]
+        emit_agent_trace('geographic_policy', country_code=decision.country_code,
+            evidence_source=decision.evidence_source, outcome=decision.decision,
+            reason_code=decision.reason_code, policy_id=decision.policy_id, version=decision.version,
+            artifact_hash=decision.artifact_hash, rule_id=decision.rule_id,
+            retrieved_policy_ids=sorted({p.policy_id for p in evidence}))
+        return decision, evidence
 
     def validate_assistance_plan(self, plan, passages, allowed_tools):
         """An advisory plan grants no tool authority; all writes retain API guards."""
@@ -82,6 +108,21 @@ class GroundedPolicyEvaluator(PolicyEvaluator):
         if isinstance(user_text, dict) and facts is None:
             facts, user_text = user_text, ""
         facts = dict(facts or {})
+        geographic_pending = pending_question or (state or {}).get('pending_customer_question')
+        pending_kind = (geographic_pending.get('question_type') if isinstance(geographic_pending, dict)
+                        else getattr(geographic_pending, 'question_type', None))
+        accepting_replacement = (pending_kind == 'replacement_offer' and
+            is_affirmative(str(user_text)) and not is_negative(str(user_text)))
+        if intent == 'replace_card' or accepting_replacement:
+            geo, geo_evidence = self.geographic_decision(
+                (state or {}).get('country_context') or facts.get('country_context'), pinned_policies)
+            if geo.decision != 'allowed':
+                return PolicyEvaluationResult(permitted=False, prohibited=geo.decision == 'denied',
+                    clarification_required=geo.decision == 'clarification_required',
+                    decision_reason=geo.explanation, geographic_decision=geo.model_dump(),
+                    policy_error='GeographicPolicyUnavailable' if geo.decision == 'unavailable' else None,
+                    retrieved_policies=[p.model_dump() for p in geo_evidence],
+                    pinned_versions={**{p.policy_id: p.version for p in geo_evidence}, **(pinned_policies or {})})
         facts.setdefault("is_temporary_freeze", facts.get("temporary_freeze", False))
         facts.setdefault("is_permanently_compromised", facts.get("compromised", False))
         try:
@@ -94,7 +135,14 @@ class GroundedPolicyEvaluator(PolicyEvaluator):
                 effective_intent = "unblock_card" if kind == "unblock_offer" else "replace_card"
             if (last_domain_event or (state or {}).get("last_domain_event") or facts.get("last_domain_event")) == "card_blocked_success" and not intent:
                 effective_intent = "block_card"
-            evidence = self._retriever.retrieve(effective_intent, facts) if effective_intent else []
+            try:
+                evidence = self._retriever.retrieve(effective_intent, facts) if effective_intent else []
+            except Exception as retrieval_error:
+                if str(retrieval_error).startswith('Approved index missing or stale:'):
+                    raise
+                if effective_intent != 'block_card' or not hasattr(self._retriever, 'retrieve_blocking_controls'):
+                    raise
+                evidence = self._retriever.retrieve_blocking_controls()
             required = {"issue_card": "POL-001", "create_card": "POL-001", "unblock_card": "POL-001",
                         "replace_card": "POL-002", "block_card": "POL-003"}.get(effective_intent)
             if required and required not in {e.policy_id for e in evidence}:
@@ -111,6 +159,8 @@ class GroundedPolicyEvaluator(PolicyEvaluator):
                 # primary policy (e.g. POL-003 offer -> POL-002 replacement).
                 # Revalidate every pinned source, even if semantic search omitted it.
                 for policy_id in pins:
+                    if effective_intent == 'block_card' and policy_id in ('POL-002', 'POL-005', 'POL-006'):
+                        continue  # Replacement version changes never prevent blocking.
                     if policy_id not in {e.policy_id for e in evidence}:
                         current = [e for e in self._retriever.retrieve_mandatory(policy_id=policy_id)
                                    if e.policy_id == policy_id]
@@ -118,6 +168,8 @@ class GroundedPolicyEvaluator(PolicyEvaluator):
                             raise RuntimeError('Pinned approved policy is unavailable')
                         evidence.extend(current)
             for e in evidence:
+                if effective_intent == 'block_card' and e.policy_id in ('POL-002', 'POL-005', 'POL-006'):
+                    continue
                 if e.policy_id in pins and pins[e.policy_id] != e.version:
                     raise RuntimeError(f"Approved policy version changed: {e.policy_id}; restart the workflow")
             if pending and effective_intent == "unblock_card" and facts.get("is_permanently_compromised"):
@@ -128,7 +180,7 @@ class GroundedPolicyEvaluator(PolicyEvaluator):
                                         last_domain_event, pinned_policies, _evidence=evidence, **kwargs)
             if evidence:
                 result.retrieved_policies = [e.model_dump() for e in evidence]
-                result.pinned_versions = {**pins, **{e.policy_id: e.version for e in evidence}}
+                result.pinned_versions = {**{e.policy_id: e.version for e in evidence}, **pins}
                 result.evidence_citations = [{"policy_id": e.policy_id, "version": e.version,
                     "source": e.source, "section_title": e.section_title} for e in evidence]
             return result
@@ -201,7 +253,7 @@ class GroundedPolicyEvaluator(PolicyEvaluator):
         )
 
     def validate_execution(self, tool_name, arguments, facts, state=None):
-        return self.evaluate(tool_name, facts=facts,
+        return self.evaluate(tool_name, facts=facts, state=state,
                              pinned_policies=(state or {}).get('pinned_policies', {}))
 
     def _get_latest_user_message(self, state: dict[str, Any]) -> str:
@@ -294,6 +346,12 @@ class GroundedPolicyEvaluator(PolicyEvaluator):
         )
 
     def _evaluate_post_block(self, facts: dict[str, Any], state: dict[str, Any], evidence=None) -> PolicyEvaluationResult:
+        geo, geographic_evidence = self.geographic_decision(state.get('country_context') or facts.get('country_context'),
+            state.get('pinned_policies'))
+        if geo.decision != 'allowed':
+            return PolicyEvaluationResult(permitted=True, decision_reason=geo.explanation,
+                geographic_decision=geo.model_dump(), recommendation={'action': 'none'},
+                retrieved_policies=[p.model_dump() for p in geographic_evidence])
         evidence = evidence if evidence is not None else self._retriever.retrieve_mandatory(policy_id="POL-003")
         pol3 = next((e for e in evidence if e.policy_id == "POL-003"), None)
         version = pol3.version if pol3 else "1.0.0"

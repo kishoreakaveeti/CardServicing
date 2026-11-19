@@ -30,6 +30,10 @@ class BankingWorkflowState(TypedDict, total=False):
     policy_evaluation: dict[str, Any] | None
     policy_error: str | None
     policy_planning: dict[str, Any] | None
+    country_context: dict[str, Any]
+    geographic_decision: dict[str, Any] | None
+    geographic_notice: str | None
+    geographic_pending_intents: list[str]
 
     # Interactive customer questions and expected responses
     pending_customer_question: dict[str, Any] | None

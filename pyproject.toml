@@ -17,6 +17,7 @@ dependencies = [
     "azure-identity>=1.19,<2",
     "python-dotenv>=1,<2",
     "PyJWT[crypto]>=2.10,<3",
+    "pycountry>=24.6,<27",
 ]
 
 [project.optional-dependencies]

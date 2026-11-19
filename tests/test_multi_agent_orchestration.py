@@ -439,7 +439,9 @@ def test_supervisor_compound_block_and_issue_replacement():
         result = await supervisor.plan_or_route(state)
         assert result["next_step"] == "fincrime_agent"
         assert result["current_handoff"].intent == "block_card"
-        assert result["planned_intents"] == ["issue_card"]
+        assert result["planned_intents"] == []
+        assert any(item['intent'] == 'replace_card' and item['status'] == 'denied'
+                   for item in result['action_plan'])
 
     asyncio.run(scenario())
 

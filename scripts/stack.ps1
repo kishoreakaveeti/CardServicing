@@ -29,6 +29,7 @@ if ($Stop) {
     Invoke-Compose -Arguments ($composeArgs + @('down'))
     exit 0
 }
+$components = @('Experience', 'Cards-Agent', 'FinCrime-Agent', 'MCP-Server', 'Cards-API', 'FinCrime-API')
 $aliasMap = @{
     'Agent' = 'Cards-Agent'
     'MCP' = 'MCP-Server'
@@ -38,7 +39,7 @@ $aliasMap = @{
 if ($aliasMap.ContainsKey($DebugComponent)) {
     $DebugComponent = $aliasMap[$DebugComponent]
 }
-$components = @('Experience', 'Cards-Agent', 'FinCrime-Agent', 'MCP-Server', 'Cards-API', 'FinCrime-API')
+if ($WaitForDebugger -and $DebugComponent -notin $components) { throw '-WaitForDebugger requires one Python component.' }
 foreach ($component in $components) {
     $envKey = $component.Replace('-', '_').ToUpper()
     $enabled = if ($DebugComponent -eq 'All' -or $DebugComponent -eq $component) { '1' } else { '0' }
@@ -46,10 +47,19 @@ foreach ($component in $components) {
     [Environment]::SetEnvironmentVariable("DEBUG_WAIT_$envKey", '0', 'Process')
 }
 if ($DebugComponent -ne 'None') { $composeArgs += @('-f', 'compose.debug.yaml') }
+if ($Build) {
+    Write-Host 'Stage 1/3: building local application images.'
+    Invoke-Compose -Arguments ($composeArgs + @('build'))
+}
+if (-not $WaitForDebugger -or $Build) {
+    Write-Host 'Stage 2/3: starting Qdrant and updating approved policy indexes.'
+    Invoke-Compose -Arguments ($composeArgs + @('up', '-d', '--wait', '--wait-timeout', '120', 'qdrant'))
+    Invoke-Compose -Arguments ($composeArgs + @('run', '--rm', '--no-deps', '--workdir', '/data',
+        '--entrypoint', 'python', 'cards-agent', '-m', 'card_chat.policy.pipeline.cli', 'ingest'))
+    Write-Host 'Policy indexing completed. Stage 3/3: starting application containers.'
+}
 $upArgs = @('up', '-d')
-if ($Build) { $upArgs += '--build' }
 if ($WaitForDebugger) {
-    if ($DebugComponent -notin $components) { throw '-WaitForDebugger requires one Python component.' }
     $envKey = $DebugComponent.Replace('-', '_').ToUpper()
     [Environment]::SetEnvironmentVariable("DEBUG_WAIT_$envKey", '1', 'Process')
     $serviceName = $DebugComponent.ToLower()

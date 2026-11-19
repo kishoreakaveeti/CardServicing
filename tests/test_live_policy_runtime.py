@@ -203,7 +203,7 @@ def test_http_successful_block_offers_replacement(policy_retriever):
     app, gateway = application(policy_retriever, status='active', reason='')
     with TestClient(app) as client:
         cid = client.post('/conversations').json()['id']
-        client.post(f'/conversations/{cid}/messages', json={'text': 'I lost my card, block it'})
+        client.post(f'/conversations/{cid}/messages', json={'text': 'I am in Australia. I lost my card, block it'})
         options = client.get(f'/conversations/{cid}/inputs').json()['tools']
         definition = next(t for t in options if t['name'] == 'block_card')
         card = next(f for f in definition['fields'] if f['name'] == 'card_id')['options'][0]['ref']
@@ -229,7 +229,7 @@ def test_http_combined_review_blocks_then_replaces_without_second_click(policy_r
     with TestClient(app) as client:
         cid = client.post('/conversations').json()['id']
         path = f'/conversations/{cid}'
-        response = client.post(path + '/messages', json={'text': prompt}).json()
+        response = client.post(path + '/messages', json={'text': 'I am in Australia. ' + prompt}).json()
         assert response['input_tool'] == 'block_card', response
         assert checkpoint(client, app, cid)['planned_intents'] == ['replace_card']
         options = client.get(path + '/inputs').json()['tools']
@@ -292,7 +292,7 @@ def test_startup_rejects_missing_or_stale_index(policy_retriever, fault):
         build_runtime_policy_services({}, retriever=policy_retriever)
 
 
-def test_http_confirmation_rechecks_policy_availability(policy_retriever):
+def test_http_block_preserves_security_action_during_vector_outage(policy_retriever):
     app, gateway = application(policy_retriever, status='active', reason='')
     with TestClient(app) as client:
         cid = client.post('/conversations').json()['id']
@@ -305,7 +305,7 @@ def test_http_confirmation_rechecks_policy_availability(policy_retriever):
         policy_retriever._store.search = Mock(side_effect=RuntimeError('Qdrant unavailable'))
         response = client.post(f'/conversations/{cid}/confirm', json={'review': review['review']}).json()
         assert 'unavailable' in response['message']
-        assert not gateway.calls
+        assert [call[0] for call in gateway.calls] == ['block_card']
 
 
 def test_docker_qdrant_fastembed_http_customer_request(policy_retriever, tmp_path):

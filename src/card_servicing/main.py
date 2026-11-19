@@ -54,7 +54,7 @@ def create_app(card_settings: CardSettings | None = None, *,
                 card_store.initialize()
                 if isinstance(card_store, SQLiteCardStore):
                     from card_servicing.banking import BankingService
-                    application.state.banking = BankingService(card_store)
+                    application.state.banking = BankingService(card_store, telemetry=telemetry)
             except StorageUnavailable as exc:
                 telemetry.emit('log', 'card_storage_initialization_failed',
                                level='ERROR', dependency=card_store.dependency_name,

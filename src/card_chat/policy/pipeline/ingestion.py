@@ -145,6 +145,11 @@ class PolicyIngestionPipeline:
             raise ValueError(f"Document {doc.policy_id} is not approved for production enforcement (status={doc.status})")
         if not doc.effective_date:
             raise ValueError(f"Document {doc.policy_id} missing effective_date")
+        if doc.policy_id == 'POL-006' and hasattr(self.source, 'directory'):
+            from ..geography import FileRulesSource
+            rules = FileRulesSource(self.source.directory).load()
+            if doc.version != rules.version or doc.conditions != rules.model_dump(exclude={'policy_id'}):
+                raise ValueError('POL-006 and geographic configuration must be approved and versioned together')
 
     def _record_audit(self, entry: dict[str, Any]) -> None:
         entries: list[dict[str, Any]] = []

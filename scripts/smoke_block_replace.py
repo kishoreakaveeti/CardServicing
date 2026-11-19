@@ -6,9 +6,15 @@ never prints credentials, cookies, account numbers or card identifiers.
 from uuid import uuid4
 import secrets
 import httpx
+import argparse
 
 
 def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('--country', choices=['AU', 'KP', 'KR'], default='AU')
+    args = parser.parse_args()
+    country = {'AU': 'Australia', 'KP': 'North Korea', 'KR': 'South Korea'}[args.country]
+    eligible = args.country != 'KP'
     origin = 'http://localhost:8080'
     with httpx.Client(base_url=origin, timeout=120, headers={'Origin': origin}) as client:
         response = client.post('/auth/register', json={
@@ -30,25 +36,27 @@ def main():
 
         cid = post('/api/conversations', {})['id']
         path = f'/api/conversations/{cid}'
-        proposed = post(path + '/messages', {'text': 'Please block my card and reissue a new one'})
+        proposed = post(path + '/messages', {'text': f'I am currently in {country}. Please block my card and reissue a new one'})
         assert proposed.get('input_tool') == 'block_card', 'Compound request did not prepare blocking'
         options = client.get(path + '/inputs').json()['tools']
         tool = next(t for t in options if t['name'] == 'block_card')
         selection = next(f for f in tool['fields'] if f['name'] == 'card_id')['options'][0]['ref']
         review = post(path + '/inputs', {'tool': 'block_card', 'fields': {'reason': 'lost'},
                       'selections': {'card_id': selection}})
-        assert review['confirmation_label'] == 'Block and replace this card', 'Combined review missing'
+        assert ('and replace' in review['confirmation_label'].lower()) == eligible, 'Geographic confirmation mismatch'
         key = uuid4().hex
         completed = post(path + '/confirm', {'review': review['review']}, key)
         assert not completed['can_confirm'], 'A second action click was required'
-        assert completed['usage']['completed_actions'] == 2, 'Both banking writes did not succeed'
+        assert completed['usage']['completed_actions'] == (2 if eligible else 1), 'Unexpected executed actions'
+        if not eligible:
+            assert 'restricted' in completed['message'].lower(), 'Restriction explanation missing'
         assert post(path + '/confirm', {'review': review['review']}, key) == completed, 'Replay changed'
         options = client.get(path + '/inputs').json()['tools']
         for action in ('block_card', 'replace_card'):
             tool = next(t for t in options if t['name'] == action)
             cards = next(f for f in tool['fields'] if f['name'] == 'card_id')['options']
-            assert len(cards) == 1, 'Expected one blocked original and one active replacement'
-    print('PASS: authenticated block + replacement, one combined confirmation, actual card states and idempotent replay')
+            assert len(cards) == (1 if eligible or action == 'replace_card' else 0), 'Unexpected card states'
+    print(f'PASS: {args.country} authenticated geographic decision, actual card states and idempotent replay')
 
 
 if __name__ == '__main__':

@@ -17,6 +17,7 @@ from starlette.responses import JSONResponse
 delegation = ContextVar('delegation', default=None)
 principal = ContextVar('principal', default=None)
 trace = ContextVar('trace', default=None)
+replacement_context = ContextVar('replacement_context', default=None)
 
 
 class Security:
@@ -107,11 +108,12 @@ def protect(app, config, audience, permission, client, *, customer=True):
                 auth = request.headers.get('Authorization', '')
                 if not auth.startswith('Bearer '):
                     raise HTTPException(401, 'Bearer credentials required')
+                declaration_entry = audience == 'cards' and request.url.path == '/banking/replacement-context'
                 bff_banking = audience == 'cards' and request.url.path.startswith('/banking/') and request.headers.get('X-Banking-BFF') == '1'
                 await asyncio.to_thread(security.verify, auth[7:],
-                    'agent' if bff_banking else audience,
-                    'agent:invoke' if bff_banking else permission,
-                    'experience-service' if bff_banking else client)
+                    'agent' if bff_banking else ('mcp' if declaration_entry else audience),
+                    'agent:invoke' if bff_banking else ('tools:execute' if declaration_entry else permission),
+                    'experience-service' if bff_banking else ('agent-service' if declaration_entry else client))
                 public_entry = audience == 'agent' and request.url.path == '/entry/messages'
                 credential_entry = bff_banking and request.url.path in ('/banking/register', '/banking/login')
                 if request.url.path in ('/banking/register', '/banking/login') and not bff_banking:

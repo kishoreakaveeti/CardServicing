@@ -62,7 +62,16 @@ and `POLICY_COLLECTION` (default `banking_policies`). The ingestion process and
 runtime must use the same values. Docker already sets the persistent service URL
 to `http://qdrant:6333` and mounts the approved policy directory.
 
-Ingest independently before starting the agent, and after approved policy changes:
+The local launcher builds images, starts Qdrant, ingests approved policies and
+then starts the application:
+
+```powershell
+.\scripts\stack.ps1 -Build
+```
+
+Azure deployment also ingests policies automatically. For manual Compose
+operation without the launcher, ingest before starting the agent and after
+approved policy changes:
 
 ```powershell
 docker compose --env-file .env --env-file .env.stack up -d qdrant

@@ -41,6 +41,8 @@ def test_setup(tmp_path):
     cust = {"sub": reg["sub"], "username": "alex", "preferred_username": "alex", "accounts": []}
     acc = banking.create_account(cust, AccountCreate(account_type="savings", issue_card=True), key="init_acc_key")
     cust["accounts"] = [acc["account_number"]]
+    geo = banking.declare_country(cust, uuid4().hex,
+        {'code': 'AU', 'status': 'explicit', 'source': 'customer_declaration'})
 
     cards = banking.cards(cust["sub"])
     assert len(cards) == 1
@@ -66,6 +68,7 @@ def test_setup(tmp_path):
         "db_file": db_file,
         "customer": cust,
         "card": card,
+        "geographic_context": geo,
     }
 
 
@@ -84,7 +87,7 @@ def test_successful_block_and_replacement_workflow(test_setup):
         allowed_tools = {"block_card": {}, "replace_card": {}, "issue_card": {}}
 
         # Initial customer message: compound request
-        history = [{"role": "user", "content": "I've lost my card. Block it and issue a replacement."}]
+        history = [{"role": "user", "content": "I'm in Australia. I've lost my card. Block it and issue a replacement."}]
         collected = {"arguments": {"card_id": card_id, "reason": "lost card"}}
 
         # Turn 1: Supervisor plans compound workflow, FinCrime prepares block_card, pauses for confirmation #1
@@ -143,7 +146,8 @@ def test_successful_block_and_replacement_workflow(test_setup):
 
         # Execute confirmation #2 in trusted execution layer (Cards API)
         replace_result = banking.replace_card(
-            cust, card_id, key="idempotency_key_1", reason="lost card replacement"
+            cust, card_id, key="idempotency_key_1", reason="lost card replacement",
+            geographic_context=test_setup['geographic_context']
         )
         assert replace_result.outcome == "replacement_created"
         assert str(replace_result.id) != card_id
@@ -188,7 +192,7 @@ def test_customer_rejects_first_confirmation(test_setup):
         allowed_tools = {"block_card": {}, "replace_card": {}}
 
         turn1 = await orch.interpret_turn(
-            history=[{"role": "user", "content": "Lost card, block and replace"}],
+            history=[{"role": "user", "content": "I am in Australia. Lost card, block and replace"}],
             collected={"arguments": {"card_id": card_id}},
             allowed_tools=allowed_tools,
             thread_id=thread_id,
@@ -230,7 +234,7 @@ def test_customer_rejects_second_confirmation(test_setup):
         allowed_tools = {"block_card": {}, "replace_card": {}}
 
         await orch.interpret_turn(
-            history=[{"role": "user", "content": "Lost card, block and replace"}],
+            history=[{"role": "user", "content": "I am in Australia. Lost card, block and replace"}],
             collected={"arguments": {"card_id": card_id}},
             allowed_tools=allowed_tools,
             thread_id=thread_id,
@@ -285,7 +289,7 @@ def test_fincrime_blocking_fails(test_setup):
         allowed_tools = {"block_card": {}, "replace_card": {}}
 
         await orch.interpret_turn(
-            history=[{"role": "user", "content": "Lost card, block and replace"}],
+            history=[{"role": "user", "content": "I am in Australia. Lost card, block and replace"}],
             collected={"arguments": {"card_id": card_id}},
             allowed_tools=allowed_tools,
             thread_id=thread_id,
@@ -332,7 +336,7 @@ def test_replacement_eligibility_fails_after_successful_blocking(test_setup):
         allowed_tools = {"block_card": {}, "replace_card": {}}
 
         await orch.interpret_turn(
-            history=[{"role": "user", "content": "Lost card, block and replace"}],
+            history=[{"role": "user", "content": "I am in Australia. Lost card, block and replace"}],
             collected={"arguments": {"card_id": card_id}},
             allowed_tools=allowed_tools,
             thread_id=thread_id,
@@ -387,13 +391,13 @@ def test_duplicate_confirmation_and_retry(test_setup):
 
     # First execution with idempotency key
     key = "idem_key_replace_123"
-    res1, replayed1 = banking.replace_card(cust, card_id, key=key, reason="lost", with_replay=True)
+    res1, replayed1 = banking.replace_card(cust, card_id, key=key, reason="lost", with_replay=True, geographic_context=test_setup['geographic_context'])
     assert res1.outcome == "replacement_created"
     assert replayed1 is False
     new_card_id = res1.id
 
     # Duplicate submission with same idempotency key
-    res2, replayed2 = banking.replace_card(cust, card_id, key=key, reason="lost", with_replay=True)
+    res2, replayed2 = banking.replace_card(cust, card_id, key=key, reason="lost", with_replay=True, geographic_context=test_setup['geographic_context'])
     assert res2.outcome == "replacement_created"
     assert replayed2 is True
     assert res2.id == new_card_id  # Returns identical existing replacement, never duplicates!
@@ -427,7 +431,7 @@ def test_restart_and_resume_across_process(tmp_path):
             checkpointer=saver1,
         )
         turn = await orch1.interpret_turn(
-            history=[{"role": "user", "content": "Lost my card, block and replace"}],
+            history=[{"role": "user", "content": "I am in Australia. Lost my card, block and replace"}],
             collected={"arguments": {"card_id": card_id}},
             allowed_tools={"block_card": {}, "replace_card": {}},
             thread_id=thread_id,
@@ -481,7 +485,7 @@ def test_unauthorized_and_cross_session_access(test_setup):
 
         # Alex starts a compound workflow
         await orch.interpret_turn(
-            history=[{"role": "user", "content": "Lost my card, block and replace"}],
+            history=[{"role": "user", "content": "I am in Australia. Lost my card, block and replace"}],
             collected={"arguments": {"card_id": str(card.id)}},
             allowed_tools={"block_card": {}, "replace_card": {}},
             thread_id=thread_id,
@@ -565,7 +569,7 @@ def test_replace_card_mcp_catalogue_and_schema_validation(test_setup):
     banking.block_card(cust, card.id, reason="lost card")
 
     # Replace card
-    replace_result = banking.replace_card(cust, card.id, key="replace_key_1", reason="lost card")
+    replace_result = banking.replace_card(cust, card.id, key="replace_key_1", reason="lost card", geographic_context=test_setup['geographic_context'])
     assert replace_result.outcome == "replacement_created"
 
     # Validate response against OpenAPI schema

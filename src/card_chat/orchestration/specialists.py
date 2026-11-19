@@ -122,31 +122,31 @@ class CardsSpecialistNode:
                     "next_step": "supervisor",
                 }
 
-        # Deterministic replace_card proposal if card_id is known and model has no queued outputs
-        if intent == "replace_card" and (_is_unconfigured_stub(self.agent)
-                or state.get('last_domain_event') == 'card_blocked_success'):
+        # The supervisor has classified replacement and checked its policies.
+        # Prepare its existing secure form directly; another model turn must not
+        # ask again for a country that was already supplied and validated.
+        if intent == "replace_card":
             target_card_id = (
                 context_arguments.get("card_id")
                 or verified_draft.get("arguments", {}).get("card_id")
                 or state.get("verified_domain_facts", {}).get("blocked_card_id")
                 or (handoff.relevant_context.get("card_id") if handoff and handoff.relevant_context else None)
             )
-            if target_card_id:
-                reason_val = context_arguments.get("reason") or "lost card replacement"
-                tool_args = {"card_id": target_card_id, "reason": reason_val}
-                result = HandoffResult(
-                    source_agent=self.name,
-                    status="requires_confirmation",
-                    message="I have prepared replace_card for your review.",
-                    tool_proposal={"name": "replace_card", "arguments": tool_args},
-                )
-                history = list(state.get("handoff_history", [])) + [result]
-                return {
-                    "handoff_history": history,
-                    "active_agent": self.name,
-                    "proposed_tool": {"name": "replace_card", "arguments": tool_args},
-                    "next_step": "supervisor",
-                }
+            reason_val = context_arguments.get("reason") or "lost card replacement"
+            tool_args = {**({'card_id': target_card_id} if target_card_id else {}), 'reason': reason_val}
+            result = HandoffResult(
+                source_agent=self.name,
+                status="requires_confirmation",
+                message="I have prepared replace_card for your review.",
+                tool_proposal={"name": "replace_card", "arguments": tool_args},
+            )
+            history = list(state.get("handoff_history", [])) + [result]
+            return {
+                "handoff_history": history,
+                "active_agent": self.name,
+                "proposed_tool": {"name": "replace_card", "arguments": tool_args},
+                "next_step": "supervisor",
+            }
 
 
         try:

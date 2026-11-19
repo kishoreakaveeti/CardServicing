@@ -98,7 +98,9 @@ def build_policy_evaluator(
         config = retriever
         retriever = kwargs.get("retriever")
     r = retriever or kwargs.get("retriever") or build_policy_retriever(config=config)
-    return GroundedPolicyEvaluator(retriever=r)
+    from .geography import FileRulesSource
+    return GroundedPolicyEvaluator(retriever=r, geographic_rules=kwargs.get('geographic_rules') or
+        FileRulesSource((config or {}).get('POLICIES_DIR')))
 
 
 def build_policy_pipeline(
@@ -146,4 +148,4 @@ def build_runtime_policy_services(config: dict[str, Any], *, retriever=None):
             retriever.check_ready()
         except Exception as exc:
             raise RuntimeError("Approved policy index unavailable; run the independent policy ingestion pipeline") from exc
-    return retriever, build_policy_evaluator(retriever=retriever)
+    return retriever, build_policy_evaluator(retriever=retriever, config=config)

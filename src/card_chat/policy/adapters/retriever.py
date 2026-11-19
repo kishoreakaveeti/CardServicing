@@ -57,7 +57,24 @@ class HybridPolicyRetriever(PolicyRetriever):
         if missing:
             raise RuntimeError(f"Missing mandatory approved policies: {sorted(missing)}")
         for doc in documents:
-            self._verify_indexed(doc)
+            if doc.policy_id != 'POL-006':
+                self._verify_indexed(doc)
+
+    def retrieve_blocking_controls(self):
+        """Local approved mandatory fallback only for protective card blocking.
+
+        Geographic/vector outages must not disable security actions. All ownership,
+        authorization and confirmation checks remain in their existing layers.
+        """
+        documents = [d for d in self._doc_source.list_documents(approved_only=True)
+                     if d.policy_id in ('POL-003', 'POL-004') and d.approved and d.status == 'approved']
+        if len(documents) != 2 or len({d.policy_id for d in documents}) != 2:
+            raise RuntimeError('Approved mandatory blocking controls unavailable')
+        return [PolicyEvidence(policy_id=d.policy_id, version=d.version, title=d.title,
+            section_title='Mandatory Document Rules', content=d.raw_content[:4000],
+            source=d.source, content_hash=d.content_hash, mandatory=True, conditions=d.conditions,
+            restrictions=d.restrictions, required_actions=d.required_actions)
+            for d in documents]
 
     def get_document(self, policy_id: str, version: str | None = None) -> Any | None:
         """Retrieve the authoritative policy document model by ID and optional version."""
@@ -100,6 +117,7 @@ class HybridPolicyRetriever(PolicyRetriever):
                         section_title="Mandatory Document Rules",
                         content=doc.raw_content[:4000],
                         source=doc.source,
+                        content_hash=doc.content_hash,
                         score=1.0,
                         mandatory=True,
                         effective_date=doc.effective_date,
@@ -149,6 +167,10 @@ class HybridPolicyRetriever(PolicyRetriever):
         try:
             query_vec = self._embedder.embed_query(search_query)
             search_results = self._store.search(query_vec, limit=limit, score_threshold=0.1)
+            from card_chat.observability import emit_agent_trace
+            from ..geographic_explanation import safe_query
+            emit_agent_trace('policy_retrieval', query=safe_query(search_query), backend=type(self._store).__name__,
+                outcome='vector_search_completed', result_count=len(search_results))
             active = {d.policy_id: d for d in self._active_documents()}
 
             for hit in search_results:
@@ -173,6 +195,7 @@ class HybridPolicyRetriever(PolicyRetriever):
                         section_title=chunk.title,
                         content=chunk.content,
                         source=chunk.source,
+                        content_hash=meta.get('content_hash', ''),
                         score=hit.score,
                         mandatory=False,
                         effective_date=meta.get("effective_date", ""),

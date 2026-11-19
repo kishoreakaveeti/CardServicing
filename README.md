@@ -9,6 +9,9 @@ A production-grade, chat-first banking simulation demonstrating **LangGraph + La
 
 ## Key Features
 
+Geographic replacement restrictions, local validation and Azure update commands:
+[geographic replacement demonstration](docs/geographic-replacement-policy-demo.md).
+
 Live policy RAG setup, ingestion and integration verification are documented in
 [Live policy runtime](docs/live-policy-runtime.md).
 
@@ -214,7 +217,10 @@ And ensure your `ANTHROPIC_API_KEY` is present in `.env`.
 ```powershell
 .\scripts\stack.ps1 -Build
 ```
-*(Or via direct Compose: `docker compose -f compose.yaml up --build -d`)*
+This builds the images, starts Qdrant, indexes approved policies and then starts
+the application. Indexing failures stop startup. Ordinary `stack.ps1` startup
+also refreshes indexes; attaching to one component with `-WaitForDebugger`
+leaves indexes alone unless `-Build` is supplied.
 
 Once started, open **http://localhost:8080** in your browser.
 

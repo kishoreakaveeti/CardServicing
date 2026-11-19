@@ -41,6 +41,12 @@ class Conversation:
     submission: dict | None = None
     bindings: dict = field(default_factory=dict)
     compound_approval: dict | None = None
+    country_context: dict = field(default_factory=dict)
+    country_required: bool = False
+    geographic_binding: dict | None = None
+    geographic_pin: str | None = None
+    geographic_hash: str | None = None
+    geographic_notice: str = ''
     usage: dict = field(default_factory=lambda: {key: 0 for key in ('model_calls', 'input_tokens',
         'output_tokens', 'cache_read_input_tokens', 'cache_creation_input_tokens', 'completed_actions')})
     lock: asyncio.Lock = field(default_factory=asyncio.Lock)
@@ -246,22 +252,72 @@ def create_app(model=None, gateway=None, *, config=None, policy_retriever=None):
         return {'message': text, 'review': c.review, 'can_confirm': can_confirm,
                 'confirmation_label': ('Block and replace this card' if spec and spec.name == 'block_card' and c.compound_approval
                                        else (spec.entry.confirmation_label or spec.entry.label) if spec else None),
-                'usage': dict(c.usage), 'input_tool': input_tool}
+                'usage': dict(c.usage), 'input_tool': input_tool, 'country_required': c.country_required}
 
     async def review_compound(cid, c):
         c.compound_approval = None
+        notice = ''
+        if c.proposal and c.proposal.name == 'block_card':
+            snapshot = await app.state.orchestrator.workflow.aget_state(
+                {'configurable': {'thread_id': f'{owner()}:{cid}'}})
+            notice = snapshot.values.get('geographic_notice') or ''
+            c.country_required = (snapshot.values.get('geographic_decision') or {}).get('decision') == 'clarification_required'
         if not c.proposal or c.proposal.name != 'block_card' or 'replace_card' not in permitted():
             return ''
         snapshot = await app.state.orchestrator.workflow.aget_state(
             {'configurable': {'thread_id': f'{owner()}:{cid}'}})
         if snapshot.values.get('planned_intents') != ['replace_card']:
-            return ''
+            return notice
+        decision = await geographic_review(cid, c)
+        if decision.decision != 'allowed':
+            return decision.explanation
         c.compound_approval = {'card_id': c.proposal.arguments['card_id'],
                                'replacement_reason': 'Customer requested replacement', 'status': 'reviewed'}
         return ' This confirmation also authorizes issuing a replacement for this same card after blocking succeeds.'
 
+    async def geographic_review(cid, c):
+        snapshot = await app.state.orchestrator.workflow.aget_state(
+            {'configurable': {'thread_id': f'{owner()}:{cid}'}})
+        c.geographic_pin = c.geographic_pin or snapshot.values.get('pinned_policies', {}).get('POL-006')
+        decision, evidence = app.state.policy_evaluator.geographic_decision(c.country_context,
+            {'POL-006': c.geographic_pin} if c.geographic_pin else {})
+        c.country_required = decision.decision == 'clarification_required'
+        if decision.version and not c.geographic_pin:
+            c.geographic_pin = decision.version
+        if decision.decision == 'allowed':
+            if c.geographic_hash and c.geographic_hash != decision.artifact_hash:
+                from card_chat.policy.geography import GeographicDecision
+                return GeographicDecision(decision='unavailable', reason_code='geographic_policy_content_changed',
+                    explanation='Replacement policy content changed. Please start a new conversation.')
+            c.geographic_hash = decision.artifact_hash
+        c.geographic_notice = decision.explanation if decision.decision != 'allowed' else ''
+        if decision.decision == 'allowed' and c.geographic_binding is None:
+            method = getattr(app.state.gateway, 'declare_country', None)
+            if callable(method):
+                try:
+                    c.geographic_binding = await method(cid, c.country_context)
+                    if (c.geographic_binding.get('policy_version') != decision.version or
+                            c.geographic_binding.get('artifact_hash') != decision.artifact_hash):
+                        raise ValueError('Policy version conflict')
+                except Exception:
+                    c.geographic_binding = None
+                    from card_chat.policy.geography import GeographicDecision
+                    return GeographicDecision(decision='unavailable', reason_code='country_binding_unavailable',
+                        explanation='Replacement country review is unavailable. Card blocking remains available.')
+        if (decision.decision == 'allowed' and c.geographic_binding and
+                (c.geographic_binding.get('policy_version') != decision.version or
+                 c.geographic_binding.get('artifact_hash') != decision.artifact_hash)):
+            from card_chat.policy.geography import GeographicDecision
+            return GeographicDecision(decision='unavailable', reason_code='country_binding_version_changed',
+                explanation='Replacement policy changed. Please start a new conversation.')
+        return decision
+
     async def execute(cid, c):
         proposal = c.proposal
+        if proposal.name == 'replace_card':
+            decision = await geographic_review(cid, c)
+            if decision.decision != 'allowed':
+                return reply(c, decision.explanation)
         spec = app.state.gateway.catalogue[proposal.name]
         if proposal.name not in permitted():
             raise HTTPException(403, 'Action is not permitted')
@@ -280,6 +336,9 @@ def create_app(model=None, gateway=None, *, config=None, policy_retriever=None):
         if proposal.name in ('issue_card', 'create_card', 'replace_card', 'block_card', 'unblock_card'):
             graph_config = {'configurable': {'thread_id': f'{owner()}:{cid}'}}
             snapshot = await app.state.orchestrator.workflow.aget_state(graph_config)
+            snapshot_state = {**snapshot.values, 'country_context': c.country_context,
+                'pinned_policies': {**snapshot.values.get('pinned_policies', {}),
+                    **({'POL-006': c.geographic_pin} if c.geographic_pin else {})}}
             facts = await app.state.facts_retriever(proposal.arguments.get('account_number'), state=snapshot.values)
             card_id = proposal.arguments.get('card_id')
             for card in caller().get('cards', []):
@@ -287,7 +346,7 @@ def create_app(model=None, gateway=None, *, config=None, policy_retriever=None):
                     facts = await app.state.facts_retriever(card.get('account_number'), state=snapshot.values)
                     break
             decision = app.state.policy_evaluator.validate_execution(
-                proposal.name, proposal.arguments, facts, snapshot.values)
+                proposal.name, proposal.arguments, facts, snapshot_state)
             if not decision.permitted:
                 return reply(c, decision.decision_reason)
         if c.submission is None:
@@ -313,14 +372,17 @@ def create_app(model=None, gateway=None, *, config=None, policy_retriever=None):
                 calling_agent = 'fincrime_agent'
             else:
                 calling_agent = 'cards_agent'
+            from card_chat.security import replacement_context
+            token = replacement_context.set(c.geographic_binding)
             try:
-                result = await app.state.gateway.execute(
-                    submission['tool'], submission['arguments'], submission['key'], agent=calling_agent
-                )
-            except TypeError:
-                result = await app.state.gateway.execute(
-                    submission['tool'], submission['arguments'], submission['key']
-                )
+                try:
+                    result = await app.state.gateway.execute(
+                        submission['tool'], submission['arguments'], submission['key'], agent=calling_agent)
+                except TypeError:
+                    result = await app.state.gateway.execute(
+                        submission['tool'], submission['arguments'], submission['key'])
+            finally:
+                replacement_context.reset(token)
             if result.get('ok') is not True:
                 error = result.get('error', 'Execution failed.')
                 if not isinstance(error, str) or sanitise(error, private_values(c)) != error:
@@ -404,6 +466,10 @@ def create_app(model=None, gateway=None, *, config=None, policy_retriever=None):
                 return response
 
             if isinstance(resumed_turn, CustomerReply) and resumed_turn.text and resumed_turn.text != text:
+                snapshot = await app.state.orchestrator.workflow.aget_state(
+                    {'configurable': {'thread_id': f'{owner()}:{cid}'}})
+                geo = (snapshot.values.get('policy_evaluation') or {}).get('geographic_decision') or snapshot.values.get('geographic_decision') or {}
+                c.country_required = geo.get('decision') == 'clarification_required'
                 if issuance_outcome != 'already_exists':
                     text = resumed_turn.text if resumed_turn.text.startswith(text) else f"{text} {resumed_turn.text}"
 
@@ -487,6 +553,34 @@ def create_app(model=None, gateway=None, *, config=None, policy_retriever=None):
                     c.history.append({'role': 'user', 'content': safe_text, 'kind': 'chat'})
                     return reply(c, PRIVATE_NOTICE)
             c.history.append({'role': 'user', 'content': safe_text, 'kind': 'chat'})
+            from card_chat.policy.geography import declared_country
+            country = declared_country(safe_text)
+            if country is not None:
+                continuing_country_form = c.country_required
+                c.country_required = country.status != 'explicit'
+                c.country_context = country.model_dump()
+                c.geographic_binding = None
+                method = getattr(app.state.gateway, 'declare_country', None)
+                if callable(method):
+                    try:
+                        c.geographic_binding = await method(cid, c.country_context)
+                    except Exception:
+                        c.geographic_binding = None
+                from card_chat.policy.geography import normalize_country
+                if continuing_country_form:
+                    pending_intents = (['block_card', 'replace_card'] if c.draft.get('tool') == 'block_card'
+                                       else ['replace_card'])
+                    await app.state.orchestrator.workflow.aupdate_state(
+                        {'configurable': {'thread_id': f'{owner()}:{cid}'}},
+                        {'country_context': c.country_context, 'geographic_pending_intents': pending_intents},
+                        as_node='supervisor')
+                if normalize_country(safe_text.strip().rstrip('.!')):
+                    graph_config = {'configurable': {'thread_id': f'{owner()}:{cid}'}}
+                    snapshot = await app.state.orchestrator.workflow.aget_state(graph_config)
+                    if not snapshot.values.get('geographic_pending_intents'):
+                        await app.state.orchestrator.workflow.aupdate_state(graph_config,
+                            {'country_context': c.country_context}, as_node='supervisor')
+                        return reply(c, 'Your current country declaration is recorded as unverified. What would you like to do with your card?')
             if ambiguous_old_reference(safe_text):
                 return reply(c, 'Please select the intended account or details again in the secure form; I cannot safely infer an older selection.')
             catalogue = permitted()
@@ -511,7 +605,8 @@ def create_app(model=None, gateway=None, *, config=None, policy_retriever=None):
             try:
                 turn = await app.state.agent.interpret_turn(
                     history, draft, tools,
-                    thread_id=f"{owner()}:{cid}", owner=owner(), session_id=cid
+                    thread_id=f"{owner()}:{cid}", owner=owner(), session_id=cid,
+                    country_context=c.country_context
                 )
             except Exception as exc:
                 logger.exception("Language service / interpret_turn failed: %s", exc)
@@ -523,6 +618,9 @@ def create_app(model=None, gateway=None, *, config=None, policy_retriever=None):
             if turn is None:
                 return reply(c, 'The language service is unavailable or proposed an invalid action. Please try again.')
             if isinstance(turn, CustomerReply):
+                snapshot = await app.state.orchestrator.workflow.aget_state(
+                    {'configurable': {'thread_id': f'{owner()}:{cid}'}})
+                c.country_required = (snapshot.values.get('geographic_decision') or {}).get('decision') == 'clarification_required'
                 # Numeric policy identifiers resemble private PINs to the conservative
                 # chat scrubber. Keep exact citations in graph state and render names.
                 text = turn.text
@@ -535,6 +633,9 @@ def create_app(model=None, gateway=None, *, config=None, policy_retriever=None):
             graph_config = {'configurable': {'thread_id': f'{owner()}:{cid}'}}
             snapshot = await app.state.orchestrator.workflow.aget_state(graph_config)
             decision = snapshot.values.get('policy_evaluation', {})
+            if (turn.name in ('issue_card', 'create_card') and
+                    any(item.get('intent') == 'replace_card' for item in snapshot.values.get('action_plan', []))):
+                return reply(c, 'A replacement request cannot be changed into additional issuance. Please request replacement under its policy controls.')
             if decision.get('customer_decision') == 'accept' and decision.get('recommended_intent') == turn.name:
                 # Only the evaluator's verified target may become a new selection.
                 # Ordinary model-supplied raw identifiers still fail resolution.
@@ -593,6 +694,11 @@ def create_app(model=None, gateway=None, *, config=None, policy_retriever=None):
                 return reply(c, 'Please supply private details using the secure action form and use its current selection.',
                              input_tool=turn.name)
             c.draft = {'tool': turn.name, 'arguments': proposal_arguments}
+            if turn.name == 'replace_card':
+                decision = await geographic_review(cid, c)
+                if decision.decision != 'allowed':
+                    c.proposal, c.review = None, None
+                    return reply(c, decision.explanation)
             c.proposal = ProposedToolCall(turn.name, arguments)
             if spec.entry.confirmation == 'none':
                 response = await execute(cid, c)
@@ -669,6 +775,11 @@ def create_app(model=None, gateway=None, *, config=None, policy_retriever=None):
         except ValueError:
             raise HTTPException(422, 'Structured details or selections are invalid') from None
         c.proposal = ProposedToolCall(body.tool, arguments)
+        if body.tool == 'replace_card':
+            decision = await geographic_review(cid, c)
+            if decision.decision != 'allowed':
+                c.proposal, c.review = None, None
+                return reply(c, decision.explanation)
         if spec.entry.confirmation == 'none':
             result = await execute(cid, c)
             c.proposal, c.submission, c.review, c.draft = None, None, None, {}

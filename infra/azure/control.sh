@@ -23,6 +23,7 @@ case "${1:-}" in
         # Verify actual Nginx envsubst configuration before publishing a proxy.
         "${app[@]}" run --rm --no-deps frontend sh -c '/docker-entrypoint.d/20-envsubst-on-templates.sh && nginx -t'
         "${app[@]}" up -d --wait --wait-timeout 360 identity qdrant
+        echo 'Updating approved policy indexes in Qdrant before starting the application.'
         "${app[@]}" run --rm --no-deps --workdir /data --entrypoint python cards-agent -m card_chat.policy.pipeline.cli ingest
         # Runtime source, environment and bind paths can change between releases.
         "${app[@]}" up -d --force-recreate --wait --wait-timeout 600

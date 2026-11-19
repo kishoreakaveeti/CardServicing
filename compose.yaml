@@ -62,6 +62,7 @@ services:
       <<: [*oidc, *telemetry]
       APP_MODULE: card_chat.main:app
       MCP_URL: http://mcp-server:8000/mcp
+      CARD_API_BASE_URL: http://cards-api:8000
       FINCRIME_AGENT_URL: http://fincrime-agent:8000
       FINCRIME_API_BASE_URL: http://fincrime-api:8000
       MODEL_PROVIDER: ${STACK_MODEL_PROVIDER:-stub}
@@ -158,6 +159,7 @@ services:
       SQLITE_PATH: /data/cards.db
     volumes:
       - cards_data:/data
+      - ./policies:/app/policies:ro
       - ./data/identity/delegation-public.pem:/keys/delegation-public.pem:ro
     depends_on:
       mongodb: {condition: service_healthy}

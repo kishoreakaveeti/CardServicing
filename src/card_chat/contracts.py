@@ -45,6 +45,7 @@ class InputOptions(BaseModel):
 
 class Reply(BaseModel):
     message: str
+    country_required: bool = False
     review: str | None = None
     can_confirm: bool = False
     confirmation_label: str | None = None

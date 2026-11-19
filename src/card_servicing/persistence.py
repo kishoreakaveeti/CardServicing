@@ -175,12 +175,14 @@ class SQLiteCardStore:
             return result, replayed
 
     @storage_operation
-    def replace_idempotent(self, card_id, key, *, customer_id=None):
+    def replace_idempotent(self, card_id, key, *, customer_id=None, authorize=None):
         if not self.ready:
             self.initialize()
         identity = f"replace:{card_id}"
         with closing(self.connect()) as db, db:
             db.execute('BEGIN IMMEDIATE')
+            if authorize:
+                authorize(db)  # Same transaction as issuance: no declaration race.
             db.row_factory = sqlite3.Row
             target_row = db.execute('SELECT * FROM cards WHERE id=? OR card_number=?', (str(card_id), str(card_id))).fetchone()
             if not target_row:

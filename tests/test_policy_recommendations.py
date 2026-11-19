@@ -123,6 +123,9 @@ def application(retriever, model):
 
 
 def block_review(client, cid, reason='temporary freeze', tool='block_card'):
+    saved = client.app.state.journal.load(cid, 'isolated-test')
+    if not saved.get('country_context'):
+        client.post(f'/conversations/{cid}/messages', json={'text':'Australia'})
     path = '/conversations/'+cid
     options = client.get(path+'/inputs').json()['tools']
     definition = next(t for t in options if t['name']==tool)
@@ -354,6 +357,6 @@ def test_offer_policy_pin_is_rechecked_even_when_not_a_semantic_hit(policy_retri
     # does not depend on a coincidental semantic result.
     original=policy_retriever.retrieve
     policy_retriever.retrieve=lambda *a,**kw:[e for e in original(*a,**kw) if e.policy_id!='POL-003']
-    decision=evaluator.validate_execution('replace_card',{}, {'has_blocked_card':True},
+    decision=evaluator.validate_execution('replace_card',{}, {'has_blocked_card':True, 'country_context':{'code':'AU','status':'explicit'}},
                                            {'pinned_policies':{'POL-003':'1.0.0'}})
     assert not decision.permitted and decision.policy_error=='PolicyRetrievalUnavailable'

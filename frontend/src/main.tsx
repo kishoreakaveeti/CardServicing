@@ -10,6 +10,7 @@ type Reply = {
   can_confirm: boolean;
   confirmation_label: string | null;
   input_tool?: string | null;
+  country_required?: boolean;
   data?: {
     accounts?: { account_number: string; account_type: string }[];
     cards?: { id: string; account_number: string; card_number: string; status?: string }[];
@@ -28,6 +29,7 @@ function App() {
   const [messages, setMessages] = useState<string[]>([]);
   const [reply, setReply] = useState<Reply | null>(null);
   const [text, setText] = useState('');
+  const [country, setCountry] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [pending, setPending] = useState<Pending | null>(null);
@@ -48,6 +50,7 @@ function App() {
   const dataRef = useRef<HTMLElement | null>(null);
   const chatEndRef = useRef<HTMLDivElement | null>(null);
   const usernameInputRef = useRef<HTMLInputElement | null>(null);
+  const countryInputRef = useRef<HTMLInputElement | null>(null);
 
   // Standard scroll-into-view helper
   const scrollTo = (el: HTMLElement | null) => {
@@ -73,6 +76,13 @@ function App() {
   }, [showInputs, tool]);
 
   useEffect(() => {
+    if (reply?.country_required && !busy) {
+      scrollTo(countryInputRef.current);
+      countryInputRef.current?.focus();
+    }
+  }, [reply?.country_required, busy]);
+
+  useEffect(() => {
     if (reply?.can_confirm && reviewRef.current) {
       scrollTo(reviewRef.current);
     } else if ((reply?.data?.cards || reply?.data?.accounts) && dataRef.current) {
@@ -93,6 +103,7 @@ function App() {
     let active = true;
     setValues({});
     setTools([]);
+    setCountry('');
     setTool('');
     setShowInputs(false);
     if (cid) {
@@ -163,6 +174,20 @@ function App() {
         value = await response.json();
       }
 
+      // A banking action can change which cards are eligible without changing
+      // the conversation ID. Refresh signed, server-generated selections before
+      // displaying the next form (especially block -> country -> replacement).
+      if (session && cid && !value.id) {
+        const options = await fetch(`/api/conversations/${cid}/inputs`, { cache: 'no-store' });
+        if (!options.ok) {
+          setTools([]);
+          setShowInputs(false);
+          throw new Error('Card choices could not be refreshed. Retry the same submission.');
+        }
+        const data: { tools: InputTool[] } = await options.json();
+        setTools(data.tools);
+      }
+
       if (value.id) {
         setCid(value.id);
         setMessages([value.message]);
@@ -224,6 +249,13 @@ function App() {
   function confirm() {
     if (!reply?.review || busy || pending) return;
     void request({ path: `/api/conversations/${cid}/confirm`, body: { review: reply.review }, key: crypto.randomUUID() });
+  }
+
+  function supplyCountry(e: React.FormEvent) {
+    e.preventDefault();
+    if (!country.trim() || busy || pending || !cid) return;
+    void request({ path: `/api/conversations/${cid}/messages`,
+      body: { text: country.trim() }, key: crypto.randomUUID() });
   }
 
   function supply(e: React.FormEvent) {
@@ -434,6 +466,20 @@ function App() {
               <p>Describe what you need. Keep account numbers and other private details out of chat.</p>
               <button disabled={busy || !!pending || !text.trim()}>Send message</button>
             </form>
+          )}
+
+          {cid && reply?.country_required && (
+            <aside aria-label="Current country">
+              <h2>Which country are you currently in?</h2>
+              <form onSubmit={supplyCountry}>
+                <label htmlFor="current-country">Current country</label>
+                <input id="current-country" ref={countryInputRef} value={country} onChange={e => setCountry(e.target.value)}
+                  placeholder="For example: Australia" autoComplete="country-name" maxLength={100}
+                  required disabled={busy || !!pending} />
+                <p>We’ll use your declared country to check replacement availability. You’ll still review and confirm any eligible replacement.</p>
+                <button disabled={busy || !!pending || !country.trim()}>Continue with country</button>
+              </form>
+            </aside>
           )}
 
           {cid && showInputs && tools.some(item => item.name === tool) && (

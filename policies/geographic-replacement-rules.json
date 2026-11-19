@@ -1,0 +1,8 @@
+{
+  "policy_id": "POL-006",
+  "version": "1.0.0",
+  "country_basis": "declared_current_location",
+  "excluded_country_codes": ["KP"],
+  "on_unknown_country": "require_clarification",
+  "allow_security_card_block": true
+}
