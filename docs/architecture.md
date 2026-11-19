@@ -2,6 +2,8 @@
 
 This document and its embedded diagrams are maintained manually. CI does not generate or update them.
 
+The [conversational card block and replacement walkthrough](card-block-and-replacement-walkthrough.md) provides a comprehensive, step-by-step presentation guide with flowcharts, sequence diagrams, prompts, and code links for audience walkthroughs.
+
 The [overseas lost-card planning flow](overseas-policy-planning.md) extends the
 same graph with model-generated policy search and a cited ordered plan. Card
 blocking retains the existing MCP/API security boundary; assistance checks are
@@ -65,7 +67,7 @@ The system supports multi-agent coordination between the **Card Servicing Agent*
 ```mermaid
 sequenceDiagram
     autonumber
-    actor Customer as React UI / Customer
+    actor Customer as React UI and Customer
     participant BFF as Experience BFF
     participant PII as Presidio PII Gateway
     participant Vault as Token Vault
@@ -75,86 +77,85 @@ sequenceDiagram
     participant MCP as MCP Streamable HTTP
     participant FinCrimeAPI as FinCrime Service API
     participant CardsAPI as Cards Banking API
-    participant FinCrimeDB as [(FinCrime SQLite)]
-    participant CardsDB as [(Cards SQLite)]
+    participant FinCrimeDB as FinCrime SQLite
+    participant CardsDB as Cards SQLite
 
     Note over Customer,CardsDB: 1. Privacy-Preserving Inbound Flow
-    Customer->>BFF: "Block my card ending in 1234"
-    BFF->>PII: Sanitize incoming message & extract entities
+    Customer->>BFF: Block my card ending in 1234
+    BFF->>PII: Sanitize incoming message and extract entities
     PII->>Vault: Tokenize sensitive identifiers into opaque tokens
-    PII->>Sup: Sanitized input + scoped tokens (zero raw PII)
+    PII->>Sup: Sanitized input and scoped tokens with zero raw PII
 
     Note over Customer,CardsDB: 2. Supervisor-Mediated Minimal-Context Handoff
-    Sup->>Sup: Dynamic LLM intent classification & plan
-    Sup->>FinCrimeAgent: Minimal Handoff Contract: AgentHandoff(intent='block_card', context={'card_id': 'selected_...'})
-    FinCrimeAgent->>FinCrimeAgent: Autonomous reasoning & tool selection
-    FinCrimeAgent-->>Sup: HandoffResult(status='requires_confirmation', tool='block_card')
-    Sup-->>BFF: Action Review: "Block card: Card reference: ****1234. Confirm action"
+    Sup->>Sup: Dynamic LLM intent classification and plan
+    Sup->>FinCrimeAgent: Minimal Handoff Contract - AgentHandoff intent block_card
+    FinCrimeAgent->>FinCrimeAgent: Autonomous reasoning and tool selection
+    FinCrimeAgent-->>Sup: HandoffResult - status requires_confirmation, tool block_card
+    Sup-->>BFF: Action Review - Block card reference ending 1234, Confirm action
     BFF-->>Customer: Display review and confirmation button
 
     Note over Customer,CardsDB: 3. Deterministic Trusted Execution
     Customer->>BFF: Confirm action
     BFF->>Vault: Resolve opaque token to raw value within trusted layer
-    BFF->>MCP: Call tool block_card(card_id, reason)
-    MCP->>FinCrimeAPI: POST /fincrime/cards/{card_id}/block
-    FinCrimeAPI->>FinCrimeDB: Insert blocked_cards, audit_log, idempotency (BEGIN IMMEDIATE)
-    FinCrimeAPI->>CardsAPI: POST /banking/cards/{card_id}/block (Sync status)
-    CardsAPI->>CardsDB: UPDATE cards SET status='blocked' (BEGIN IMMEDIATE)
-    CardsAPI-->>FinCrimeAPI: 200 OK (status: blocked)
-    FinCrimeAPI-->>MCP: 200 OK (CardBlockResult)
+    BFF->>MCP: Call tool block_card with card_id and reason
+    MCP->>FinCrimeAPI: POST /fincrime/cards/card_id/block
+    FinCrimeAPI->>FinCrimeDB: Insert blocked_cards, audit_log, idempotency with BEGIN IMMEDIATE
+    FinCrimeAPI->>CardsAPI: POST /banking/cards/card_id/block - Sync status
+    CardsAPI->>CardsDB: UPDATE cards SET status blocked with BEGIN IMMEDIATE
+    CardsAPI-->>FinCrimeAPI: 200 OK - status blocked
+    FinCrimeAPI-->>MCP: 200 OK - CardBlockResult
     MCP-->>BFF: Tool success
-    BFF-->>Customer: Updated chat & [BLOCKED] badge in My Cards
+    BFF-->>Customer: Updated chat and BLOCKED badge in My Cards
 
     Note over Customer,CardsDB: 4. Cross-Agent Pre-Issuance Rejection Policy
-    Customer->>BFF: "I would like a new card" (for account with blocked card)
+    Customer->>BFF: Request new card for account with blocked card
     BFF->>PII: Sanitize input
     PII->>Sup: Sanitized input
-    Sup->>CardsAgent: Minimal Handoff: AgentHandoff(intent='issue_card')
-    CardsAgent-->>Sup: Propose issue_card(account_number)
-    Sup->>FinCrimeAPI: Check account status: GET /fincrime/accounts/{acc}/status
-    FinCrimeAPI->>FinCrimeDB: SELECT 1 FROM blocked_cards WHERE account_number=?
+    Sup->>CardsAgent: Minimal Handoff - AgentHandoff intent issue_card
+    CardsAgent-->>Sup: Propose issue_card for account_number
+    Sup->>FinCrimeAPI: Check account status - GET /fincrime/accounts/acc/status
     FinCrimeDB-->>FinCrimeAPI: Blocked card found
-    FinCrimeAPI-->>Sup: has_blocked_cards = True
-    Sup-->>BFF: Intercept: "Cannot issue new card while an existing card for this account is blocked."
+    FinCrimeAPI-->>Sup: has_blocked_cards is True
+    Sup-->>BFF: Intercept - Cannot issue new card while an existing card is blocked
     BFF-->>Customer: Explanatory rejection message
 
-    Note over Customer,CardsDB: 5. Compound Request Orchestration & Resumption (Lost Card -> Block -> Replace)
-    Customer->>BFF: "I've lost my card. Block it and issue a replacement."
+    Note over Customer,CardsDB: 5. Compound Request Orchestration - Lost Card to Block to Replace
+    Customer->>BFF: Lost card - Block it and issue a replacement
     BFF->>PII: Sanitize input
     PII->>Vault: Tokenize sensitive card reference
-    PII->>Sup: Sanitized text + card token
-    Sup->>Sup: Classify & plan compound intents: ['block_card', 'replace_card']
-    Sup->>FinCrimeAgent: Step 1 Handoff: AgentHandoff(intent='block_card', context={'card_id': '...'})
-    FinCrimeAgent-->>Sup: HandoffResult(status='requires_confirmation', tool='block_card')
-    Sup->>Sup: LangGraph interrupt() pauses graph, DurableSqliteSaver checkpoints state
-    Sup-->>BFF: Step 1 Confirmation Request (review nonce #1)
-    BFF-->>Customer: Display Step 1 Review: "Block card. Confirm with button."
+    PII->>Sup: Sanitized text and card token
+    Sup->>Sup: Classify and plan compound intents - block_card then replace_card
+    Sup->>FinCrimeAgent: Step 1 Handoff - AgentHandoff intent block_card
+    FinCrimeAgent-->>Sup: HandoffResult - status requires_confirmation
+    Sup->>Sup: LangGraph interrupt pauses graph, DurableSqliteSaver checkpoints state
+    Sup-->>BFF: Step 1 Confirmation Request - review nonce 1
+    BFF-->>Customer: Display Step 1 Review - Block card, Confirm with button
     Customer->>BFF: Confirm Step 1
     BFF->>Vault: Resolve token
     BFF->>MCP: Execute block_card
-    MCP->>FinCrimeAPI: POST /fincrime/cards/{card_id}/block
-    FinCrimeAPI->>CardsAPI: POST /banking/cards/{card_id}/block (status: 'blocked')
+    MCP->>FinCrimeAPI: POST /fincrime/cards/card_id/block
+    FinCrimeAPI->>CardsAPI: POST /banking/cards/card_id/block - status blocked
     CardsAPI-->>FinCrimeAPI: 200 OK
-    FinCrimeAPI-->>MCP: 200 OK (status: 'blocked')
-    MCP-->>BFF: Execution result (ok=True, card_id, status='blocked')
-    BFF->>Sup: LangGraph Command(resume={'status': 'confirmed', 'tool': 'block_card', 'data': {...}})
-    Sup->>Sup: Update action_plan (block_card: completed, replace_card: executing)
-    Sup->>CardsAgent: Step 2 Handoff: AgentHandoff(intent='replace_card', context={'card_id': '...', 'status': 'blocked'})
-    CardsAgent->>CardsAgent: Verify replacement eligibility (card is blocked), prepare replace_card
-    CardsAgent-->>Sup: HandoffResult(status='requires_confirmation', tool='replace_card')
-    Sup->>Sup: LangGraph interrupt() pauses graph for separate Confirmation #2
-    Sup-->>BFF: Step 2 Confirmation Request (fresh review nonce #2)
-    BFF-->>Customer: Display Step 2 Review: "Replace card. Confirm with button."
+    FinCrimeAPI-->>MCP: 200 OK - status blocked
+    MCP-->>BFF: Execution result - ok is True, status blocked
+    BFF->>Sup: LangGraph Command - resume with status confirmed, tool block_card
+    Sup->>Sup: Update action plan - block_card completed, replace_card executing
+    Sup->>CardsAgent: Step 2 Handoff - AgentHandoff intent replace_card
+    CardsAgent->>CardsAgent: Verify replacement eligibility, prepare replace_card
+    CardsAgent-->>Sup: HandoffResult - status requires_confirmation, tool replace_card
+    Sup->>Sup: LangGraph interrupt pauses graph for separate Confirmation 2
+    Sup-->>BFF: Step 2 Confirmation Request - fresh review nonce 2
+    BFF-->>Customer: Display Step 2 Review - Replace card, Confirm with button
     Customer->>BFF: Confirm Step 2
-    BFF->>MCP: Execute replace_card (with Idempotency-Key)
-    MCP->>CardsAPI: POST /banking/cards/{card_id}/replace
-    CardsAPI->>CardsDB: Atomically issue replacement card (status='created'), keep original 'blocked'
-    CardsAPI-->>MCP: 201 Created (CardIssuance outcome='replacement_created')
-    MCP-->>BFF: Execution result (ok=True, new_card)
-    BFF->>Sup: LangGraph Command(resume={'status': 'confirmed', 'tool': 'replace_card', 'data': {...}})
-    Sup->>Sup: Update action_plan (replace_card: completed)
+    BFF->>MCP: Execute replace_card with Idempotency-Key
+    MCP->>CardsAPI: POST /banking/cards/card_id/replace
+    CardsAPI->>CardsDB: Atomically issue replacement card status created, keep original blocked
+    CardsAPI-->>MCP: 201 Created - CardIssuance replacement_created
+    MCP-->>BFF: Execution result - ok is True, new_card
+    BFF->>Sup: LangGraph Command - resume with status confirmed, tool replace_card
+    Sup->>Sup: Update action plan - replace_card completed
     Sup-->>BFF: Compound workflow completed summary
-    BFF-->>Customer: Final confirmation: Card blocked and replacement card issued.
+    BFF-->>Customer: Final confirmation - Card blocked and replacement card issued
 ```
 
 ### Roles and Responsibilities

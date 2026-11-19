@@ -21,6 +21,9 @@ Geographic replacement restrictions, local validation and Azure update commands:
 Live policy RAG setup, ingestion and integration verification are documented in
 [Live policy runtime](docs/live-policy-runtime.md).
 
+Complete conversational walkthrough and flow diagrams for presentation:
+[Conversational Card Block & Replacement Walkthrough](docs/card-block-and-replacement-walkthrough.md).
+
 - **LangGraph Multi-Agent Architecture:**
   - **`SupervisorAgent` (LangGraph)**: LLM-powered supervisor dynamically routes intents, constructs minimal-context handoff contracts, schedules specialist consultations, and orchestrates compound multi-step workflows.
   - **`CardServicingAgent` (LangGraph Specialist)**: Autonomous reasoning agent managing account creation, balance/account viewing, and new card issuance.
