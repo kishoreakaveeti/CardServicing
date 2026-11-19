@@ -82,7 +82,7 @@ def form_options(catalogue, caller, bindings, cid, owner):
                     'type': prop['type'], 'required': field in spec.input_schema.get('required', [])}
             if source == 'account':
                 item['options'] = [{'ref': bind(bindings, cid, owner, name, field, value),
-                                    'label': 'Account ' + mask(value)} for value in caller.get('accounts', [])]
+                                    'label': ('Everyday Account •••• ' + str(value)[-4:]) if len(str(value)) >= 4 else ('Account ' + mask(value))} for value in caller.get('accounts', [])]
             elif source == 'card':
                 cards = caller.get('cards', [])
                 if name in ('unblock_card', 'replace_card'):
@@ -90,7 +90,7 @@ def form_options(catalogue, caller, bindings, cid, owner):
                 elif name == 'block_card':
                     cards = [c for c in cards if not (isinstance(c, dict) and c.get('status') == 'blocked')]
                 item['options'] = [{'ref': bind(bindings, cid, owner, name, field, c['id'] if isinstance(c, dict) else c),
-                                    'label': ('Card ' + mask(c.get('card_number', c['id'])) + (f" [{c['status'].upper()}]" if 'status' in c else '')) if isinstance(c, dict) else ('Card ' + mask(c))}
+                                    'label': ('Visa Debit ' + mask(c.get('card_number', c['id'])) + (f" [{c['status'].upper()}]" if 'status' in c else '')) if isinstance(c, dict) else ('Card ' + mask(c))}
                                    for c in cards]
             fields.append(item)
         tools.append({'name': name, 'label': spec.entry.label, 'fields': fields})

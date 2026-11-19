@@ -8,7 +8,7 @@
     "build": "tsc --noEmit && vite build",
     "typecheck": "tsc --noEmit",
     "dev:local": "vite --host 127.0.0.1",
-    "test": "node --experimental-strip-types --test tests/http.test.mjs"
+    "test": "node --experimental-strip-types --test tests/http.test.mjs tests/voice.test.mjs"
   },
   "dependencies": {
     "react": "19.2.0",

@@ -140,19 +140,21 @@ def create_app(config=None):
         result.delete_cookie('card_session', path='/')
         return result
 
-    async def banking_request(request, path, body=None, value=None):
+    async def banking_request(request, path, body=None, value=None, extra_headers=None):
         dt = delegation.set(security.issue_customer(value['claims']) if value else None)
         tt = trace.set(uuid4().hex)
         try:
             headers = await security.headers()
             headers['X-Banking-BFF'] = '1'
+            if extra_headers:
+                headers.update(extra_headers)
             async with httpx.AsyncClient(timeout=30) as client:
                 response = await client.request('POST' if body is not None else 'GET',
                     config.get('CARD_API_BASE_URL', 'http://cards:8000').rstrip('/') + '/banking/' + path,
                     json=body, headers=headers)
             if response.status_code >= 400:
                 details = {401: 'Invalid username or password', 409: 'Username is already registered'}
-                raise HTTPException(response.status_code, details.get(response.status_code, 'Banking request rejected'))
+                raise HTTPException(response.status_code, details.get(response.status_code, response.text or 'Banking request rejected'))
             return response.json()
         except (httpx.HTTPError, ValueError):
             raise HTTPException(503, 'Banking service unavailable') from None
@@ -211,11 +213,16 @@ def create_app(config=None):
 
     async def forward(request, path, body=None):
         value = session(request)
-        if value['claims'].get('local_customer'):
+        try:
             current = await banking_request(request, 'accounts', value=value)
-            value['claims']['accounts'] = [a['account_number'] for a in current['accounts']]
+            value['claims']['accounts'] = [a['account_number'] for a in current.get('accounts', [])]
             current_cards = await banking_request(request, 'cards', value=value)
-            value['claims']['cards'] = [{'id': c['id'], 'card_number': c['card_number'], 'status': c['status'], 'account_number': c['account_number']} for c in current_cards.get('cards', [])]
+            value['claims']['cards'] = [{'id': str(c['id']), 'card_number': c['card_number'], 'status': c['status'], 'account_number': c['account_number']} for c in current_cards.get('cards', [])]
+            sid = request.cookies.get('card_session')
+            if sid:
+                store(sid, value, 3600)
+        except Exception:
+            pass
         dt = delegation.set(security.issue_customer(value['claims']))
         tt = trace.set(uuid4().hex)
         try:
@@ -247,6 +254,64 @@ def create_app(config=None):
         finally:
             delegation.reset(dt)
             trace.reset(tt)
+
+    @app.get('/api/accounts')
+    async def get_accounts(request: Request):
+        val = session(request)
+        return await banking_request(request, 'accounts', value=val)
+
+    @app.post('/api/accounts', status_code=201)
+    async def post_account(request: Request):
+        val = session(request)
+        body = await request.json()
+        key = request.headers.get('Idempotency-Key') or uuid4().hex
+        result = await banking_request(request, 'accounts', body=body, value=val, extra_headers={'Idempotency-Key': key})
+        try:
+            current = await banking_request(request, 'accounts', value=val)
+            val['claims']['accounts'] = [a['account_number'] for a in current.get('accounts', [])]
+            sid = request.cookies.get('card_session')
+            if sid:
+                store(sid, val, 3600)
+        except Exception:
+            pass
+        return result
+
+    @app.get('/api/cards')
+    async def get_cards(request: Request):
+        val = session(request)
+        return await banking_request(request, 'cards', value=val)
+
+    @app.post('/api/cards', status_code=201)
+    async def post_card(request: Request):
+        val = session(request)
+        body = await request.json()
+        key = request.headers.get('Idempotency-Key') or uuid4().hex
+        result = await banking_request(request, 'cards', body=body, value=val, extra_headers={'Idempotency-Key': key})
+        try:
+            current_cards = await banking_request(request, 'cards', value=val)
+            val['claims']['cards'] = [{'id': str(c['id']), 'card_number': c['card_number'], 'status': c['status'], 'account_number': c['account_number']} for c in current_cards.get('cards', [])]
+            sid = request.cookies.get('card_session')
+            if sid:
+                store(sid, val, 3600)
+        except Exception:
+            pass
+        return result
+
+    @app.post('/api/cards/{card_id}/block')
+    async def post_block_card(card_id: str, request: Request):
+        val = session(request)
+        body = await request.json() if request.headers.get('content-length', '0') != '0' else {'reason': 'lost'}
+        key = request.headers.get('Idempotency-Key') or uuid4().hex
+        result = await banking_request(request, f'cards/{card_id}/block', body=body, value=val, extra_headers={'Idempotency-Key': key})
+        try:
+            current_cards = await banking_request(request, 'cards', value=val)
+            val['claims']['cards'] = [{'id': str(c['id']), 'card_number': c['card_number'], 'status': c['status'], 'account_number': c['account_number']} for c in current_cards.get('cards', [])]
+            sid = request.cookies.get('card_session')
+            if sid:
+                store(sid, val, 3600)
+        except Exception:
+            pass
+        return result
 
     @app.post('/api/conversations', response_model=Reply)
     async def start(request: Request):

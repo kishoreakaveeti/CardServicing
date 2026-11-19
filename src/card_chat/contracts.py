@@ -53,6 +53,11 @@ class Reply(BaseModel):
     usage: dict[str, int] = Field(default_factory=dict)
     input_tool: str | None = None
     data: dict | None = None
+    trace: dict | None = None
+    suggested_actions: list[str] = Field(default_factory=list)
+    product_offer: dict | None = None
+    sentiment: str | None = None
+    urgency: str | None = None
 
 
 class Operation(BaseModel):

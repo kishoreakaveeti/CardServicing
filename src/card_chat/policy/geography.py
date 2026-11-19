@@ -33,7 +33,18 @@ class RequestInterpretation(BaseModel):
 
 
 ALIASES = {'north korea': 'KP', 'dprk': 'KP', "democratic people's republic of korea": 'KP',
-           'south korea': 'KR', 'republic of korea': 'KR', 'uk': 'GB', 'usa': 'US'}
+           'south korea': 'KR', 'republic of korea': 'KR', 'uk': 'GB', 'usa': 'US',
+           'australia': 'AU', 'united states': 'US', 'united kingdom': 'GB'}
+
+CITY_TO_COUNTRY = {
+    'sydney': 'AU', 'melbourne': 'AU', 'brisbane': 'AU', 'perth': 'AU', 'adelaide': 'AU',
+    'canberra': 'AU', 'darwin': 'AU', 'hobart': 'AU', 'gold coast': 'AU',
+    'pyongyang': 'KP', 'seoul': 'KR', 'busan': 'KR', 'london': 'GB', 'manchester': 'GB',
+    'tokyo': 'JP', 'osaka': 'JP', 'singapore': 'SG', 'new york': 'US',
+    'san francisco': 'US', 'los angeles': 'US', 'chicago': 'US', 'seattle': 'US',
+    'auckland': 'NZ', 'wellington': 'NZ', 'christchurch': 'NZ',
+    'paris': 'FR', 'berlin': 'DE', 'frankfurt': 'DE', 'toronto': 'CA', 'vancouver': 'CA',
+}
 
 
 def normalize_country(value: str | None) -> str | None:
@@ -42,6 +53,8 @@ def normalize_country(value: str | None) -> str | None:
     clean = value.strip().casefold()
     if clean in ALIASES:
         return ALIASES[clean]
+    if clean in CITY_TO_COUNTRY:
+        return CITY_TO_COUNTRY[clean]
     # Korea alone is ambiguous. Fuzzy matching must never choose one Korea.
     if clean == 'korea':
         return None
@@ -58,7 +71,11 @@ def declared_country(text: str, proposed: RequestInterpretation | None = None) -
     model code, delivery destination, negation or historical mention grants nothing.
     """
     text = text.strip().rstrip('.!')
-    patterns = (r"(?:i(?:'m| am|’m)\s+(?:currently\s+|now\s+)?(?:in|located in)|my current (?:location|country) is)\s+([^.!?;]+)",)
+    patterns = (
+        r"(?:i(?:'m| am|’m)\s+(?:currently\s+|now\s+)?(?:in|located in)|my current (?:location|country) is)\s+([^.!?;]+)",
+        r"(?:i(?:'m| am|’m)\s+(?:travelling|traveling|commuting|riding|on vacation|on holiday|visiting|staying)\s+(?:(?:on|in)\s+[^.!?;]+\s+)?in)\s+([^.!?;]+)",
+        r"(?:(?:travelling|traveling|commuting|on vacation|on holiday|visiting|staying|vacationing)\s+(?:(?:on|in)\s+[^.!?;]+\s+)?in)\s+([^.!?;]+)",
+    )
     candidates = [m.group(1) for p in patterns for m in re.finditer(p, text, re.I)]
     if not candidates and (normalize_country(text) or text.casefold() == 'korea'):
         candidates = [text]
@@ -147,7 +164,7 @@ def evaluate_geography(context, rules: GeographicRules, evidence, pinned_version
     base['country_code'] = ctx.code
     if ctx.status != 'explicit' or not ctx.code or normalize_country(ctx.code) != ctx.code:
         return GeographicDecision(**base, decision='clarification_required', reason_code='country_required',
-            explanation='Which country are you currently in? Your declaration is required before replacement can be reviewed. Card blocking remains available.')
+            explanation='Which country should your replacement card be issued for? Your declaration is required before replacement can be reviewed. Card blocking remains available.')
     denied = ctx.code in rules.excluded_country_codes
     return GeographicDecision(**base, decision='denied' if denied else 'allowed',
         reason_code='excluded_declared_country' if denied else 'country_eligible',

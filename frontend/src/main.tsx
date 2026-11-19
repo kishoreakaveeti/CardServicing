@@ -1,136 +1,151 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import './style.css';
-import { readSessionResponse } from './http';
-
-type Reply = {
-  id?: string;
-  message: string;
-  review: string | null;
-  can_confirm: boolean;
-  confirmation_label: string | null;
-  input_tool?: string | null;
-  country_required?: boolean;
-  data?: {
-    accounts?: { account_number: string; account_type: string }[];
-    cards?: { id: string; account_number: string; card_number: string; status?: string }[];
-  };
-};
-
-type Session = { name: string; csrf: string };
-type Job = { status: 'pending' | 'running' | 'succeeded' | 'failed'; status_url: string; result: Reply | null; error: string | null };
-type Pending = { path: string; body: object; key: string };
-type InputField = { name: string; label: string; type: 'string' | 'integer' | 'number' | 'boolean'; required: boolean; options?: { ref: string; label: string }[] };
-type InputTool = { name: string; label: string; fields: InputField[] };
+import {
+  AccountRecord,
+  ActivityItem,
+  CardRecord,
+  ChatMessage,
+  InputTool,
+  PendingAction,
+  Reply,
+  Session,
+  TraceInfo,
+} from './types';
+import { Navbar, NavTab } from './components/Navbar';
+import { HomeView } from './components/HomeView';
+import { AccountsView } from './components/AccountsView';
+import { CardsView } from './components/CardsView';
+import { ChatView } from './components/ChatView';
+import { ActivityView } from './components/ActivityView';
 
 function App() {
   const [session, setSession] = useState<Session | null>(null);
+  const [currentTab, setCurrentTab] = useState<NavTab>('home');
   const [cid, setCid] = useState('');
-  const [messages, setMessages] = useState<string[]>([]);
-  const [reply, setReply] = useState<Reply | null>(null);
-  const [text, setText] = useState('');
-  const [country, setCountry] = useState('');
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [latestReply, setLatestReply] = useState<Reply | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
-  const [pending, setPending] = useState<Pending | null>(null);
-  const [poll, setPoll] = useState(false);
+  const [pending, setPending] = useState<PendingAction | null>(null);
+  const [accounts, setAccounts] = useState<AccountRecord[]>([]);
+  const [cards, setCards] = useState<CardRecord[]>([]);
+  const [activities, setActivities] = useState<ActivityItem[]>([]);
+  const [currentTrace, setCurrentTrace] = useState<TraceInfo | null>(null);
   const [tools, setTools] = useState<InputTool[]>([]);
   const [tool, setTool] = useState('');
-  const [values, setValues] = useState<Record<string, string>>({});
-  const [showInputs, setShowInputs] = useState(false);
-  const [desiredTool, setDesiredTool] = useState('');
-  const [authAction, setAuthAction] = useState<'register' | 'login' | 'logout' | ''>('');
+  const [authAction, setAuthAction] = useState<'register' | 'login' | ''>('');
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
 
-  // Auto-scroll anchor refs
-  const authRef = useRef<HTMLElement | null>(null);
-  const inputsRef = useRef<HTMLElement | null>(null);
-  const reviewRef = useRef<HTMLElement | null>(null);
-  const dataRef = useRef<HTMLElement | null>(null);
-  const chatEndRef = useRef<HTMLDivElement | null>(null);
   const usernameInputRef = useRef<HTMLInputElement | null>(null);
-  const countryInputRef = useRef<HTMLInputElement | null>(null);
 
-  // Standard scroll-into-view helper
-  const scrollTo = (el: HTMLElement | null) => {
-    if (el) {
-      el.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-    }
-  };
-
-  // Reusable Auto-Scroll Pattern for all user actions & transitions
-  useEffect(() => {
-    if (authAction && authRef.current) {
-      scrollTo(authRef.current);
-      if (['register', 'login'].includes(authAction)) {
-        setTimeout(() => usernameInputRef.current?.focus(), 100);
-      }
-    }
-  }, [authAction]);
-
-  useEffect(() => {
-    if (showInputs && inputsRef.current) {
-      scrollTo(inputsRef.current);
-    }
-  }, [showInputs, tool]);
-
-  useEffect(() => {
-    if (reply?.country_required && !busy) {
-      scrollTo(countryInputRef.current);
-      countryInputRef.current?.focus();
-    }
-  }, [reply?.country_required, busy]);
-
-  useEffect(() => {
-    if (reply?.can_confirm && reviewRef.current) {
-      scrollTo(reviewRef.current);
-    } else if ((reply?.data?.cards || reply?.data?.accounts) && dataRef.current) {
-      scrollTo(dataRef.current);
-    } else if (chatEndRef.current && messages.length > 0) {
-      scrollTo(chatEndRef.current);
-    }
-  }, [reply, messages]);
-
+  // Load session on startup
   useEffect(() => {
     fetch('/api/session')
-      .then(r => (r.ok ? readSessionResponse(r) : null))
-      .then(setSession)
+      .then((r) => (r.ok ? readSessionResponse(r) : null))
+      .then((sess) => {
+        setSession(sess);
+        if (sess) {
+          addActivity('Sign in', 'Session validated successfully', 'auth');
+        }
+      })
       .catch(() => setError('Session unavailable. Refresh to try again.'));
   }, []);
 
+  // Restore conversation from sessionStorage when session is loaded
   useEffect(() => {
-    let active = true;
-    setValues({});
-    setTools([]);
-    setCountry('');
-    setTool('');
-    setShowInputs(false);
-    if (cid) {
-      fetch(`/api/conversations/${cid}/inputs`)
-        .then(r => {
-          if (!r.ok) throw new Error('Secure form unavailable. Start a new conversation.');
-          return r.json();
-        })
-        .then((data: { tools: InputTool[] }) => {
-          if (active) {
-            setTools(data.tools);
-            if (desiredTool) {
-              setTool(desiredTool);
-              setShowInputs(true);
-            }
+    if (session) {
+      try {
+        const savedCid = sessionStorage.getItem(`neobank_cid_${session.name}`);
+        const savedMessages = sessionStorage.getItem(`neobank_chat_${session.name}`);
+        if (savedCid) setCid(savedCid);
+        if (savedMessages) {
+          const parsed = JSON.parse(savedMessages);
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            setMessages(parsed);
           }
-        })
-        .catch(() => {
-          if (active) setError('Secure form unavailable. Start a new conversation.');
-        });
+        }
+      } catch {
+        // Non-blocking fallback
+      }
     }
-    return () => {
-      active = false;
-    };
-  }, [cid]);
+  }, [session?.name]);
 
-  async function request(action: Pending) {
+  // Persist conversation to sessionStorage whenever messages or cid change
+  useEffect(() => {
+    if (session && cid) {
+      try {
+        sessionStorage.setItem(`neobank_cid_${session.name}`, cid);
+        sessionStorage.setItem(`neobank_chat_${session.name}`, JSON.stringify(messages));
+      } catch {
+        // Non-blocking fallback
+      }
+    }
+  }, [session?.name, cid, messages]);
+
+  // Fetch accounts & cards when session is active
+  const refreshBankingData = async () => {
+    if (!session) return;
+    try {
+      const [accRes, cardRes] = await Promise.all([
+        fetch('/api/accounts'),
+        fetch('/api/cards'),
+      ]);
+      if (accRes.ok) {
+        const data = await accRes.json();
+        const list = Array.isArray(data) ? data : (data.accounts || []);
+        setAccounts(list);
+      }
+      if (cardRes.ok) {
+        const data = await cardRes.json();
+        const list = Array.isArray(data) ? data : (data.cards || []);
+        setCards(list);
+      }
+    } catch {
+      // Non-blocking fallback
+    }
+  };
+
+  useEffect(() => {
+    if (session) {
+      refreshBankingData();
+    }
+  }, [session]);
+
+  const addActivity = (title: string, details: string, type: 'security' | 'card' | 'account' | 'auth') => {
+    const item: ActivityItem = {
+      id: crypto.randomUUID(),
+      title,
+      details,
+      type,
+      timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
+    };
+    setActivities((prev) => [item, ...prev.slice(0, 40)]);
+  };
+
+  // Dynamically refresh input options when conversation changes, active tool is required, or accounts/cards update
+  const refreshInputs = async () => {
+    if (!cid) return;
+    try {
+      const res = await fetch(`/api/conversations/${cid}/inputs`);
+      if (res.ok) {
+        const data = await res.json();
+        setTools(data.tools || []);
+      }
+    } catch {
+      // Non-blocking fallback
+    }
+  };
+
+  useEffect(() => {
+    if (cid) {
+      refreshInputs();
+    }
+  }, [cid, latestReply?.input_tool, accounts.length, cards.length]);
+
+  // Unified Request Dispatcher
+  async function request(action: PendingAction): Promise<Reply | undefined> {
     setBusy(true);
     setError('');
     setPending(action);
@@ -141,10 +156,10 @@ function App() {
           'Content-Type': 'application/json',
           ...(session ? { 'X-CSRF-Token': session.csrf } : {}),
           'Idempotency-Key': action.key,
-          ...(poll ? { Prefer: 'respond-async' } : {})
         },
-        body: JSON.stringify(action.body)
+        body: JSON.stringify(action.body),
       });
+
       if (!response.ok) {
         if (response.status >= 400 && response.status < 500) setPending(null);
         if (response.status === 401) setSession(null);
@@ -152,130 +167,225 @@ function App() {
           response.status === 401
             ? 'Sign in again to continue.'
             : response.status < 500
-            ? 'Details were not accepted. Check the secure form and review again.'
-            : 'Request failed. Retry the same submission.'
+            ? 'Request details were rejected. Please review your input.'
+            : 'Banking service unavailable. You may retry.'
         );
       }
+
       let value: Reply;
       if (response.status === 202) {
-        let job: Job = await response.json();
+        let job = await response.json();
         while (job.status === 'pending' || job.status === 'running') {
-          await new Promise(resolve => setTimeout(resolve, 500));
-          const status = await fetch(job.status_url);
-          if (!status.ok) throw new Error('Polling interrupted. Retry the same submission.');
-          job = await status.json();
+          await new Promise((resolve) => setTimeout(resolve, 500));
+          const statusRes = await fetch(job.status_url);
+          if (!statusRes.ok) throw new Error('Polling interrupted. Please retry.');
+          job = await statusRes.json();
         }
         if (job.status === 'failed' || !job.result) {
           setPending(null);
-          throw new Error(job.error || 'Operation failed. Check the form and try again.');
+          throw new Error(job.error || 'Operation failed.');
         }
         value = job.result;
       } else {
         value = await response.json();
       }
 
-      // A banking action can change which cards are eligible without changing
-      // the conversation ID. Refresh signed, server-generated selections before
-      // displaying the next form (especially block -> country -> replacement).
-      if (session && cid && !value.id) {
-        const options = await fetch(`/api/conversations/${cid}/inputs`, { cache: 'no-store' });
-        if (!options.ok) {
-          setTools([]);
-          setShowInputs(false);
-          throw new Error('Card choices could not be refreshed. Retry the same submission.');
-        }
-        const data: { tools: InputTool[] } = await options.json();
-        setTools(data.tools);
-      }
-
       if (value.id) {
         setCid(value.id);
-        setMessages([value.message]);
-      } else {
-        setMessages(old => [...old, value.message]);
       }
 
-      if (value.input_tool) {
-        if (['register', 'login', 'logout'].includes(value.input_tool)) {
-          setAuthAction(value.input_tool as 'register' | 'login' | 'logout');
-        }
-        if (tool !== value.input_tool) setValues({});
-        setTool(value.input_tool);
-        setShowInputs(true);
-      } else {
-        setShowInputs(false);
+      if (value.trace) {
+        setCurrentTrace(value.trace);
       }
-      setReply(value);
+
+      setLatestReply(value);
       setPending(null);
+
+      // Add assistant message to chat
+      const assistantMsg: ChatMessage = {
+        id: crypto.randomUUID(),
+        sender: 'assistant',
+        text: value.message,
+        timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        trace: value.trace,
+        suggested_actions: value.suggested_actions,
+        product_offer: value.product_offer,
+        can_confirm: value.can_confirm,
+        review: value.review,
+        confirmation_label: value.confirmation_label,
+        country_required: value.country_required,
+        input_tool: value.input_tool,
+      };
+
+      setMessages((prev) => [...prev, assistantMsg]);
+
+      if (value.input_tool) {
+        setTool(value.input_tool);
+      } else {
+        setTool('');
+      }
+
+      // Refresh accounts/cards whenever a banking action completes
+      if (value.can_confirm === false && !value.input_tool) {
+        refreshBankingData();
+      }
+
       return value;
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Request interrupted. Retry the same submission.');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Banking request failed');
     } finally {
       setBusy(false);
     }
   }
 
-  function start() {
-    setDesiredTool('');
-    setReply(null);
-    void request({ path: '/api/conversations', body: {}, key: crypto.randomUUID() });
-  }
+  // Chat Actions
+  async function handleSendMessage(text: string) {
+    if (!text.trim() || busy) return;
 
-  async function choose(name: string) {
-    const read = name.startsWith('view_');
-    setDesiredTool(read ? '' : name);
-    setReply(null);
-    const value = await request({ path: '/api/conversations', body: {}, key: crypto.randomUUID() });
-    if (read && value?.id) {
-      await request({ path: `/api/conversations/${value.id}/inputs`, body: { tool: name, fields: {} }, key: crypto.randomUUID() });
+    const userMsg: ChatMessage = {
+      id: crypto.randomUUID(),
+      sender: 'user',
+      text,
+      timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+    };
+
+    setMessages((prev) => [...prev, userMsg]);
+    addActivity('Chat Inquiry', text.slice(0, 48) + (text.length > 48 ? '...' : ''), 'security');
+
+    if (!cid) {
+      const init = await request({
+        path: '/api/conversations',
+        body: {},
+        key: crypto.randomUUID(),
+      });
+      if (!init?.id) return;
+      await request({
+        path: `/api/conversations/${init.id}/messages`,
+        body: { text },
+        key: crypto.randomUUID(),
+      });
+    } else {
+      await request({
+        path: `/api/conversations/${cid}/messages`,
+        body: { text },
+        key: crypto.randomUUID(),
+      });
     }
   }
 
-  function submit(e: React.FormEvent) {
-    e.preventDefault();
-    if (!text.trim() || busy || pending) return;
-    const content = text;
-    setText('');
-    setReply(null);
-    const privatePaste = /\d(?:[\s-]?\d){2,}|\b(?:cvv|cvc|pin|password|secret|account_number|user_name|given_name)\b|sk-ant-/i.test(content);
-    setMessages(old => [...old, privatePaste ? 'You: [Private input omitted. Use the secure action form.]' : `You: ${content}`]);
-    void request({
-      path: session ? `/api/conversations/${cid}/messages` : '/api/entry/messages',
-      body: { text: content },
-      key: crypto.randomUUID()
+  async function handleConfirmAction() {
+    if (!cid || !latestReply?.review || busy) return;
+    addActivity('Confirmed Banking Action', latestReply.confirmation_label || 'Confirmed action', 'security');
+    await request({
+      path: `/api/conversations/${cid}/confirm`,
+      body: { review: latestReply.review },
+      key: crypto.randomUUID(),
+    });
+    await refreshBankingData();
+  }
+
+  async function handleSelectCountry(countryCode: string) {
+    if (!countryCode || !cid || busy) return;
+    addActivity('Country Declaration', `Declared location: ${countryCode}`, 'security');
+    await request({
+      path: `/api/conversations/${cid}/messages`,
+      body: { text: countryCode },
+      key: crypto.randomUUID(),
     });
   }
 
-  function confirm() {
-    if (!reply?.review || busy || pending) return;
-    void request({ path: `/api/conversations/${cid}/confirm`, body: { review: reply.review }, key: crypto.randomUUID() });
-  }
-
-  function supplyCountry(e: React.FormEvent) {
-    e.preventDefault();
-    if (!country.trim() || busy || pending || !cid) return;
-    void request({ path: `/api/conversations/${cid}/messages`,
-      body: { text: country.trim() }, key: crypto.randomUUID() });
-  }
-
-  function supply(e: React.FormEvent) {
-    e.preventDefault();
-    if (busy || pending) return;
-    const action = tools.find(item => item.name === tool);
-    if (!action) return;
-    const fields: Record<string, string | number | boolean> = {};
+  async function handleSupplyInputs(toolName: string, formVals: Record<string, string>) {
+    if (!cid || busy) return;
+    addActivity('Secure Form Input', `Submitted details for ${toolName}`, 'security');
+    const toolDef = tools.find((t) => t.name === toolName);
     const selections: Record<string, string> = {};
-    for (const field of action.fields) {
-      const value = values[field.name];
-      if (value === undefined || value === '') continue;
-      if (field.options) selections[field.name] = value;
-      else fields[field.name] = field.type === 'boolean' ? value === 'true' : field.type === 'string' ? value : Number(value);
+    const fields: Record<string, any> = {};
+    for (const [k, v] of Object.entries(formVals)) {
+      const fieldDef = toolDef?.fields.find((f) => f.name === k);
+      if (fieldDef?.options && fieldDef.options.length > 0) {
+        selections[k] = v;
+      } else {
+        fields[k] = v === 'true' ? true : v === 'false' ? false : v;
+      }
     }
-    setReply(null);
-    void request({ path: `/api/conversations/${cid}/inputs`, body: { tool, fields, selections }, key: crypto.randomUUID() });
+    await request({
+      path: `/api/conversations/${cid}/inputs`,
+      body: { tool: toolName, fields, selections },
+      key: crypto.randomUUID(),
+    });
+    await refreshBankingData();
   }
 
-  async function authenticate(e: React.FormEvent) {
+  async function handleCreateAccount(accountType: 'transaction' | 'savings', issueCard: boolean) {
+    if (!session) return;
+    const res = await fetch('/api/accounts', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-CSRF-Token': session.csrf,
+        'Idempotency-Key': crypto.randomUUID(),
+      },
+      body: JSON.stringify({ account_type: accountType, issue_card: issueCard }),
+    });
+
+    if (!res.ok) {
+      throw new Error('Account creation failed. Please verify your details.');
+    }
+    addActivity('Account Opened', `Created new ${accountType} account`, 'account');
+    await refreshBankingData();
+  }
+
+  async function handleIssueCard(accountNumber: string, additionalCard: boolean) {
+    if (!session) return;
+    const res = await fetch('/api/cards', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-CSRF-Token': session.csrf,
+        'Idempotency-Key': crypto.randomUUID(),
+      },
+      body: JSON.stringify({ account_number: accountNumber, additional_card: additionalCard }),
+    });
+
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.detail || 'Card issuance failed. Please review your account.');
+    }
+    addActivity('Card Issued', `Visa Debit card linked to account •••• ${accountNumber.slice(-4)}`, 'card');
+    await refreshBankingData();
+  }
+
+  async function handleBlockCard(cardId: string, reason: string) {
+    if (!session) return;
+    const res = await fetch(`/api/cards/${cardId}/block`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-CSRF-Token': session.csrf,
+        'Idempotency-Key': crypto.randomUUID(),
+      },
+      body: JSON.stringify({ reason: reason || 'lost' }),
+    });
+
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.detail || 'Could not block card. Please try again.');
+    }
+    addActivity('Card Blocked', `Blocked card (${reason})`, 'security');
+    await refreshBankingData();
+  }
+
+  function handleStartChatScenario(scenarioPrompt?: string) {
+    setCurrentTab('chat');
+    if (scenarioPrompt) {
+      setTimeout(() => {
+        handleSendMessage(scenarioPrompt);
+      }, 100);
+    }
+  }
+
+  // Authentication Handlers
+  async function handleAuthSubmit(e: React.FormEvent) {
     e.preventDefault();
     setBusy(true);
     setError('');
@@ -285,356 +395,273 @@ function App() {
       const response = await fetch(authAction === 'register' ? '/auth/register' : '/auth/password-login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username, password: secret })
+        body: JSON.stringify({ username, password: secret }),
       });
       const data = await readSessionResponse(response);
       setSession(data);
       setAuthAction('');
       setUsername('');
       setCid('');
-      setReply(null);
-      setPending(null);
-      setMessages(['Welcome. Start a conversation to view accounts, create an account or issue a card.']);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Sign-in unavailable');
+      setMessages([]);
+      addActivity('Authentication', `Logged in as ${data.name}`, 'auth');
+      refreshBankingData();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Sign-in failed');
     } finally {
       setBusy(false);
     }
   }
 
-  async function logout() {
+  async function handleSignOut() {
     if (!session) return;
-    const r = await fetch('/auth/logout', { method: 'POST', headers: { 'X-CSRF-Token': session.csrf } });
-    if (r.ok) {
-      setSession(null);
-      setMessages([]);
-      setCid('');
-      setReply(null);
-      setPending(null);
-      setAuthAction('');
-      setValues({});
-    } else {
-      setError('Sign out failed. Try again.');
+    try {
+      sessionStorage.removeItem(`neobank_cid_${session.name}`);
+      sessionStorage.removeItem(`neobank_chat_${session.name}`);
+      await fetch('/auth/logout', {
+        method: 'POST',
+        headers: { 'X-CSRF-Token': session.csrf },
+      });
+    } catch {
+      // Continue client cleanup
     }
+    setSession(null);
+    setCid('');
+    setMessages([]);
+    setAccounts([]);
+    setCards([]);
+    setCurrentTrace(null);
+    setCurrentTab('home');
   }
 
   return (
-    <main>
-      <header>
-        <span className="eyebrow">LOCAL SIMULATION</span>
-        <h1>Card servicing</h1>
-        <p>Talk through a request. Review the details before you confirm.</p>
-      </header>
+    <div className="app-shell">
+      <Navbar
+        currentTab={currentTab}
+        onSelectTab={setCurrentTab}
+        session={session}
+        onSignOut={handleSignOut}
+        onOpenAuth={(mode) => {
+          setAuthAction(mode);
+          setTimeout(() => usernameInputRef.current?.focus(), 50);
+        }}
+      />
 
-      {!session ? (
-        <>
-          <div className="toolbar">
-            <button disabled={busy} onClick={() => setAuthAction('register')}>
-              Register / Sign up
-            </button>
-            <button disabled={busy} onClick={() => setAuthAction('login')}>
-              Login
-            </button>
-            <a href="/auth/login" className="button">
-              OIDC sign in
-            </a>
-          </div>
-
-          {['register', 'login'].includes(authAction) && (
-            <aside ref={authRef} className="auth-card" tabIndex={-1}>
-              <h2>{authAction === 'register' ? 'Register' : 'Login'}</h2>
-              <form onSubmit={authenticate}>
-                <label className="secure-field">
-                  Username
-                  <input
-                    ref={usernameInputRef}
-                    value={username}
-                    onChange={e => setUsername(e.target.value)}
-                    autoComplete="username"
-                    pattern="[A-Za-z][A-Za-z0-9_.-]{2,63}"
-                    required
-                    maxLength={64}
-                  />
-                </label>
-                <label className="secure-field">
-                  Password
-                  <input
-                    type="password"
-                    value={password}
-                    onChange={e => setPassword(e.target.value)}
-                    autoComplete={authAction === 'register' ? 'new-password' : 'current-password'}
-                    minLength={10}
-                    maxLength={128}
-                    required
-                  />
-                </label>
-                <p>Use 3–64 characters for your username and at least 10 characters for your password. Credentials stay out of chat.</p>
-                <div className="action-buttons">
-                  <button disabled={busy}>{authAction === 'register' ? 'Create customer and sign in' : 'Login'}</button>
-                  <button type="button" className="button-secondary" disabled={busy} onClick={() => setAuthAction('')}>
-                    Cancel
-                  </button>
-                </div>
-              </form>
-            </aside>
-          )}
-
-          <section aria-live="polite">
-            {messages.map((m, i) => (
-              <p key={i}>{m}</p>
-            ))}
-            <div ref={chatEndRef} />
-          </section>
-
-          <form onSubmit={submit}>
-            <label>
-              How can we help?
-              <textarea value={text} onChange={e => setText(e.target.value)} placeholder="I want to register" maxLength={4000} />
-            </label>
-            <p>Keep credentials out of chat. Use the secure form.</p>
-            <button disabled={busy || !!pending || !text.trim()}>Send message</button>
-          </form>
-        </>
-      ) : (
-        <>
-          <div className="toolbar">
-            <span>Signed in as {session.name}</span>
-            <button disabled={busy} onClick={start}>
-              {cid ? 'New conversation' : 'Start conversation'}
-            </button>
-            <button disabled={busy} onClick={() => setAuthAction('logout')}>
-              Sign out
+      <main className="main-content">
+        {error && (
+          <div className="service-alert">
+            <span>⚠️</span>
+            <span>{error}</span>
+            <button
+              onClick={() => setError('')}
+              style={{ background: 'none', border: 'none', cursor: 'pointer', marginLeft: 'auto', fontWeight: 'bold' }}
+            >
+              ×
             </button>
           </div>
+        )}
 
-          {authAction === 'logout' && (
-            <aside ref={authRef} className="auth-card" tabIndex={-1}>
-              <h2>Sign out</h2>
-              <p>Sign out of this session?</p>
-              <div className="action-buttons">
-                <button disabled={busy} onClick={() => void logout()}>
-                  Confirm sign out
-                </button>
-                <button type="button" className="button-secondary" disabled={busy} onClick={() => setAuthAction('')}>
-                  Cancel
-                </button>
-              </div>
-            </aside>
-          )}
-
-          <nav aria-label="Banking actions" className="toolbar">
-            {[
-              ['view_accounts', 'View my accounts'],
-              ['create_account', 'Create account'],
-              ['view_cards', 'View my cards'],
-              ['issue_card', 'Issue new card'],
-              ['replace_card', 'Replace card'],
-              ['block_card', 'Block card'],
-              ['unblock_card', 'Unblock card']
-            ].map(([name, label]) => (
-              <button key={name} disabled={busy || !!pending} onClick={() => choose(name)}>
-                {label}
-              </button>
-            ))}
-          </nav>
-
-          <label>
-            <input type="checkbox" checked={poll} disabled={busy} onChange={e => setPoll(e.target.checked)} /> Submit and poll
-          </label>
-
-          <section aria-live="polite" aria-busy={busy}>
-            {messages.map((message, index) => (
-              <p className={message.startsWith('You:') ? 'customer' : 'assistant'} key={index}>
-                {message}
-              </p>
-            ))}
-            {busy && <p>Working…</p>}
-            <div ref={chatEndRef} />
-          </section>
-
-          {cid && (
-            <form onSubmit={submit}>
-              <label htmlFor="message">How can we help?</label>
-              <textarea
-                id="message"
-                placeholder="For example: I would like a new card."
-                value={text}
-                maxLength={4000}
-                onChange={e => setText(e.target.value)}
-                disabled={busy || !!pending}
-              />
-              <p>Describe what you need. Keep account numbers and other private details out of chat.</p>
-              <button disabled={busy || !!pending || !text.trim()}>Send message</button>
-            </form>
-          )}
-
-          {cid && reply?.country_required && (
-            <aside aria-label="Current country">
-              <h2>Which country are you currently in?</h2>
-              <form onSubmit={supplyCountry}>
-                <label htmlFor="current-country">Current country</label>
-                <input id="current-country" ref={countryInputRef} value={country} onChange={e => setCountry(e.target.value)}
-                  placeholder="For example: Australia" autoComplete="country-name" maxLength={100}
-                  required disabled={busy || !!pending} />
-                <p>We’ll use your declared country to check replacement availability. You’ll still review and confirm any eligible replacement.</p>
-                <button disabled={busy || !!pending || !country.trim()}>Continue with country</button>
-              </form>
-            </aside>
-          )}
-
-          {cid && showInputs && tools.some(item => item.name === tool) && (
-            <aside ref={inputsRef} tabIndex={-1}>
-              <h2>{tools.find(item => item.name === tool)?.label}: private details</h2>
-              <p>Private details stay with the service. They are not sent to the language model.</p>
-              {['issue_card', 'create_card'].includes(tool) && (
-                <p>Ordinary requests return your existing card. Select “Issue an additional card” only if you want another card, then review and confirm.</p>
-              )}
-              {tool === 'issue_card' && tools.find(t => t.name === tool)?.fields.some(f => f.options?.length === 0) && (
-                <p>
-                  Create an account first.{' '}
-                  <button
-                    onClick={() => {
-                      setTool('create_account');
-                      setValues({});
-                    }}
-                  >
-                    Create account
-                  </button>
-                </p>
-              )}
-              {tool === 'unblock_card' && tools.find(t => t.name === tool)?.fields.some(f => f.name === 'card_id' && f.options?.length === 0) && (
-                <p>No blocked cards are currently available to unblock.</p>
-              )}
-              {tool === 'replace_card' && tools.find(t => t.name === tool)?.fields.some(f => f.name === 'card_id' && f.options?.length === 0) && (
-                <p>No blocked cards are currently available to replace.</p>
-              )}
-              {tool === 'block_card' && tools.find(t => t.name === tool)?.fields.some(f => f.name === 'card_id' && f.options?.length === 0) && (
-                <p>No active cards are available to block.</p>
-              )}
-              <form onSubmit={supply}>
-                {tools
-                  .find(item => item.name === tool)
-                  ?.fields.map(field => (
-                    <label className="secure-field" key={field.name}>
-                      {field.label}
-                      {field.options ? (
-                        <select
-                          required={field.required}
-                          value={values[field.name] || ''}
-                          disabled={busy || !!pending}
-                          onChange={e => setValues(old => ({ ...old, [field.name]: e.target.value }))}
-                        >
-                          <option value="">Choose a masked selection</option>
-                          {field.options.map(option => (
-                            <option key={option.ref} value={option.ref}>
-                              {option.label}
-                            </option>
-                          ))}
-                        </select>
-                      ) : field.type === 'boolean' ? (
-                        <select
-                          required={field.required}
-                          value={values[field.name] || ''}
-                          disabled={busy || !!pending}
-                          onChange={e => setValues(old => ({ ...old, [field.name]: e.target.value }))}
-                        >
-                          <option value="">Choose</option>
-                          <option value="true">Yes</option>
-                          <option value="false">No</option>
-                        </select>
-                      ) : (
-                        <input
-                          type={field.type === 'string' ? 'text' : 'number'}
-                          step={field.type === 'integer' ? '1' : 'any'}
-                          required={field.required}
-                          value={values[field.name] || ''}
-                          disabled={busy || !!pending}
-                          autoComplete="off"
-                          maxLength={4000}
-                          onChange={e => setValues(old => ({ ...old, [field.name]: e.target.value }))}
-                        />
-                      )}
-                    </label>
-                  ))}
-                <button disabled={busy || !!pending}>Review action</button>
-              </form>
-            </aside>
-          )}
-
-          {reply?.can_confirm && (
-            <aside ref={reviewRef} tabIndex={-1}>
-              <strong>Action review</strong>
-              <p>{reply.message}</p>
-              <button disabled={busy || !!pending} onClick={confirm}>
-                {reply.confirmation_label || 'Confirm action'}
-              </button>
-              {tool && (
-                <button disabled={busy || !!pending} onClick={() => setShowInputs(true)}>
-                  Edit private details
-                </button>
-              )}
-            </aside>
-          )}
-
-          {reply?.data?.accounts && (
-            <aside ref={dataRef} tabIndex={-1}>
-              <h2>My accounts</h2>
-              {reply.data.accounts.map(a => (
-                <p key={a.account_number}>
-                  {a.account_type} · {a.account_number}
-                </p>
-              ))}
-              {!reply.data.accounts.length && <button onClick={() => choose('create_account')}>Create account</button>}
-            </aside>
-          )}
-
-          {reply?.data?.cards && (
-            <aside ref={dataRef} tabIndex={-1}>
-              <h2>My cards</h2>
-              {reply.data.cards.map(c => (
-                <p key={c.id}>
-                  {c.card_number} · Account ending {c.account_number.slice(-4)}
-                  {c.status ? ` · [${c.status.toUpperCase()}]` : ''}
-                </p>
-              ))}
-            </aside>
-          )}
-
-          {cid && tools.length > 0 && (
-            <details>
-              <summary>Choose an action manually</summary>
-              <p>You can also describe your request in chat above.</p>
-              <select
-                aria-label="Choose an action manually"
-                value={tool}
-                disabled={busy || !!pending}
-                onChange={e => {
-                  setTool(e.target.value);
-                  setValues({});
-                  setShowInputs(!!e.target.value);
+        {/* Public Guest Landing */}
+        {!session && (
+          <div style={{ maxWidth: '480px', margin: '48px auto', textAlign: 'center' }}>
+            <div className="surface-card" style={{ padding: '36px 24px' }}>
+              <div
+                style={{
+                  width: '56px',
+                  height: '56px',
+                  borderRadius: '16px',
+                  backgroundColor: '#101828',
+                  color: '#2dd4bf',
+                  fontSize: '1.8rem',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  margin: '0 auto 16px',
+                  fontWeight: 800,
                 }}
               >
-                <option value="">Choose an action</option>
-                {tools.map(item => (
-                  <option key={item.name} value={item.name}>
-                    {item.label}
-                  </option>
-                ))}
-              </select>
-              <button disabled={busy || !!pending || !tool} onClick={() => setShowInputs(true)}>
-                Enter private details
-              </button>
-            </details>
-          )}
+                N
+              </div>
+              <h2 style={{ fontSize: '1.6rem', fontWeight: 800, color: '#101828', marginBottom: '8px' }}>
+                Welcome to Neo Bank
+              </h2>
+              <p style={{ color: '#64748b', fontSize: '0.95rem', marginBottom: '24px', lineHeight: 1.5 }}>
+                Banking, intelligently connected. Sign in or register to access your verified accounts, Visa Debit cards, and 24/7 banking assistance.
+              </p>
 
-          {pending && !busy && <button onClick={() => void request(pending)}>Retry same submission</button>}
-        </>
-      )}
+              {authAction ? (
+                <form onSubmit={handleAuthSubmit} style={{ textAlign: 'left' }}>
+                  <div className="form-group">
+                    <label htmlFor="auth-username">Username</label>
+                    <input
+                      ref={usernameInputRef}
+                      id="auth-username"
+                      type="text"
+                      className="form-control"
+                      value={username}
+                      onChange={(e) => setUsername(e.target.value)}
+                      placeholder="e.g. alex.mercer"
+                      required
+                      autoComplete="username"
+                    />
+                  </div>
 
-      {error && <p role="alert">{error}</p>}
-      <footer>Simulated cards only. Use synthetic customer details.</footer>
-    </main>
+                  <div className="form-group" style={{ marginTop: '12px' }}>
+                    <label htmlFor="auth-password">Password</label>
+                    <input
+                      id="auth-password"
+                      type="password"
+                      className="form-control"
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                      placeholder="At least 10 characters"
+                      required
+                      minLength={10}
+                      autoComplete={authAction === 'register' ? 'new-password' : 'current-password'}
+                    />
+                  </div>
+
+                  <button
+                    type="submit"
+                    className="btn-primary"
+                    style={{ width: '100%', marginTop: '20px', padding: '12px' }}
+                    disabled={busy}
+                  >
+                    {busy
+                      ? 'Please wait...'
+                      : authAction === 'register'
+                      ? 'Create Neo Account'
+                      : 'Sign In to Neo Bank'}
+                  </button>
+
+                  <div style={{ textAlign: 'center', marginTop: '14px', fontSize: '0.85rem' }}>
+                    <button
+                      type="button"
+                      style={{ background: 'none', border: 'none', color: '#0d9488', cursor: 'pointer', fontWeight: 600 }}
+                      onClick={() => setAuthAction(authAction === 'register' ? 'login' : 'register')}
+                    >
+                      {authAction === 'register'
+                        ? 'Already have an account? Sign in'
+                        : "Don't have an account? Register"}
+                    </button>
+                  </div>
+                </form>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                  <button
+                    className="btn-primary"
+                    style={{ width: '100%', padding: '12px', fontSize: '1rem' }}
+                    onClick={() => {
+                      setAuthAction('login');
+                      setTimeout(() => usernameInputRef.current?.focus(), 50);
+                    }}
+                  >
+                    Sign in to your account
+                  </button>
+                  <button
+                    className="btn-secondary"
+                    style={{ width: '100%', padding: '12px', fontSize: '1rem' }}
+                    onClick={() => {
+                      setAuthAction('register');
+                      setTimeout(() => usernameInputRef.current?.focus(), 50);
+                    }}
+                  >
+                    Open a new account (Register)
+                  </button>
+                  <a
+                    href="/auth/login"
+                    className="btn-secondary"
+                    style={{ width: '100%', textAlign: 'center', textDecoration: 'none', marginTop: '4px' }}
+                  >
+                    Enterprise Single Sign-On
+                  </a>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* Authenticated Views */}
+        {session && (
+          <>
+            {currentTab === 'home' && (
+              <HomeView
+                session={session}
+                accounts={accounts}
+                cards={cards}
+                activities={activities}
+                onNavigate={setCurrentTab}
+                onOpenAccount={() => setCurrentTab('accounts')}
+                onIssueCard={() => setCurrentTab('cards')}
+              />
+            )}
+
+            {currentTab === 'accounts' && (
+              <AccountsView
+                accounts={accounts}
+                isLoading={busy}
+                onRefresh={refreshBankingData}
+                onCreateAccount={handleCreateAccount}
+              />
+            )}
+
+            {currentTab === 'cards' && (
+              <CardsView
+                cards={cards}
+                accounts={accounts}
+                isLoading={busy}
+                onRefresh={refreshBankingData}
+                onIssueCard={handleIssueCard}
+                onBlockCard={handleBlockCard}
+                onNavigateToAccounts={() => setCurrentTab('accounts')}
+                onStartChat={handleStartChatScenario}
+              />
+            )}
+
+            {currentTab === 'chat' && (
+              <ChatView
+                messages={messages}
+                isBusy={busy}
+                onSendMessage={handleSendMessage}
+                onConfirmAction={handleConfirmAction}
+                onCancelAction={() => {
+                  setLatestReply(null);
+                  handleSendMessage('Cancel that action.');
+                }}
+                onSelectCountry={handleSelectCountry}
+                onActionChipClick={(action) => {
+                  if (action === 'block_and_replace') handleSendMessage('Please block and replace my card');
+                  else if (action === 'block_card') handleSendMessage('Please block my card');
+                  else if (action === 'replace_card') handleSendMessage('Please replace my card');
+                  else if (action === 'view_cards') setCurrentTab('cards');
+                  else if (action === 'view_accounts') setCurrentTab('accounts');
+                }}
+                onExploreProducts={() => {
+                  addActivity('Product Exploration', 'Customer explored Neo Bank catalogue', 'account');
+                  alert('Neo Bank Products:\n• High-Interest Savings Account\n• Multi-Currency Travel Debit Card\n• Smart Spend Budgeting Tools');
+                }}
+                tools={tools}
+                activeTool={tool}
+                onSupplyInputs={handleSupplyInputs}
+              />
+            )}
+
+            {currentTab === 'activity' && (
+              <ActivityView activities={activities} onClear={() => setActivities([])} />
+            )}
+          </>
+        )}
+      </main>
+    </div>
   );
+}
+
+// Helper to validate and read session response
+async function readSessionResponse(response: Response): Promise<Session> {
+  const data = await response.json();
+  if (typeof data?.name !== 'string' || typeof data?.csrf !== 'string') {
+    throw new Error('Malformed session returned by service');
+  }
+  return { name: data.name, csrf: data.csrf };
 }
 
 createRoot(document.getElementById('root')!).render(<App />);
