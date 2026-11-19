@@ -348,6 +348,20 @@ initial identity setup. Same-origin routing preserves `/auth/callback` for the B
 
 **Qdrant and full readiness:**
 
+**`public-banking-workflows` and `remote-verification` smoke failures after
+geographic policy changes:** inspect the individual report rows. Older smoke
+scripts requested replacement without declaring a country and checked a cumulative
+action count, so they could label replacement PASS even when only blocking ran;
+the later active-card persistence snapshot then failed. The updated smoke request
+declares Australia, requires exactly two new confirmed actions, checks both the
+blocked original and active replacement, and retains idempotent replay checks.
+Failure evidence now identifies the workflow stage without logging customer data.
+Deploy the updated checkout using the create/redeploy command with explicit
+`-ModelId`; a local-only edit does not update the checker already on the VM.
+`remote-verification` is the aggregate failure when a remote check fails, not
+necessarily a second independent infrastructure fault. Never skip smoke checks
+or treat an old replacement PASS row alone as proof of issuance.
+
 **PowerShell `Where-Object ... status cannot be resolved`:** Windows PowerShell
 5.1 can wrap `ConvertFrom-Json` arrays when they are collected directly from a
 pipeline. The updated checker explicitly flattens and validates each report row,

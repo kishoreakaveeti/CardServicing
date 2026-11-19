@@ -66,6 +66,87 @@ def test_oidc_login_client_is_entered_once_and_closed(monkeypatch):
     assert authenticated.is_closed
 
 
+@pytest.mark.parametrize('increment,expected,passes',[(1,1,True),(2,2,True),(1,2,False),(0,1,False)])
+def test_smoke_counts_new_actions_instead_of_cumulative_success(monkeypatch,increment,expected,passes):
+    module=load('smoke')
+    # Prior create/block/unblock actions must not conceal a missing replacement.
+    review={'review':'synthetic-review','can_confirm':True,'usage':{'completed_actions':5}}
+    result={'usage':{'completed_actions':5+increment}}
+    calls=[]
+    def operation(client,path,body,key=None):
+        calls.append((path,key))
+        return review if path.endswith('/inputs') else result
+    monkeypatch.setattr(module,'operation',operation)
+    if passes:
+        assert module.execute(None,'/synthetic','block_card',{},expected_actions=expected)==result
+        assert calls[1][1]==calls[2][1]
+    else:
+        with pytest.raises(AssertionError):
+            module.execute(None,'/synthetic','block_card',{},expected_actions=expected)
+
+
+@pytest.mark.parametrize('missing_replacement',[False,True])
+def test_public_smoke_replacement_supplies_country_and_verifies_actual_card_states(tmp_path,monkeypatch,missing_replacement):
+    module=load('smoke')
+    monkeypatch.setattr(module,'STATE',tmp_path)
+    (tmp_path/'deployment.json').write_text(json.dumps({'AppDomain':'app.test','IdentityDomain':'app.test'}))
+    (tmp_path/'.env.stack').write_text('DEMO_PASSWORD=synthetic-password')
+    counts={'actions':0,'active':0,'blocked':0}
+    prompts=[]
+    def options():
+        return {'tools':[{'name':name,'fields':[{'name':'card_id','options':[
+            {'ref':name+'-synthetic','label':label} for _ in range(count)]}]}
+            for name,count,label in [('block_card',counts['active'],'Synthetic active card'),
+                ('unblock_card',counts['blocked'],'Synthetic blocked card'),
+                ('replace_card',counts['blocked'],'Synthetic blocked card')]]}
+    class Client:
+        def __init__(self,**kwargs): self.headers={}
+        def __enter__(self): return self
+        def __exit__(self,*args): pass
+        def get(self,path):
+            if path.endswith('/health'): return httpx.Response(200)
+            if 'openid-configuration' in path: return httpx.Response(200,json={'issuer':'https://app.test/realms/cards'})
+            return httpx.Response(200,json=options())
+        def post(self,path,**kwargs):
+            return httpx.Response(401 if path=='/api/conversations' else 201,json={'csrf':'synthetic'})
+    monkeypatch.setattr(module.httpx,'Client',Client)
+    from contextlib import contextmanager
+    @contextmanager
+    def login(*args):
+        class Login:
+            def get(self,*args): return httpx.Response(200)
+            def post(self,*args,**kwargs): return httpx.Response(403)
+        yield Login()
+    monkeypatch.setattr(module,'sign_in_oidc',login)
+    def operation(client,path,body,key=None):
+        if path=='/api/conversations': return {'id':'synthetic'}
+        prompts.append(body['text'])
+        name='unblock_card' if 'unfreeze' in body['text'] else 'block_card'
+        return {'input_tool':name,'usage':{'model_calls':1}}
+    monkeypatch.setattr(module,'operation',operation)
+    def execute(client,path,tool,fields,selections=None,*,expected_actions=1):
+        if tool=='create_account': counts.update(active=1)
+        elif tool=='unblock_card': counts.update(active=1,blocked=0)
+        elif expected_actions==2:
+            assert 'I am currently in Australia' in prompts[-1]
+            counts.update(active=0 if missing_replacement else 1,blocked=1)
+        else: counts.update(active=0,blocked=1)
+        counts['actions']+=expected_actions
+        return {'usage':{'completed_actions':counts['actions']}}
+    monkeypatch.setattr(module,'execute',execute)
+    module.main()
+    report=json.loads((tmp_path/'public-report.json').read_text())
+    if missing_replacement:
+        assert any(row['check']=='public-banking-workflows' and row['status']=='FAIL'
+                   and row['evidence']=='card-replacement: AssertionError' for row in report),report
+        assert not any(row['check']=='card-replacement' and row['status']=='PASS' for row in report)
+        assert not (tmp_path/'smoke-customer.json').exists()
+    else:
+        assert not any(row['status']=='FAIL' for row in report),report
+        assert any(row['check']=='card-replacement' and row['status']=='PASS' for row in report)
+        assert json.loads((tmp_path/'smoke-customer.json').read_text())['snapshot']
+
+
 @pytest.mark.parametrize('published',['127.0.0.1','0.0.0.0'])
 def test_isolation_counts_configured_services_even_with_caddy_in_same_project(tmp_path,monkeypatch,published):
     module=load('verify_isolation')

@@ -75,13 +75,13 @@ def selection(options,tool,field):
     return next(f for f in spec['fields'] if f['name']==field)['options'][0]['ref']
 
 
-def execute(client,path,tool,fields,selections=None):
+def execute(client,path,tool,fields,selections=None,*,expected_actions=1):
     review=operation(client,path+'/inputs',{'tool':tool,'fields':fields,'selections':selections or {}})
     assert review['can_confirm'] and review['review']
     before=review.get('usage',{}).get('completed_actions',0)
     key=uuid4().hex
     result=operation(client,path+'/confirm',{'review':review['review']},key)
-    assert result.get('usage',{}).get('completed_actions',0)>before
+    assert result.get('usage',{}).get('completed_actions',0)-before==expected_actions
     replay=operation(client,path+'/confirm',{'review':review['review']},key)
     assert replay==result
     return result
@@ -109,6 +109,7 @@ def main():
     origin='https://'+cfg['AppDomain']
     identity='https://'+cfg['IdentityDomain']
     report=[]
+    stage='public-readiness'
     if '--persistence' in sys.argv:
         try:
             record(report,'restart-persistence','PASS',persistence(origin))
@@ -148,6 +149,7 @@ def main():
                 assert client.post('/api/conversations',json={},headers={'X-CSRF-Token':'wrong'}).status_code==403
         check('keycloak-browser-login',oidc,'Authorization Code + PKCE, state/nonce, public callback and secure session cookie')
         with httpx.Client(base_url=origin,headers={'Origin':origin},timeout=120) as client:
+            stage='customer-registration'
             assert client.post('/api/conversations',json={}).status_code==401
             username='azure-smoke-'+uuid4().hex[:12]
             password=secrets.token_urlsafe(24)
@@ -157,9 +159,11 @@ def main():
             record(report,'customer-registration','PASS','Fresh synthetic application customer registered through authenticated service boundary')
             cid=operation(client,'/api/conversations',{})['id']
             path='/api/conversations/'+cid
+            stage='account-and-card-issuance'
             execute(client,path,'create_account',{'account_type':'transaction','issue_card':True})
             record(report,'account-and-card-issuance','PASS','Reviewed account creation and card issuance completed through Agent/MCP; replay matched')
             # Natural-language calls exercise LangGraph classification and the real model.
+            stage='card-blocking'
             proposed=operation(client,path+'/messages',{'text':'Please temporarily freeze my card.'})
             assert proposed.get('input_tool')=='block_card'
             assert proposed.get('usage',{}).get('model_calls',0)>0
@@ -167,19 +171,27 @@ def main():
             card=selection(opts,'block_card','card_id')
             execute(client,path,'block_card',{'reason':'temporary freeze'}, {'card_id':card})
             record(report,'card-blocking','PASS','FinCrime workflow confirmed a temporary freeze through remote MCP')
+            stage='card-unblocking'
             proposed=operation(client,path+'/messages',{'text':'Please unfreeze my temporarily frozen card. I have it safely with me.'})
             assert proposed.get('input_tool')=='unblock_card'
             card=selection(tools(client,path),'unblock_card','card_id')
             execute(client,path,'unblock_card',{}, {'card_id':card})
             record(report,'card-unblocking','PASS','Policy-authorized temporary-freeze reversal completed and replay matched')
-            proposed=operation(client,path+'/messages',{'text':'Please block my card and reissue a new one'})
+            stage='card-replacement'
+            proposed=operation(client,path+'/messages',{'text':'I am currently in Australia. Please block my card and reissue a new one.'})
             assert proposed.get('input_tool')=='block_card'
             card=selection(tools(client,path),'block_card','card_id')
-            replaced=execute(client,path,'block_card',{'reason':'lost'}, {'card_id':card})
-            assert replaced.get('usage',{}).get('completed_actions',0)>=2
-            record(report,'card-replacement','PASS','Reviewed lost-card blocking and replacement completed with idempotent replay')
+            replaced=execute(client,path,'block_card',{'reason':'lost'}, {'card_id':card},expected_actions=2)
+            assert not replaced.get('country_required')
+            opts=tools(client,path)
+            assert len(snapshot(opts))==1
+            replacement_tool=next(t for t in opts if t['name']=='replace_card')
+            blocked=next(f for f in replacement_tool['fields'] if f['name']=='card_id')['options']
+            assert len(blocked)==1
+            record(report,'card-replacement','PASS','Declared AU; exactly two confirmed actions; one blocked original and one active replacement; idempotent replay matched')
             record(report,'langgraph-anthropic','PASS','Live natural-language routing produced expected FinCrime tools and reported nonzero model calls')
-            saved={'username':username,'password':password,'snapshot':snapshot(tools(client,path))}
+            stage='save-restart-snapshot'
+            saved={'username':username,'password':password,'snapshot':snapshot(opts)}
             assert saved['snapshot']
             target=STATE/'smoke-customer.json'
             target.write_text(json.dumps(saved))
@@ -188,7 +200,7 @@ def main():
         # realm: do not silently enable realm self-registration or merge identities.
         record(report,'keycloak-self-registration','NOT TESTED','Existing realm deliberately disables self-registration; application registration verified separately')
     except Exception as exc:
-        record(report,'public-banking-workflows','FAIL',type(exc).__name__)
+        record(report,'public-banking-workflows','FAIL',stage+': '+type(exc).__name__)
     finally:
         (STATE/'public-report.json').write_text(json.dumps(report,indent=2))
 
