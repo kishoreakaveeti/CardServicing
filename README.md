@@ -3,6 +3,12 @@
 **Azure deployment and operations:** [AZURE_DEPLOYMENT.md](AZURE_DEPLOYMENT.md)
 is the guide for one-command create, stop, start, redeploy and verified teardown.
 
+Create or redeploy with an explicit model selection:
+
+```powershell
+.\scripts\azure-create.ps1 -SubscriptionId $subscriptionId -ModelId claude-haiku-5-5
+```
+
 A production-grade, chat-first banking simulation demonstrating **LangGraph + LangChain multi-agent orchestration**, **privacy-preserving LLM interactions via Microsoft Presidio**, **catalogue-driven Model Context Protocol (MCP)** integration, and **independent financial crime risk management (FinCrime Agent)**. Customers can seamlessly interact through conversational AI or direct-action UI workflows—both paths strictly enforce identical authorization, verification, and persistent business logic.
 
 ---

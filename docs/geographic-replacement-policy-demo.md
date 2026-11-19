@@ -223,6 +223,8 @@ automatically by the unit tests.
 ## Azure update
 
 Use the existing single deployment script after local validation:
+Specify `-ModelId` explicitly on both create and redeploy to select the intended
+model even when deployment configuration has already been saved.
 
 ```powershell
 .\scripts\azure-create.ps1 -SubscriptionId $subscriptionId -ModelId claude-haiku-5-5

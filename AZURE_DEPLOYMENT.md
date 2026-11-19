@@ -104,15 +104,21 @@ $subscriptionId = az account show --query id --output tsv
 
 | Operation | Exact command | Data |
 | --- | --- | --- |
-| Create/deploy | `.\scripts\azure-create.ps1 -SubscriptionId $subscriptionId` | Creates or reuses owned infrastructure and volumes |
+| Create/deploy | `.\scripts\azure-create.ps1 -SubscriptionId $subscriptionId -ModelId claude-haiku-5-5` | Creates or reuses owned infrastructure and volumes |
 | Stop/deallocate | `.\scripts\azure-stop.ps1 -SubscriptionId $subscriptionId` | Preserved |
 | Start | `.\scripts\azure-start.ps1 -SubscriptionId $subscriptionId` | Preserved; runs synthetic smoke workflows |
 | Status | `.\scripts\azure-status.ps1 -SubscriptionId $subscriptionId` | Preserved |
-| Update/redeploy | `.\scripts\azure-create.ps1 -SubscriptionId $subscriptionId` | Rebuilds current checkout; preserves volumes |
+| Update/redeploy | `.\scripts\azure-create.ps1 -SubscriptionId $subscriptionId -ModelId claude-haiku-5-5` | Rebuilds current checkout; preserves volumes |
 | Preview deletion | `.\scripts\azure-destroy.ps1 -SubscriptionId $subscriptionId -WhatIf` | No Azure deletion |
 | Destroy permanently | `.\scripts\azure-destroy.ps1 -SubscriptionId $subscriptionId` | Permanently deleted after typed group confirmation |
 
 ## C. First deployment
+
+Pass `-ModelId claude-haiku-5-5` explicitly for both first deployment and
+redeployment so the intended model is selected, including when saved deployment
+configuration exists. Use the exact model ID available to your Anthropic key.
+The parameter has a default, but these examples specify the model rather than
+relying on a default or a previously saved selection.
 
 1. Install/check tools, login and select the subscription as above. Have your
    Anthropic API key ready to paste into the masked prompt. SSH CIDR is detected automatically.
@@ -124,7 +130,7 @@ $subscriptionId = az account show --query id --output tsv
    securely for a missing Anthropic key:
 
    ```powershell
-   .\scripts\azure-create.ps1 -SubscriptionId $subscriptionId
+   .\scripts\azure-create.ps1 -SubscriptionId $subscriptionId -ModelId claude-haiku-5-5
    ```
 
 4. Configuration is saved at `.azure/cardservicing-<scope-hash>/deployment.json`.
@@ -288,7 +294,7 @@ az network nsg rule list -g $rg --nsg-name "$vm-nsg" --subscription $subscriptio
 Test-NetConnection $ip -Port 22
 ssh @sshOptions $target 'true'
 # If your approved source changed, update it and redeploy:
-.\scripts\azure-create.ps1 -SubscriptionId $subscriptionId -SshSourceCidr 'YOUR.NEW.PUBLIC.IP/32'
+.\scripts\azure-create.ps1 -SubscriptionId $subscriptionId -ModelId claude-haiku-5-5 -SshSourceCidr 'YOUR.NEW.PUBLIC.IP/32'
 ```
 
 **Docker installation, container startup and logs:**
@@ -455,7 +461,7 @@ checks terminate execution. Scope is subscription + resource group; keep it stab
 
 | Script | Required | Optional / defaults | Behavior / example |
 | --- | --- | --- | --- |
-| `scripts/azure-create.ps1` | `SubscriptionId` | `ResourceGroup=rg-cardservicing-demo`, `Location=australiaeast`, `VmName=vm-cardservicing-demo`, `VmSize=Standard_B4ms`, `DnsLabel=cardservicing-<hash>`, `SshSourceCidr=automatic detection, prompt on failure`, `AnthropicKeyFile=~/.secrets/cardservicing-anthropic-key.txt`, `ModelId=claude-haiku-5-5`, `AcmeEmail=operator@<hostname>` | Create/redeploy current source; volumes preserved. `.\scripts\azure-create.ps1 -SubscriptionId $subscriptionId` |
+| `scripts/azure-create.ps1` | `SubscriptionId` | `ResourceGroup=rg-cardservicing-demo`, `Location=australiaeast`, `VmName=vm-cardservicing-demo`, `VmSize=Standard_B4ms`, `DnsLabel=cardservicing-<hash>`, `SshSourceCidr=automatic detection, prompt on failure`, `AnthropicKeyFile=~/.secrets/cardservicing-anthropic-key.txt`, `ModelId=claude-haiku-5-5`, `AcmeEmail=operator@<hostname>` | Create/redeploy current source; volumes preserved. `.\scripts\azure-create.ps1 -SubscriptionId $subscriptionId -ModelId claude-haiku-5-5` |
 | `scripts/azure-stop.ps1` | `SubscriptionId` | `ResourceGroup` as above | Graceful stop + verified deallocation; preserves data. `.\scripts\azure-stop.ps1 -SubscriptionId $subscriptionId` |
 | `scripts/azure-start.ps1` | `SubscriptionId` | `ResourceGroup`, `RestartContainers` switch | Existing VM only; starts and verifies, preserves data. `.\scripts\azure-start.ps1 -SubscriptionId $subscriptionId` |
 | `scripts/azure-status.ps1` | `SubscriptionId` | `ResourceGroup` | Resource/power/container status; no data changes. `.\scripts\azure-status.ps1 -SubscriptionId $subscriptionId` |
@@ -528,7 +534,7 @@ install the updated remote lifecycle helpers before using the new start/stop che
 Run just this command:
 
 ```powershell
-.\scripts\azure-create.ps1 -SubscriptionId $subscriptionId
+.\scripts\azure-create.ps1 -SubscriptionId $subscriptionId -ModelId claude-haiku-5-5
 ```
 
 The terminal prints timestamped stages, the exact subscription/resource group,
