@@ -218,7 +218,7 @@ class AgentOrchestrator:
                     is_blocked = await self.check_blocked_fn(account_num)
                     if is_blocked:
                         return CustomerReply(
-                            'Cannot issue a new card for this account because it has an active blocked card. '
+                            'Banking policy restricts card issuance while an existing card is blocked. '
                             'Under banking security rules, the blocked card must be unblocked or resolved first.'
                         )
 

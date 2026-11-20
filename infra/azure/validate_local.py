@@ -130,7 +130,7 @@ os.chmod(p/'delegation-private.pem',0o640)
 os.chown(p/'realm.json',0,0)
 os.chmod(p/'realm.json',0o640)
 ''')
-        for service in ('identity-db','identity','qdrant','frontend'):
+        for service in ('identity-db','identity','qdrant','frontend','opa'):
             name = project + '-' + service
             docker(*compose,'run','-d','--no-deps','--use-aliases','--name',name,service)
             containers.append(name)

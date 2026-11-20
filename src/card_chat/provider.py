@@ -67,6 +67,7 @@ class AnthropicModel:
             'Use exact supplied references for private arguments; never invent, decode or request private identifiers. '
             'Ask one friendly clarification when intent is ambiguous. All permitted tools stay available for changes of action. '
             'When intent clearly matches a tool, propose that tool immediately, even if arguments are missing. '
+            'When the customer expresses a desire or intent to obtain, order, or create a card (such as "I want a card", "Can I get a card?", "I need a debit card", "How can I get my first card?", "Please issue me a card"), propose issue_card (or create_card if available), even if no account number is provided yet. '
             'Omit unknown arguments and unavailable private references; never invent placeholder references. '
             'The application opens the matching secure form automatically. Do not ask the customer to choose an action manually. '
             'For unsupported requests, explain the available capabilities rather than choosing a different action. '
@@ -224,7 +225,9 @@ class StubModel:
             candidates = ['block_card']
         elif 'account' in text and any(word in text for word in ('create', 'open', 'new', 'start', 'want', 'apply')):
             candidates = ['create_account']
-        elif 'card' in text and any(word in text for word in ('issue', 'new', 'want', 'additional', 'another')):
+        elif ('card' in text or 'debit' in text or 'credit' in text) and any(word in text for word in (
+            'issue', 'new', 'want', 'additional', 'another', 'get', 'need', 'first', 'like', 'create', 'order', 'request', 'apply'
+        )):
             candidates = ['issue_card', 'create_card']
         elif 'account' in text:
             candidates = ['view_accounts']

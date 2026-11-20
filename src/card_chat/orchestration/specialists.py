@@ -108,7 +108,7 @@ class CardsSpecialistNode:
                 "next_step": "supervisor",
             }
 
-        # Deterministic issue_card / create_card proposal if account_number is known and model has no queued outputs
+        # Deterministic issue_card / create_card proposal if model has no queued outputs
         if intent in ("issue_card", "create_card") and _is_unconfigured_stub(self.agent):
             target_acc = (
                 context_arguments.get("account_number")
@@ -116,21 +116,20 @@ class CardsSpecialistNode:
                 or state.get("verified_domain_facts", {}).get("account_number")
                 or (handoff.relevant_context.get("account_number") if handoff and handoff.relevant_context else None)
             )
-            if target_acc:
-                tool_args = {"account_number": target_acc}
-                result = HandoffResult(
-                    source_agent=self.name,
-                    status="requires_confirmation",
-                    message=f"I have prepared {intent} for your review.",
-                    tool_proposal={"name": intent, "arguments": tool_args},
-                )
-                history = list(state.get("handoff_history", [])) + [result]
-                return {
-                    "handoff_history": history,
-                    "active_agent": self.name,
-                    "proposed_tool": {"name": intent, "arguments": tool_args},
-                    "next_step": "supervisor",
-                }
+            tool_args = {"account_number": target_acc} if target_acc else {}
+            result = HandoffResult(
+                source_agent=self.name,
+                status="requires_confirmation",
+                message=f"I have prepared {intent} for your review.",
+                tool_proposal={"name": intent, "arguments": tool_args},
+            )
+            history = list(state.get("handoff_history", [])) + [result]
+            return {
+                "handoff_history": history,
+                "active_agent": self.name,
+                "proposed_tool": {"name": intent, "arguments": tool_args},
+                "next_step": "supervisor",
+            }
 
         # The supervisor has classified replacement and checked its policies.
         # Prepare its existing secure form directly; another model turn must not

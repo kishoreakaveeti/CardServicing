@@ -16,9 +16,10 @@ export const OverviewView: React.FC<OverviewViewProps> = ({
   onNavigateTab,
   onReviewCase,
 }) => {
-  const pendingCases = cases.filter((c) => c.status === 'PENDING');
-  const approvedCases = cases.filter((c) => c.status === 'APPROVED' || c.status === 'COMPLETED');
-  const rejectedCases = cases.filter((c) => c.status === 'REJECTED');
+  const safeCases = Array.isArray(cases) ? cases : [];
+  const pendingCases = safeCases.filter((c) => c && c.status === 'PENDING');
+  const approvedCases = safeCases.filter((c) => c && (c.status === 'APPROVED' || c.status === 'COMPLETED'));
+  const rejectedCases = safeCases.filter((c) => c && c.status === 'REJECTED');
 
   return (
     <div>
@@ -103,7 +104,7 @@ export const OverviewView: React.FC<OverviewViewProps> = ({
                 <tr key={c.case_id}>
                   <td style={{ fontFamily: 'monospace', fontWeight: 600 }}>{c.case_id}</td>
                   <td>{c.customer_id}</td>
-                  <td><span style={{ textTransform: 'capitalize' }}>{c.action.replace('_', ' ')}</span></td>
+                  <td><span style={{ textTransform: 'capitalize' }}>{(c.action || 'replacement').replace(/_/g, ' ')}</span></td>
                   <td>
                     <span className="badge-country">{c.current_country}</span>
                   </td>

@@ -41,7 +41,7 @@ def test_build_indexes_before_application_start(launcher):
     assert result.returncode == 0, result.stderr
     assert len(calls) == 4, calls
     assert calls[0].endswith(' build')
-    assert calls[1].endswith(' up -d --wait --wait-timeout 120 qdrant')
+    assert calls[1].endswith(' up -d --wait --wait-timeout 120 qdrant opa')
     assert '--entrypoint python cards-agent -m card_chat.policy.pipeline.cli ingest' in calls[2]
     assert calls[3].endswith(' up -d --wait --wait-timeout 360')
     assert 'Policy indexing completed' in result.stdout
@@ -59,7 +59,7 @@ def test_normal_start_refreshes_index_without_rebuilding(launcher):
     result,calls = launcher()
     assert result.returncode == 0, result.stderr
     assert len(calls) == 3
-    assert calls[0].endswith(' qdrant')
+    assert calls[0].endswith(' qdrant opa')
     assert calls[1].endswith(' card_chat.policy.pipeline.cli ingest')
 
 

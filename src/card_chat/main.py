@@ -413,6 +413,13 @@ def create_app(model=None, gateway=None, *, config=None, policy_retriever=None):
                 calling_agent = 'fincrime_agent'
             else:
                 calling_agent = 'cards_agent'
+            if proposal.name == 'replace_card' and not c.geographic_binding and (c.country_context or {}).get('status') == 'explicit':
+                method = getattr(app.state.gateway, 'declare_country', None)
+                if callable(method):
+                    try:
+                        c.geographic_binding = await method(cid, c.country_context)
+                    except Exception:
+                        pass
             from card_chat.security import replacement_context
             token = replacement_context.set(c.geographic_binding)
             try:
@@ -809,16 +816,28 @@ def create_app(model=None, gateway=None, *, config=None, policy_retriever=None):
 
 
             from card_chat.policy.geography import declared_country
-            country = declared_country(safe_text)
+            country = declared_country(safe_text, current_context=c.country_context)
             if country is not None:
                 from card_chat.policy.geography import normalize_country
                 is_pure_country_reply = bool(normalize_country(safe_text.strip().rstrip('.!')))
                 continuing_country_form = c.country_required and is_pure_country_reply
                 c.country_required = country.status != 'explicit'
+
+                prev_country_code = (c.country_context or {}).get('code')
                 c.country_context = country.model_dump()
                 c.geographic_binding = None
+
+                # Invalidate stale draft/submission when country declaration changes
+                if prev_country_code and prev_country_code != country.code:
+                    if c.draft.get('tool') == 'replace_card':
+                        c.draft = {}
+                    if c.proposal and c.proposal.name == 'replace_card':
+                        c.proposal = None
+                    if c.submission and c.submission.get('tool') == 'replace_card':
+                        c.submission = None
+
                 method = getattr(app.state.gateway, 'declare_country', None)
-                if callable(method):
+                if callable(method) and country.status == 'explicit':
                     try:
                         c.geographic_binding = await method(cid, c.country_context)
                     except Exception:
@@ -908,7 +927,9 @@ def create_app(model=None, gateway=None, *, config=None, policy_retriever=None):
             graph_config = {'configurable': {'thread_id': f'{owner()}:{cid}'}}
             snapshot = await app.state.orchestrator.workflow.aget_state(graph_config)
             decision = snapshot.values.get('policy_evaluation', {})
+            geo_dec = snapshot.values.get('geographic_decision', {})
             if (turn.name in ('issue_card', 'create_card') and
+                    geo_dec.get('decision') in ('denied', 'DENY') and
                     any(item.get('intent') == 'replace_card' for item in snapshot.values.get('action_plan', []))):
                 return reply(c, 'A replacement request cannot be changed into additional issuance. Please request replacement under its policy controls.')
             if decision.get('customer_decision') == 'accept' and decision.get('recommended_intent') == turn.name:
@@ -1292,7 +1313,7 @@ def create_app(model=None, gateway=None, *, config=None, policy_retriever=None):
         return {
             'active_release': active,
             'releases': releases,
-            'policies': [{'policy_id': d.policy_id, 'version': d.version, 'title': d.title, 'effective_date': d.effective_date} for d in all_docs]
+            'policies': [{'id': d.policy_id, 'policy_id': d.policy_id, 'version': d.version, 'title': d.title, 'effective_date': d.effective_date} for d in all_docs]
         }
 
     @app.get('/fincrime/policies/{policy_id}')

@@ -198,15 +198,20 @@ export const PolicyManagementView: React.FC<PolicyManagementViewProps> = ({
 
       {/* Policy Selector */}
       <div style={{ display: 'flex', gap: '8px', marginBottom: '20px', flexWrap: 'wrap' }}>
-        {policies.map((p) => (
-          <button
-            key={p.id}
-            className={`fincrime-tab-btn ${selectedPolicyId === p.id ? 'active' : ''}`}
-            onClick={() => setSelectedPolicyId(p.id)}
-          >
-            {p.id}: {p.title.split(' ')[0]}
-          </button>
-        ))}
+        {(policies || []).map((p) => {
+          const pid = p.id || p.policy_id || 'POL-006';
+          const title = p.title || pid;
+          const firstWord = title.split(' ')[0] || pid;
+          return (
+            <button
+              key={pid}
+              className={`fincrime-tab-btn ${selectedPolicyId === pid ? 'active' : ''}`}
+              onClick={() => setSelectedPolicyId(pid)}
+            >
+              {pid}: {firstWord}
+            </button>
+          );
+        })}
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr', gap: '24px' }}>

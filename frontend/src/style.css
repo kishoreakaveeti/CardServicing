@@ -976,7 +976,8 @@ button:disabled, .btn-primary:disabled, .btn-secondary:disabled {
 }
 
 /* Mobile Bottom Navigation */
-.bottom-nav {
+.bottom-nav,
+.bottom-nav-mobile {
   display: none;
   position: fixed;
   bottom: 0;
@@ -1017,7 +1018,8 @@ button:disabled, .btn-primary:disabled, .btn-secondary:disabled {
   .nav-links-desktop {
     display: none;
   }
-  .bottom-nav {
+  .bottom-nav,
+  .bottom-nav-mobile {
     display: flex;
   }
   .main-viewport {

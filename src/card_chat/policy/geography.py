@@ -16,10 +16,13 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
 class CountryContext(BaseModel):
-    model_config = ConfigDict(extra='forbid')
+    model_config = ConfigDict(extra='ignore')
     code: str | None = None
     status: Literal['explicit', 'ambiguous', 'unknown'] = 'unknown'
     source: Literal['customer_declaration'] = 'customer_declaration'
+    revision: int = 1
+    updated_at: str | None = None
+    verification_status: Literal['unverified', 'verified', 'disputed'] = 'unverified'
 
 
 class RequestInterpretation(BaseModel):
@@ -64,17 +67,45 @@ def normalize_country(value: str | None) -> str | None:
         return None
 
 
-def declared_country(text: str, proposed: RequestInterpretation | None = None) -> CountryContext | None:
+def declared_country(
+    text: str,
+    proposed: RequestInterpretation | None = None,
+    current_context: dict | CountryContext | None = None,
+) -> CountryContext | None:
     """Accept only explicit current-location language or a standalone clarification.
 
     An LLM proposal must match an actual declaration and the ISO database. A bare
-    model code, delivery destination, negation or historical mention grants nothing.
+    model code, delivery destination, negation, historical mention, or future travel grants nothing.
     """
     text = text.strip().rstrip('.!')
+
+    # Distinguish historical mentions and future travel
+    has_explicit_current_indicator = bool(re.search(
+        r"\b(?:i(?:'m| am|’m)\s+(?:currently\s+|now\s+)?(?:in|located in)|my current (?:location|country) is|currently (?:in|located in)|now in|now located in)\b",
+        text,
+        re.I,
+    ))
+    has_historical_indicator = bool(re.search(
+        r"\b(?:visited|was in|were in|went to|returned from|previously lived in|traveled to|travelled to|flew to|last year|last month|last week|yesterday|years ago|months ago)\b",
+        text,
+        re.I,
+    ))
+    has_future_indicator = bool(re.search(
+        r"\b(?:will be in|travelling to|traveling to|going to be in|flying to|planning to visit|planning to travel to|next week|next month|tomorrow)\b",
+        text,
+        re.I,
+    ))
+
+    # If text has purely historical travel or future travel and lacks any current location statement, it is not a current declaration.
+    if (has_historical_indicator or has_future_indicator) and not has_explicit_current_indicator:
+        # A standalone country name (e.g. user just typed "Australia") is not historical/future
+        if not (normalize_country(text) or text.casefold() == 'korea'):
+            return None
+
     patterns = (
         r"(?:i(?:'m| am|’m)\s+(?:currently\s+|now\s+)?(?:in|located in)|my current (?:location|country) is)\s+([^.!?;]+)",
         r"(?:i(?:'m| am|’m)\s+(?:travelling|traveling|commuting|riding|on vacation|on holiday|visiting|staying)\s+(?:(?:on|in)\s+[^.!?;]+\s+)?in)\s+([^.!?;]+)",
-        r"(?:(?:travelling|traveling|commuting|on vacation|on holiday|visiting|staying|vacationing)\s+(?:(?:on|in)\s+[^.!?;]+\s+)?in)\s+([^.!?;]+)",
+        r"(?:(?:currently\s+)?(?:travelling|traveling|commuting|on vacation|on holiday|visiting|staying|vacationing)\s+(?:(?:on|in)\s+[^.!?;]+\s+)?in)\s+([^.!?;]+)",
     )
     candidates = [m.group(1) for p in patterns for m in re.finditer(p, text, re.I)]
     if not candidates and (normalize_country(text) or text.casefold() == 'korea'):
@@ -88,6 +119,17 @@ def declared_country(text: str, proposed: RequestInterpretation | None = None) -
     for candidate in candidates:
         if re.search(r'\b(?:or|but|not|no longer|maybe|possibly)\b', candidate, re.I):
             ambiguous = True
+        if re.search(r'\band\b', candidate, re.I):
+            # Check if there is another country declaration in the candidate joined by 'and'
+            parts = re.split(r'\band\b', candidate, flags=re.I)
+            if len(parts) > 1:
+                for p in parts[1:]:
+                    p_clean = re.sub(r'^(?:\s*i(?:(?:\'m| am|’m))\s+(?:currently\s+|now\s+)?(?:in|located in)\s+)', '', p.strip(), flags=re.I)
+                    p_word = re.split(r'[.!?;,]|\s+(?:please|block|replace)', p_clean, maxsplit=1, flags=re.I)[0].strip()
+                    other_code = normalize_country(p_word)
+                    if other_code:
+                        codes.add(other_code)
+                        ambiguous = True
         # Split sentence boundaries and workflow instructions, not country names.
         candidate = re.split(r'[.!?;,]|\s+(?:and |please |block |replace |but |or )', candidate, maxsplit=1, flags=re.I)[0].strip()
         code = normalize_country(candidate)
@@ -101,7 +143,25 @@ def declared_country(text: str, proposed: RequestInterpretation | None = None) -
     if proposed and proposed.country_status == 'explicit':
         if normalize_country(proposed.declared_country) != code or normalize_country(proposed.proposed_country_code) != code:
             return CountryContext(status='ambiguous')
-    return CountryContext(code=code, status='explicit')
+
+    cur_code = None
+    cur_rev = 1
+    if current_context:
+        cur_code = current_context.get('code') if isinstance(current_context, dict) else getattr(current_context, 'code', None)
+        cur_rev = current_context.get('revision', 1) if isinstance(current_context, dict) else getattr(current_context, 'revision', 1)
+
+    new_rev = (cur_rev + 1) if (cur_code and cur_code != code) else cur_rev
+    from datetime import datetime, timezone
+    now_iso = datetime.now(timezone.utc).isoformat()
+
+    return CountryContext(
+        code=code,
+        status='explicit',
+        source='customer_declaration',
+        revision=new_rev,
+        updated_at=now_iso,
+        verification_status='unverified',
+    )
 
 
 class GeographicRules(BaseModel):

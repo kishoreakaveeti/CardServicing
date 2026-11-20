@@ -173,6 +173,7 @@ class SupervisorAgent:
             })
 
     async def plan_or_route(self, state: BankingWorkflowState) -> dict[str, Any]:
+        """LangGraph graph node entry point: inspects state, evaluates policy, and delegates to specialist."""
         """Supervisor node entry point in the LangGraph workflow."""
         iterations = state.get("iteration_count", 0) + 1
         if iterations > MAX_SUPERVISOR_ITERATIONS:
@@ -524,7 +525,11 @@ class SupervisorAgent:
 
         # 3. Analyze intent and detect compound requests
         from card_chat.policy.geography import declared_country, normalize_country
-        clarified = declared_country(user_text)
+        prev_country = state.get('country_context') or {}
+        if hasattr(prev_country, 'model_dump'):
+            prev_country = prev_country.model_dump()
+
+        clarified = declared_country(user_text, current_context=prev_country)
         is_pure_country = bool(normalize_country(user_text.strip().rstrip('.!')))
         from card_chat.policy.planning import needs_policy_planning
         planning = state.get('policy_planning')
@@ -542,17 +547,35 @@ class SupervisorAgent:
                 user_text, allowed_tools, state.get("verified_draft", {}), interpretation
             )
 
-        from card_chat.policy.geography import declared_country, RequestInterpretation
+        from card_chat.policy.geography import RequestInterpretation
         interpreted = RequestInterpretation.model_validate(interpretation) if 'interpretation' in locals() and interpretation else None
         # The validated declaration is authoritative input. An incomplete or
         # mistaken model extraction must not erase a country already supplied.
         country = clarified or state.get('country_context', {})
-        if clarified and interpreted and declared_country(user_text, interpreted) != clarified:
+        if clarified and interpreted and declared_country(user_text, interpreted, current_context=prev_country) != clarified:
             emit_agent_trace('geographic_policy', outcome='model_country_conflict', country_code=clarified.code)
         if hasattr(country, 'model_dump'):
             country = country.model_dump()
+
+        # Authoritative versioning and multi-turn country transition handling
+        prev_code = prev_country.get('code')
+        new_code = country.get('code')
+        country_changed = bool(clarified and clarified.status == 'explicit' and prev_code and prev_code != new_code)
+        if country_changed:
+            # Country transitioned across conversation turns: invalidate stale decision and plans
+            state = {**state, 'geographic_decision': None, 'action_plan': []}
+            emit_agent_trace(
+                'geographic_policy',
+                outcome='country_declaration_transition',
+                previous_country=prev_code,
+                new_country=new_code,
+                revision=country.get('revision'),
+            )
+
         state = {**state, 'country_context': country}
         geo_updates = {'country_context': country, 'geographic_pending_intents': []}
+        if country_changed:
+            geo_updates['geographic_decision'] = None
         geographic_notice = ''
         # Explicit replacement language cannot become additional issuance merely
         # because a model returned a different tool name.
@@ -782,6 +805,8 @@ class SupervisorAgent:
             **state_policy_updates,
         }
 
+    execute = plan_or_route
+
     async def _classify_and_plan(
         self,
         user_text: str,
@@ -843,6 +868,7 @@ class SupervisorAgent:
                     "- Cards domain (cards_agent): create_account, view_accounts, view_cards, issue_card, create_card, replace_card, register, login, logout\n"
                     "For compound requests (e.g. 'block my card and reissue a new one'), use block_card then replace_card. "
                     "Reissue means replace_card, not additional card issuance. List all intents in execution order.\n"
+                    "Requests expressing a desire, question, or need for a new card (such as 'I want a card', 'Can I get a card?', 'I need a debit card', 'How can I get my first card?', 'Please issue me a card', 'I want to create a card') express card issuance and must be classified as 'issue_card' (or 'create_card'). Do not treat them as ambiguous or unsupported.\n"
                     "If the customer's request is ambiguous or unsupported, set intents to empty list and provide a clarification reply.\n"
                     "Also extract explicitly declared current country, proposed ISO alpha-2 code and country_status "
                     "(explicit, ambiguous, unknown). Do not infer location from account or delivery address. "
@@ -868,31 +894,17 @@ class SupervisorAgent:
 
                 llm_reply = data.get("reply")
                 if not raw_intents:
-                    return "cards_agent", [], llm_reply or "Could you please clarify what banking service you require?"
-
-                # Validate against strict capability allowlist
-                valid_intents = [i for i in raw_intents if i in ALL_CAPABILITIES or i in allowed_tools]
-                if not valid_intents:
-                    return (
-                        "cards_agent",
-                        [],
-                        "I cannot fulfill this request as it is not a supported banking service. I can help you view accounts, manage cards, or report a lost card.",
-                    )
-
-                # Filter against caller's authorized tools
-                authorized_intents = [i for i in valid_intents if i in allowed_tools]
-                if not authorized_intents:
-                    return (
-                        "cards_agent",
-                        [],
-                        "You do not have authorization to perform the requested action, or that capability is currently unavailable.",
-                    )
-
-                authorized_intents = normalise_compound_intents(authorized_intents, allowed_tools)
-                primary = authorized_intents[0]
-                # Enforce domain ownership independently of LLM output
-                target = get_target_agent_for_intent(primary)
-                return target, authorized_intents, None
+                    logger.info("Supervisor LLM returned empty intents; falling through to deterministic semantic rules.")
+                else:
+                    # Validate against strict capability allowlist
+                    valid_intents = [i for i in raw_intents if i in ALL_CAPABILITIES or i in allowed_tools]
+                    if valid_intents:
+                        authorized_intents = [i for i in valid_intents if i in allowed_tools]
+                        if authorized_intents:
+                            authorized_intents = normalise_compound_intents(authorized_intents, allowed_tools)
+                            primary = authorized_intents[0]
+                            target = get_target_agent_for_intent(primary)
+                            return target, authorized_intents, None
             except Exception as e:
                 logger.info("Supervisor LLM intent classification failed or not JSON; falling back to deterministic semantic rules: %s", e)
 
@@ -940,9 +952,19 @@ class SupervisorAgent:
         # Issue / create card
         pos_issue = _find_keyword_pos(
             lower,
-            ("issue", "new card", "debit card", "credit card", "another card", "additional card", "create card", "create a card", "create the card", "order a card", "want a card", "want a new"),
+            (
+                "issue", "new card", "debit card", "credit card", "another card", "additional card",
+                "create card", "create a card", "create the card", "order a card", "order card",
+                "want a card", "want card", "want a new", "need a card", "need a debit card", "need a new card", "need card",
+                "get a card", "get a debit card", "get a new card", "get my first card", "get card",
+                "can i get a card", "can i have a card", "how can i get a card", "how can i get my first card",
+                "first card", "issue me a card", "issue a card", "like a card", "like a new card",
+                "apply for a card", "request a card", "request card",
+            ),
         )
-        if pos_issue != -1 and (has_card or any(w in lower for w in ("card", "cards"))):
+        if pos_issue == -1 and (has_card or any(w in lower for w in ("card", "cards", "debit", "credit"))) and any(w in lower for w in ("want", "need", "get", "like", "order", "issue", "first", "create", "apply")):
+            pos_issue = min((lower.find(w) for w in ("want", "need", "get", "like", "order", "issue", "first", "create", "apply") if lower.find(w) != -1), default=-1)
+        if pos_issue != -1 and (has_card or any(w in lower for w in ("card", "cards", "debit", "credit"))):
             if not any(i[0] in ("replace_card", "issue_card") for i in intent_candidates):
                 target_tool = "create_card" if (draft_tool == "create_card" or ("create_card" in allowed_tools and "create" in lower and "issue_card" not in allowed_tools)) else "issue_card"
                 intent_candidates.append((target_tool, pos_issue))
@@ -960,11 +982,12 @@ class SupervisorAgent:
                 "start an account", "start a new account", "apply for an account", "want an account", "want to open",
             ),
         )
-        if pos_create_acc == -1 and has_account and any(w in lower for w in ("create", "open", "new", "start", "want", "apply")):
-            pos_create_acc = min(
-                (lower.find(w) for w in ("create", "open", "new", "start", "want") if lower.find(w) != -1),
-                default=-1,
-            )
+        if pos_create_acc == -1 and has_account:
+            if re.search(r'\b(?:create|open|start|apply for|set up)\b.*\b(?:account|accounts)\b', lower) or re.search(r'\b(?:new|another)\s+account\b', lower):
+                pos_create_acc = min(
+                    (lower.find(w) for w in ("create", "open", "start", "apply", "set up") if lower.find(w) != -1),
+                    default=-1,
+                )
         if pos_create_acc != -1 and has_account:
             intent_candidates.append(("create_account", pos_create_acc))
 

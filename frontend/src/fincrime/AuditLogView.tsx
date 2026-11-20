@@ -41,43 +41,46 @@ export const AuditLogView: React.FC<AuditLogViewProps> = ({ entries, onRefresh }
               </tr>
             </thead>
             <tbody>
-              {entries.map((entry) => (
-                <tr key={entry.event_id}>
-                  <td style={{ fontFamily: 'monospace', fontSize: '0.8rem', color: '#94a3b8' }}>
-                    {entry.event_id}
-                  </td>
-                  <td style={{ fontSize: '0.82rem', whiteSpace: 'nowrap' }}>
-                    {new Date(entry.timestamp).toLocaleString()}
-                  </td>
-                  <td>
-                    <span
-                      style={{
-                        padding: '2px 8px',
-                        borderRadius: '6px',
-                        fontSize: '0.78rem',
-                        fontWeight: 700,
-                        backgroundColor: entry.event_type.includes('APPROVED')
-                          ? '#14532d'
-                          : entry.event_type.includes('REJECTED')
-                          ? '#7f1d1d'
-                          : entry.event_type.includes('ACTIVATED')
-                          ? '#1e3a8a'
-                          : '#1e293b',
-                        color: '#f8fafc',
-                      }}
-                    >
-                      {entry.event_type}
-                    </span>
-                  </td>
-                  <td style={{ fontWeight: 600 }}>{entry.actor}</td>
-                  <td>
-                    <span className="fincrime-role-tag">{entry.actor_role}</span>
-                  </td>
-                  <td style={{ fontSize: '0.82rem', color: '#cbd5e1', maxWidth: '350px' }}>
-                    {entry.details ? JSON.stringify(entry.details) : '—'}
-                  </td>
-                </tr>
-              ))}
+              {(entries || []).map((entry) => {
+                const eventType = entry.event_type || '';
+                return (
+                  <tr key={entry.event_id}>
+                    <td style={{ fontFamily: 'monospace', fontSize: '0.8rem', color: '#94a3b8' }}>
+                      {entry.event_id}
+                    </td>
+                    <td style={{ fontSize: '0.82rem', whiteSpace: 'nowrap' }}>
+                      {entry.timestamp ? new Date(entry.timestamp).toLocaleString() : '—'}
+                    </td>
+                    <td>
+                      <span
+                        style={{
+                          padding: '2px 8px',
+                          borderRadius: '6px',
+                          fontSize: '0.78rem',
+                          fontWeight: 700,
+                          backgroundColor: eventType.includes('APPROVED')
+                            ? '#14532d'
+                            : eventType.includes('REJECTED')
+                            ? '#7f1d1d'
+                            : eventType.includes('ACTIVATED')
+                            ? '#1e3a8a'
+                            : '#1e293b',
+                          color: '#f8fafc',
+                        }}
+                      >
+                        {eventType || 'UNKNOWN'}
+                      </span>
+                    </td>
+                    <td style={{ fontWeight: 600 }}>{entry.actor || '—'}</td>
+                    <td>
+                      <span className="fincrime-role-tag">{entry.actor_role || 'Staff'}</span>
+                    </td>
+                    <td style={{ fontSize: '0.82rem', color: '#cbd5e1', maxWidth: '350px' }}>
+                      {entry.details ? JSON.stringify(entry.details) : '—'}
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         )}

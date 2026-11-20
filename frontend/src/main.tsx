@@ -145,7 +145,7 @@ function App() {
   }, [cid, latestReply?.input_tool, accounts.length, cards.length]);
 
   // Unified Request Dispatcher
-  async function request(action: PendingAction): Promise<Reply | undefined> {
+  async function request(action: PendingAction) {
     setBusy(true);
     setError('');
     setPending(action);
@@ -236,6 +236,36 @@ function App() {
     } finally {
       setBusy(false);
     }
+  }
+
+  function choose(name: string) {
+    const read = name.startsWith('view_');
+    return read ? request({ path: `/api/conversations/${cid}/inputs`, body: { tool: name, fields: {}, selections: {} }, key: crypto.randomUUID() }) : null;
+  }
+
+  function supply(e: React.FormEvent) {
+    e.preventDefault();
+    return handleSupplyInputs(tool, {});
+  }
+
+  function confirm() {
+    if (!latestReply?.review || busy || pending) return;
+    return handleConfirmAction();
+  }
+
+  function submit(e: React.FormEvent) {
+    e.preventDefault();
+    return handleSendMessage('');
+  }
+
+  function authenticate(e: React.FormEvent) {
+    e.preventDefault();
+    return handleAuthSubmit(e);
+  }
+
+  function logout() {
+    if (!session) return;
+    return handleSignOut();
   }
 
   // Chat Actions
@@ -696,6 +726,7 @@ async function readSessionResponse(response: Response): Promise<Session> {
 }
 
 import { FinCrimeApp } from './fincrime/FinCrimeApp';
+import { ErrorBoundary } from './components/ErrorBoundary';
 
 // Root Router supporting Customer Portal (/) and FinCrime Portal (/fincrime)
 function RootRouter() {
@@ -708,10 +739,22 @@ function RootRouter() {
   }, []);
 
   if (path.startsWith('/fincrime')) {
-    return <FinCrimeApp />;
+    return (
+      <ErrorBoundary fallbackTitle="FinCrime Portal Exception">
+        <FinCrimeApp />
+      </ErrorBoundary>
+    );
   }
 
-  return <App />;
+  return (
+    <ErrorBoundary fallbackTitle="Customer Portal Exception">
+      <App />
+    </ErrorBoundary>
+  );
 }
 
-createRoot(document.getElementById('root')!).render(<RootRouter />);
+createRoot(document.getElementById('root')!).render(
+  <ErrorBoundary>
+    <RootRouter />
+  </ErrorBoundary>
+);

@@ -65,7 +65,7 @@ def test_model_cannot_substitute_account_creation_for_replacement(geo_retriever)
     assert not result['planned_intents']
 
 
-@pytest.mark.parametrize('code,outcome', [('AU','allowed'),('KR','allowed'),('KP','denied'),(None,'clarification_required')])
+@pytest.mark.parametrize('code,outcome', [('AU','allowed'),('KR','requires_human_approval'),('KP','denied'),(None,'clarification_required')])
 def test_real_qdrant_retrieval_and_decision(geo_retriever, code, outcome):
     r = geo_retriever
     r._store.client.query_points = Mock(wraps=r._store.client.query_points)
@@ -100,8 +100,14 @@ class Gateway:
         return {'ok':True, 'result': {'card_id':arguments.get('card_id'), 'status':'blocked', 'last_block_reason':'lost'}}
 
 
-@pytest.mark.parametrize('country,combined', [('Australia',True),('South Korea',True),('North Korea',False),('Korea',False),('',False)])
-def test_compound_confirmation_and_checkpoint(geo_retriever, country, combined):
+@pytest.mark.parametrize('country,combined,has_planned', [
+    ('Australia', True, True),
+    ('South Korea', False, True),
+    ('North Korea', False, False),
+    ('Korea', False, False),
+    ('', False, False),
+])
+def test_compound_confirmation_and_checkpoint(geo_retriever, country, combined, has_planned):
     gateway = Gateway()
     app = create_app(StubModel(), gateway, policy_retriever=geo_retriever, config={
         'LOCAL_CUSTOMER': {'sub':'test', 'username':'demo', 'accounts':['ACC-SYNTHETIC'],
@@ -121,7 +127,7 @@ def test_compound_confirmation_and_checkpoint(geo_retriever, country, combined):
         assert ('and replace' in review['confirmation_label'].lower()) == combined
         state = client.portal.call(app.state.orchestrator.workflow.aget_state,
             {'configurable':{'thread_id':f'isolated-test:{cid}'}}).values
-        assert ('replace_card' in state['planned_intents']) == combined
+        assert ('replace_card' in state['planned_intents']) == has_planned
         if not combined:
             done = client.post(path+'/confirm',json={'review':review['review']}).json()
             assert [x[0] for x in gateway.calls] == ['block_card'], done
@@ -368,7 +374,7 @@ def test_prompt_country_is_reused_without_another_country_question(geo_retriever
         assert not answer['country_required'], answer
         assert 'which country' not in answer['message'].lower()
         assert len(model.calls)==1 and not gateway.calls
-        if eligible:
+        if code == 'AU':
             assert answer['input_tool']=='replace_card', answer
             options=client.get(path+'/inputs').json()['tools']
             tool=next(t for t in options if t['name']=='replace_card')
@@ -376,6 +382,9 @@ def test_prompt_country_is_reused_without_another_country_question(geo_retriever
             review=client.post(path+'/inputs',json={'tool':'replace_card','fields':{'reason':'lost'},
                 'selections':{'card_id':ref}}).json()
             assert review['can_confirm'] and not review['country_required'], review
+        elif code == 'KR':
+            assert 'pending fincrime' in answer['message'].lower()
+            assert not answer['can_confirm']
         else:
             assert not answer['can_confirm'] and 'restricted' in answer['message'].lower()
 

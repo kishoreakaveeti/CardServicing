@@ -34,12 +34,15 @@ export interface FinCrimeCase {
 }
 
 export interface PolicyMetadata {
-  id: string;
-  title: string;
-  category: string;
-  description: string;
-  current_version: string;
-  active_version: string;
+  id?: string;
+  policy_id?: string;
+  title?: string;
+  category?: string;
+  description?: string;
+  version?: string;
+  current_version?: string;
+  active_version?: string;
+  effective_date?: string;
   rules_summary?: {
     home_country_code?: string;
     excluded_country_codes?: string[];

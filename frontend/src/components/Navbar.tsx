@@ -108,7 +108,7 @@ export const Navbar: React.FC<NavbarProps> = ({
 
       {/* Mobile Responsive Bottom Navigation */}
       {session && (
-        <nav className="bottom-nav-mobile" aria-label="Mobile Navigation">
+        <nav className="bottom-nav" aria-label="Mobile Navigation">
           <button
             className={`bottom-nav-item ${currentTab === 'home' ? 'active' : ''}`}
             onClick={() => onSelectTab('home')}

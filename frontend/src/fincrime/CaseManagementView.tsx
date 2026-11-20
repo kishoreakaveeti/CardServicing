@@ -24,7 +24,9 @@ export const CaseManagementView: React.FC<CaseManagementViewProps> = ({
   const [decisionReason, setDecisionReason] = useState('');
   const [errorNotice, setErrorNotice] = useState<string | null>(null);
 
-  const filteredCases = cases.filter((c) => {
+  const safeCases = Array.isArray(cases) ? cases : [];
+  const filteredCases = safeCases.filter((c) => {
+    if (!c) return false;
     if (filter === 'ALL') return true;
     if (filter === 'PENDING') return c.status === 'PENDING';
     if (filter === 'APPROVED') return c.status === 'APPROVED' || c.status === 'COMPLETED';
