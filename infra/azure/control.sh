@@ -9,7 +9,7 @@ export COMPOSE_PARALLEL_LIMIT=1
 app=(docker compose --env-file "$root/state/.env.azure" -f compose.azure.yaml)
 edge=(docker compose --env-file "$root/state/.env.azure" -f infra/azure/compose.proxy.yaml)
 start_app() {
-    "${app[@]}" up -d --wait --wait-timeout 360 identity qdrant cards-api fincrime-api fincrime-agent mcp-server
+    "${app[@]}" up -d --wait --wait-timeout 360 identity qdrant opa cards-api fincrime-api fincrime-agent mcp-server
     "${app[@]}" up -d --wait --wait-timeout 600
     "${edge[@]}" up -d --wait --wait-timeout 120
 }
@@ -22,7 +22,7 @@ case "${1:-}" in
         "${app[@]}" run --rm --no-deps --workdir /data --entrypoint python cards-agent -m card_chat.policy.pipeline.cli --help
         # Verify actual Nginx envsubst configuration before publishing a proxy.
         "${app[@]}" run --rm --no-deps frontend sh -c '/docker-entrypoint.d/20-envsubst-on-templates.sh && nginx -t'
-        "${app[@]}" up -d --wait --wait-timeout 360 identity qdrant
+        "${app[@]}" up -d --wait --wait-timeout 360 identity qdrant opa
         echo 'Updating approved policy indexes in Qdrant before starting the application.'
         "${app[@]}" run --rm --no-deps --workdir /data --entrypoint python cards-agent -m card_chat.policy.pipeline.cli ingest
         # Runtime source, environment and bind paths can change between releases.

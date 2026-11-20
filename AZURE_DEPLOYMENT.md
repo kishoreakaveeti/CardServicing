@@ -426,6 +426,7 @@ flowchart LR
     MCP --> FinCrimeAPI[FinCrime API]
     CardsAgent --> Qdrant[Private Qdrant / policy RAG]
     FinCrimeAgent --> Qdrant
+    CardsAgent --> OPA[Private OPA / Rego policy engine]
     Keycloak --> MariaDB[Private identity MariaDB]
     BFF --> BFFDB[BFF SQLite volume]
     CardsAgent --> AgentDB[Agent SQLite volume]

@@ -96,6 +96,23 @@ class AgentOrchestrator:
             checkpointer=checkpointer,
             policy=self.agent_tools_policy,
         )
+        self.case_store = None
+        self.policy_store = None
+        self._card_gateway = None
+
+    def attach_fincrime_case_store(self, store):
+        self.case_store = store
+        if hasattr(self, "supervisor"):
+            self.supervisor.case_store = store
+            self.supervisor.fincrime_store = store
+
+    def attach_policy_release_store(self, store):
+        self.policy_store = store
+        if hasattr(self, "supervisor"):
+            self.supervisor.policy_store = store
+
+    def attach_card_gateway(self, gateway):
+        self._card_gateway = gateway
 
     def route(self, history: list, collected: dict, allowed_tools: dict | None = None) -> str:
         """Dynamic routing mediated by the Supervisor classifier."""
@@ -323,3 +340,102 @@ class AgentOrchestrator:
         except Exception as exc:
             logger.exception("Failed to cancel LangGraph workflow for thread %s: %s", thread_id, exc)
             return None
+
+    async def resume_fincrime_case(
+        self,
+        case_id: str,
+        decision: str,
+        reason: str,
+        analyst_username: str,
+        gateway: Any | None = None,
+        case_store: Any | None = None,
+    ) -> dict[str, Any]:
+        """Resume LangGraph workflow after FinCrime staff approval or rejection."""
+        from fincrime_servicing.cases import FinCrimeCaseStore
+        store = case_store or getattr(self, "case_store", None) or FinCrimeCaseStore()
+        case = store.get_case(case_id)
+        if not case:
+            raise KeyError(f"FinCrime case {case_id} not found")
+
+        # Atomic decision recording
+        if case.status == "PENDING":
+            if decision == "approved":
+                case = store.approve_case(case_id, analyst_username, reason)
+            else:
+                case = store.reject_case(case_id, analyst_username, reason)
+        else:
+            raise ValueError(f"Case {case_id} is already in state {case.status}, duplicate decision rejected")
+
+        thread_id = case.thread_id
+        config = {"configurable": {"thread_id": thread_id}}
+
+        from langgraph.types import Command
+        resume_payload = {
+            "status": "fincrime_approved" if decision == "approved" else "fincrime_rejected",
+            "case_id": case_id,
+            "reason": reason,
+        }
+
+        try:
+            final_state = await self.workflow.ainvoke(Command(resume=resume_payload), config=config)
+        except Exception as exc:
+            logger.exception("Failed to resume LangGraph workflow for case %s (thread %s): %s", case_id, thread_id, exc)
+            return {"ok": False, "status": "FAILED", "error": str(exc)}
+
+        if decision == "rejected":
+            return {"ok": True, "status": "REJECTED", "case_id": case_id}
+
+        # If approved, check if workflow reached or produced tool proposal
+        proposal = final_state.get("proposed_tool")
+        gw = gateway or getattr(self, "gateway", None) or getattr(self, "_card_gateway", None)
+
+        if proposal and isinstance(proposal, dict) and proposal.get("name") == "replace_card" and gw:
+            tool_args = dict(proposal.get("arguments", {}))
+            if not tool_args.get("card_id"):
+                tool_args["card_id"] = case.card_id
+
+            rep_ctx = {
+                "workflow": thread_id,
+                "policy_version": case.policy_version,
+                "fincrime_approval": True,
+                "case_id": case_id,
+            }
+            if hasattr(gw, "execute"):
+                exec_res = await gw.execute(
+                    "replace_card",
+                    tool_args,
+                    key=f"fc-approve:{case_id}",
+                    replacement_context=rep_ctx,
+                )
+            else:
+                import inspect
+                res = gw("replace_card", tool_args, key=f"fc-approve:{case_id}", replacement_context=rep_ctx)
+                if inspect.isawaitable(res):
+                    res = await res
+                exec_res = res if isinstance(res, dict) and "ok" in res else {"ok": True, "result": res}
+            if exec_res.get("ok"):
+                res_data = exec_res.get("result", {})
+                new_card_id = res_data.get("id") or res_data.get("card_id") or ""
+                await self.resume_execution(
+                    thread_id=thread_id,
+                    owner=case.customer_id,
+                    session_id=thread_id,
+                    tool_name="replace_card",
+                    result=exec_res,
+                    ok=True,
+                    arguments=tool_args,
+                )
+                store.mark_completed(case_id, str(new_card_id))
+                return {"ok": True, "status": "COMPLETED", "case_id": case_id, "card_id": str(new_card_id)}
+            else:
+                err = exec_res.get("error", "Replacement execution failed")
+                store.mark_failed(case_id, err)
+                return {"ok": False, "status": "FAILED", "case_id": case_id, "error": err}
+
+        if decision == "approved" and not proposal:
+            final_resp = final_state.get("final_response") or ""
+            if "policy changed" in str(final_resp).lower() or "no longer permitted" in str(final_resp).lower():
+                store.mark_failed(case_id, str(final_resp))
+                return {"ok": False, "status": "FAILED", "case_id": case_id, "error": str(final_resp)}
+
+        return {"ok": True, "status": "APPROVED", "case_id": case_id, "state": final_state.get("final_response")}

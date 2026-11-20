@@ -6,7 +6,7 @@ import os
 from pathlib import Path
 from typing import Any
 
-from .adapters.document_source import FileSystemDocumentSource, InMemoryDocumentSource
+from .adapters.document_source import FileSystemDocumentSource, InMemoryDocumentSource, ReleaseDocumentSource
 from .adapters.embeddings.deterministic_provider import DeterministicLocalEmbeddingProvider
 from .adapters.embeddings.fastembed_provider import FastEmbedEmbeddingProvider
 from .adapters.evaluator import GroundedPolicyEvaluator
@@ -15,6 +15,7 @@ from .adapters.vector_stores.memory_store import InMemoryVectorStore
 from .adapters.vector_stores.qdrant_store import QdrantVectorStore
 from .pipeline.ingestion import PolicyIngestionPipeline
 from .ports import DocumentSource, EmbeddingProvider, PolicyEvaluator, PolicyRetriever, VectorStore
+from .release_store import PolicyReleaseStore, ReleaseRulesSource
 
 logger = logging.getLogger(__name__)
 
@@ -69,10 +70,14 @@ def build_policy_retriever(
     embedding_provider: EmbeddingProvider | None = None,
     vector_store: VectorStore | None = None,
     config: dict[str, Any] | None = None,
+    release_store: PolicyReleaseStore | None = None,
 ) -> PolicyRetriever:
     config = config or {}
     policies_dir = config.get("POLICIES_DIR", os.getenv("POLICIES_DIR", "policies"))
     src = document_source or build_document_source(policies_dir=policies_dir)
+    r_store = release_store or config.get("RELEASE_STORE")
+    if r_store is not None and not isinstance(src, ReleaseDocumentSource):
+        src = ReleaseDocumentSource(src, r_store)
     emb = embedding_provider or build_embedding_provider(
         provider_type=config.get("EMBEDDING_PROVIDER"),
         model_name=config.get("FASTEMBED_MODEL"),
@@ -99,8 +104,14 @@ def build_policy_evaluator(
         retriever = kwargs.get("retriever")
     r = retriever or kwargs.get("retriever") or build_policy_retriever(config=config)
     from .geography import FileRulesSource
-    return GroundedPolicyEvaluator(retriever=r, geographic_rules=kwargs.get('geographic_rules') or
-        FileRulesSource((config or {}).get('POLICIES_DIR')))
+    rules = kwargs.get('geographic_rules')
+    if rules is None:
+        r_store = kwargs.get('release_store') or (config or {}).get("RELEASE_STORE")
+        if r_store is not None:
+            rules = ReleaseRulesSource(r_store, (config or {}).get('POLICIES_DIR'))
+        else:
+            rules = FileRulesSource((config or {}).get('POLICIES_DIR'))
+    return GroundedPolicyEvaluator(retriever=r, geographic_rules=rules)
 
 
 def build_policy_pipeline(

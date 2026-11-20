@@ -51,6 +51,29 @@ export const ChatView: React.FC<ChatViewProps> = ({
   const [voiceNotice, setVoiceNotice] = useState<string | null>(null);
   const [formValues, setFormValues] = useState<Record<string, string>>({});
 
+  // Initialize formValues with smart defaults whenever activeTool changes
+  useEffect(() => {
+    if (!activeTool) {
+      setFormValues({});
+      return;
+    }
+    const tool = tools.find((t) => t.name === activeTool);
+    if (!tool) return;
+    const initial: Record<string, string> = {};
+    for (const f of tool.fields) {
+      if (f.name === 'account_type') {
+        initial[f.name] = 'transaction';
+      } else if (f.name === 'issue_card' || f.name === 'additional_card' || f.type === 'boolean') {
+        initial[f.name] = 'true';
+      } else if (f.name === 'reason') {
+        initial[f.name] = 'lost';
+      } else if (f.options && f.options.length > 0) {
+        initial[f.name] = f.options[0].ref;
+      }
+    }
+    setFormValues(initial);
+  }, [activeTool, tools]);
+
   const chatContainerRef = useRef<HTMLDivElement | null>(null);
   const chatEndRef = useRef<HTMLDivElement | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
@@ -134,7 +157,24 @@ export const ChatView: React.FC<ChatViewProps> = ({
   const handleFormSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!activeTool || isBusy) return;
-    await onSupplyInputs(activeTool, formValues);
+    const tool = tools.find((t) => t.name === activeTool);
+    const finalVals: Record<string, string> = { ...formValues };
+    if (tool) {
+      for (const f of tool.fields) {
+        if (finalVals[f.name] === undefined || finalVals[f.name] === '') {
+          if (f.name === 'account_type') {
+            finalVals[f.name] = 'transaction';
+          } else if (f.name === 'issue_card' || f.name === 'additional_card' || f.type === 'boolean') {
+            finalVals[f.name] = 'true';
+          } else if (f.name === 'reason') {
+            finalVals[f.name] = 'lost';
+          } else if (f.options && f.options.length > 0 && f.required) {
+            finalVals[f.name] = f.options[0].ref;
+          }
+        }
+      }
+    }
+    await onSupplyInputs(activeTool, finalVals);
   };
 
   const latestMessage = messages[messages.length - 1];
@@ -407,20 +447,20 @@ export const ChatView: React.FC<ChatViewProps> = ({
                 );
               }
 
-              if (field.name === 'additional_card') {
+              if (field.name === 'issue_card' || field.name === 'additional_card' || field.type === 'boolean') {
                 return (
                   <div key={field.name}>
                     <label style={{ fontSize: '0.8rem', fontWeight: 600, color: '#334155', display: 'block', marginBottom: '4px' }}>
-                      Additional Card
+                      {field.label || (field.name === 'issue_card' ? 'Issue Debit Card' : 'Additional Card')}
                     </label>
                     <select
                       className="form-control"
-                      value={formValues[field.name] || 'false'}
+                      value={formValues[field.name] ?? 'true'}
                       onChange={(e) => setFormValues((prev) => ({ ...prev, [field.name]: e.target.value }))}
                       disabled={isBusy}
                     >
-                      <option value="false">No — Use existing card if available</option>
-                      <option value="true">Yes — Issue additional new card</option>
+                      <option value="true">Yes — Issue debit card with this account</option>
+                      <option value="false">No — Account only (no card)</option>
                     </select>
                   </div>
                 );

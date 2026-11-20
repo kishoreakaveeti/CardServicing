@@ -6,7 +6,7 @@ def test_azure_compose_service_boundaries_and_private_storage():
     document = yaml.safe_load(Path('compose.azure.yaml').read_text())
     services = document['services']
     assert set(services) == {'frontend', 'experience', 'cards-agent', 'fincrime-agent', 'mcp-server',
-                             'cards-api', 'fincrime-api', 'identity', 'identity-db', 'qdrant'}
+                             'cards-api', 'fincrime-api', 'identity', 'identity-db', 'qdrant', 'opa'}
     for name, service in services.items():
         assert 'container_name' not in service
         assert 'healthcheck' in service

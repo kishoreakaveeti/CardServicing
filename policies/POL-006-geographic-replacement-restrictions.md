@@ -10,14 +10,18 @@ applicable_intents:
 conditions:
   version: 1.0.0
   country_basis: declared_current_location
+  home_country_code: AU
   excluded_country_codes:
     - KP
-  on_unknown_country: require_clarification
-  allow_security_card_block: true
+  overseas_replacement_requires_fincrime_approval: true
+  domestic_replacement_requires_fincrime_approval: false
+  unknown_country_action: REQUIRE_CLARIFICATION
+  security_card_blocking_allowed: true
 required_actions:
   - validate_declared_current_country
   - enforce_geographic_rules_before_replacement
   - require_customer_confirmation
+  - require_fincrime_approval_for_overseas_replacement
 restrictions:
   - never_bypass_replacement_denial_with_additional_issuance
 source: policies/POL-006-geographic-replacement-restrictions.md
@@ -34,7 +38,12 @@ sanctions list, legal advice or regulatory compliance certification.
 Replacement is denied when the customer's declared current location normalizes
 to an excluded ISO 3166-1 alpha-2 code. The approved exclusion configuration is
 `geographic-replacement-rules.json`; version 1.0.0 excludes KP (North Korea).
-KR (South Korea) and AU (Australia) are not excluded by this version.
+Australia (AU) is the domestic home country.
+
+Permitted overseas destinations (such as New Zealand NZ, Singapore SG, South
+Korea KR, or United States US) are not excluded, but require FinCrime staff
+approval prior to replacement card issuance. Domestic replacement in Australia
+does not require FinCrime human approval under the baseline demonstration rules.
 
 ## Identification and clarification
 
@@ -53,6 +62,14 @@ POL-005 advisory assistance grants no replacement authority.
 
 Do not bypass a replacement restriction using issue_card, create_card or another
 tool. Additional issuance remains a distinct operation with its existing guards.
+
+## FinCrime staff approval workflow
+
+When an overseas customer in a non-excluded country requests a replacement, the
+workflow suspends and creates a persistent FinCrime review case. Upon approval
+by an authorized FinCrime analyst, the workflow resumes and executes replacement
+issuance through the trusted Cards API. Rejection concludes the replacement
+attempt while preserving card blocking.
 
 ## Communication and escalation
 

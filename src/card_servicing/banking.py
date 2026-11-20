@@ -112,8 +112,14 @@ class BankingService:
                     policy_id=decision.policy_id, version=decision.version,
                     artifact_hash=decision.artifact_hash, rule_id=decision.rule_id,
                     country_code=decision.country_code, evidence_source=decision.evidence_source)
-            if decision.decision != 'allowed':
-                raise HTTPException(403 if decision.decision == 'denied' else 409, decision.explanation)
+            if decision.decision == 'denied':
+                # A FinCrime approval must never override a hard denial
+                raise HTTPException(403, decision.explanation)
+            if decision.decision in ('requires_human_approval', 'REQUIRES_HUMAN_APPROVAL'):
+                if not context.get('fincrime_approval'):
+                    raise HTTPException(403, decision.explanation)
+            elif decision.decision not in ('allowed', 'ALLOW'):
+                raise HTTPException(409, decision.explanation)
             return decision
         except HTTPException:
             raise

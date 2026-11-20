@@ -115,10 +115,11 @@ def protect(app, config, audience, permission, client, *, customer=True):
                     'agent:invoke' if bff_banking else ('tools:execute' if declaration_entry else permission),
                     'experience-service' if bff_banking else ('agent-service' if declaration_entry else client))
                 public_entry = audience == 'agent' and request.url.path == '/entry/messages'
+                fincrime_entry = audience == 'agent' and request.url.path.startswith('/fincrime/')
                 credential_entry = bff_banking and request.url.path in ('/banking/register', '/banking/login')
                 if request.url.path in ('/banking/register', '/banking/login') and not bff_banking:
                     raise HTTPException(403, 'Experience service required')
-                if customer and not public_entry and not credential_entry:
+                if customer and not public_entry and not credential_entry and not fincrime_entry:
                     principal.set(security.customer(delegation.get(), audience))
             response = await call_next(request)
         except HTTPException as exc:

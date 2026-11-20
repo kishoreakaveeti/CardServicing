@@ -125,3 +125,78 @@ class InMemoryDocumentSource(DocumentSource):
             return None
         # Return newest / first
         return matches[-1]
+
+
+def parse_policy_markdown_string(raw_text: str, source_path: str = "virtual") -> tuple[PolicyDocument, str]:
+    """Parse policy document from in-memory string."""
+    content_hash = hashlib.sha256(raw_text.encode("utf-8")).hexdigest()
+    parts = raw_text.split("---", 2)
+    if len(parts) < 3:
+        raise ValueError("Invalid policy markdown format: missing YAML frontmatter delimiters '---'")
+
+    frontmatter_raw = parts[1].strip()
+    body_markdown = parts[2].strip()
+
+    meta: dict[str, Any] = yaml.safe_load(frontmatter_raw) or {}
+    status = str(meta.get("status", "approved")).lower()
+    approved = bool(meta.get("approved", status == "approved"))
+
+    doc = PolicyDocument(
+        policy_id=str(meta["policy_id"]).strip().upper(),
+        version=str(meta["version"]).strip(),
+        effective_date=str(meta["effective_date"]).strip(),
+        title=str(meta["title"]).strip(),
+        status=status,
+        approved=approved,
+        applicable_intents=[str(i).strip() for i in meta.get("applicable_intents", [])],
+        triggering_events=[str(e).strip() for e in meta.get("triggering_events", [])],
+        conditions=dict(meta.get("conditions", {})),
+        required_actions=[str(a).strip() for a in meta.get("required_actions", [])],
+        restrictions=[str(r).strip() for r in meta.get("restrictions", [])],
+        source=source_path,
+        raw_content=raw_text,
+        content_hash=content_hash,
+    )
+    return doc, body_markdown
+
+
+class ReleaseDocumentSource(DocumentSource):
+    """DocumentSource that overlays dynamic releases from PolicyReleaseStore over base documents."""
+
+    def __init__(self, base_source: DocumentSource, release_store: Any):
+        self.base_source = base_source
+        self.release_store = release_store
+        self.directory = getattr(base_source, "directory", Path("policies"))
+
+    def list_documents(self, approved_only: bool = True) -> list[PolicyDocument]:
+        base_docs = self.base_source.list_documents(approved_only=approved_only)
+        result: list[PolicyDocument] = []
+        overridden_pids = set()
+
+        # Check POL-006 active release
+        active_rel = self.release_store.get_active_release("POL-006")
+        if active_rel:
+            try:
+                rel_doc, _ = parse_policy_markdown_string(
+                    active_rel["markdown"],
+                    source_path=f"policies/POL-006-geographic-replacement-restrictions.md"
+                )
+                if not approved_only or (rel_doc.approved and rel_doc.status == "approved"):
+                    result.append(rel_doc)
+                    overridden_pids.add("POL-006")
+            except Exception as exc:
+                logger.warning("Failed to parse active release for POL-006: %s", exc)
+
+        for d in base_docs:
+            if d.policy_id not in overridden_pids:
+                result.append(d)
+        return result
+
+    def get_document(self, policy_id: str, version: str | None = None) -> PolicyDocument | None:
+        norm_id = policy_id.strip().upper()
+        if norm_id == "POL-006":
+            active_rel = self.release_store.get_active_release("POL-006")
+            if active_rel and (version is None or active_rel["version"] == version):
+                doc, _ = parse_policy_markdown_string(active_rel["markdown"])
+                return doc
+        return self.base_source.get_document(policy_id, version)

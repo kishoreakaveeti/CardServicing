@@ -116,13 +116,21 @@ class GroundedPolicyEvaluator(PolicyEvaluator):
         if intent == 'replace_card' or accepting_replacement:
             geo, geo_evidence = self.geographic_decision(
                 (state or {}).get('country_context') or facts.get('country_context'), pinned_policies)
-            if geo.decision != 'allowed':
-                return PolicyEvaluationResult(permitted=False, prohibited=geo.decision == 'denied',
-                    clarification_required=geo.decision == 'clarification_required',
-                    decision_reason=geo.explanation, geographic_decision=geo.model_dump(),
-                    policy_error='GeographicPolicyUnavailable' if geo.decision == 'unavailable' else None,
+            if geo.decision not in ('allowed', 'ALLOW'):
+                is_denied = geo.decision in ('denied', 'DENY')
+                is_clar = geo.decision in ('clarification_required', 'REQUIRE_CLARIFICATION')
+                is_approval = geo.decision in ('requires_human_approval', 'REQUIRES_HUMAN_APPROVAL')
+                return PolicyEvaluationResult(
+                    permitted=False,
+                    prohibited=is_denied,
+                    clarification_required=is_clar,
+                    requires_human_approval=is_approval,
+                    decision_reason=geo.explanation,
+                    geographic_decision=geo.model_dump(),
+                    policy_error='GeographicPolicyUnavailable' if geo.decision in ('unavailable', 'UNAVAILABLE') else None,
                     retrieved_policies=[p.model_dump() for p in geo_evidence],
-                    pinned_versions={**{p.policy_id: p.version for p in geo_evidence}, **(pinned_policies or {})})
+                    pinned_versions={**{p.policy_id: p.version for p in geo_evidence}, **(pinned_policies or {})}
+                )
         facts.setdefault("is_temporary_freeze", facts.get("temporary_freeze", False))
         facts.setdefault("is_permanently_compromised", facts.get("compromised", False))
         try:

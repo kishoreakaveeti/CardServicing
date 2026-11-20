@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { AccountRecord, CardRecord } from '../types';
 
 interface CardsViewProps {
@@ -36,6 +36,20 @@ export const CardsView: React.FC<CardsViewProps> = ({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorNotice, setErrorNotice] = useState<string | null>(null);
   const [successNotice, setSuccessNotice] = useState<string | null>(null);
+  const [replacementStatus, setReplacementStatus] = useState<any>(null);
+
+  const fetchReplacementStatus = () => {
+    fetch('/api/cards/replacement-status')
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data) => {
+        if (data) setReplacementStatus(data);
+      })
+      .catch(() => {});
+  };
+
+  useEffect(() => {
+    fetchReplacementStatus();
+  }, [cards.length]);
 
   const activeCards = cards.filter((c) => c.status !== 'blocked');
 
@@ -161,6 +175,107 @@ export const CardsView: React.FC<CardsViewProps> = ({
           }}
         >
           {successNotice}
+        </div>
+      )}
+
+      {/* Replacement Status Alert Banner */}
+      {replacementStatus?.active_replacement_case && (
+        <div
+          style={{
+            padding: '16px 20px',
+            backgroundColor:
+              replacementStatus.active_replacement_case.status === 'PENDING'
+                ? '#fffbeb'
+                : replacementStatus.active_replacement_case.status === 'APPROVED' || replacementStatus.active_replacement_case.status === 'COMPLETED'
+                ? '#f0fdf4'
+                : '#fef2f2',
+            border: `1px solid ${
+              replacementStatus.active_replacement_case.status === 'PENDING'
+                ? '#fcd34d'
+                : replacementStatus.active_replacement_case.status === 'APPROVED' || replacementStatus.active_replacement_case.status === 'COMPLETED'
+                ? '#86efac'
+                : '#fca5a5'
+            }`,
+            borderRadius: '12px',
+            marginBottom: '20px',
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            boxShadow: '0 1px 3px rgba(0,0,0,0.05)',
+          }}
+        >
+          <div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
+              <span style={{ fontSize: '1.2rem' }}>
+                {replacementStatus.active_replacement_case.status === 'PENDING'
+                  ? '⏳'
+                  : replacementStatus.active_replacement_case.status === 'APPROVED' || replacementStatus.active_replacement_case.status === 'COMPLETED'
+                  ? '✅'
+                  : '❌'}
+              </span>
+              <strong
+                style={{
+                  color:
+                    replacementStatus.active_replacement_case.status === 'PENDING'
+                      ? '#92400e'
+                      : replacementStatus.active_replacement_case.status === 'APPROVED' || replacementStatus.active_replacement_case.status === 'COMPLETED'
+                      ? '#166534'
+                      : '#991b1b',
+                  fontSize: '0.95rem',
+                }}
+              >
+                {replacementStatus.active_replacement_case.status === 'PENDING' &&
+                  'Card Replacement Pending FinCrime Staff Approval'}
+                {(replacementStatus.active_replacement_case.status === 'APPROVED' ||
+                  replacementStatus.active_replacement_case.status === 'COMPLETED') &&
+                  'Replacement Card Approved & Issued'}
+                {replacementStatus.active_replacement_case.status === 'REJECTED' &&
+                  'Replacement Request Declined by FinCrime'}
+              </strong>
+              <span
+                style={{
+                  fontSize: '0.75rem',
+                  padding: '2px 8px',
+                  borderRadius: '10px',
+                  backgroundColor:
+                    replacementStatus.active_replacement_case.status === 'PENDING'
+                      ? '#fef3c7'
+                      : replacementStatus.active_replacement_case.status === 'APPROVED' || replacementStatus.active_replacement_case.status === 'COMPLETED'
+                      ? '#dcfce7'
+                      : '#fee2e2',
+                  color:
+                    replacementStatus.active_replacement_case.status === 'PENDING'
+                      ? '#b45309'
+                      : replacementStatus.active_replacement_case.status === 'APPROVED' || replacementStatus.active_replacement_case.status === 'COMPLETED'
+                      ? '#15803d'
+                      : '#b91c1c',
+                  fontWeight: 700,
+                  fontFamily: 'monospace',
+                }}
+              >
+                {replacementStatus.active_replacement_case.case_id}
+              </span>
+            </div>
+            <p style={{ margin: 0, fontSize: '0.85rem', color: '#475569' }}>
+              {replacementStatus.active_replacement_case.status === 'PENDING' &&
+                `Your overseas card replacement request (Country: ${replacementStatus.active_replacement_case.country || 'Overseas'}) is undergoing human review in our FinCrime portal. Click 'Refresh Status' after review.`}
+              {(replacementStatus.active_replacement_case.status === 'APPROVED' ||
+                replacementStatus.active_replacement_case.status === 'COMPLETED') &&
+                `Staff approval verified (${replacementStatus.active_replacement_case.decision_reason || 'Verified'}). Your replacement Visa Debit card has been issued and appears in your cards below.`}
+              {replacementStatus.active_replacement_case.status === 'REJECTED' &&
+                `Your replacement request was reviewed and declined by FinCrime (${replacementStatus.active_replacement_case.decision_reason || 'Policy exclusion'}).`}
+            </p>
+          </div>
+          <button
+            className="btn-secondary"
+            style={{ fontSize: '0.82rem', padding: '6px 14px', whiteSpace: 'nowrap', fontWeight: 600 }}
+            onClick={() => {
+              fetchReplacementStatus();
+              onRefresh();
+            }}
+          >
+            Refresh Status 🔄
+          </button>
         </div>
       )}
 

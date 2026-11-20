@@ -25,7 +25,61 @@ def route_supervisor_next(state: BankingWorkflowState) -> str:
         return "fincrime_agent"
     elif next_step == "human_confirmation":
         return "human_confirmation"
+    elif next_step == "fincrime_approval":
+        return "fincrime_approval"
     return END
+
+
+async def fincrime_approval_node(state: BankingWorkflowState) -> dict[str, Any]:
+    """Checkpoint node representing an intentional pause for FinCrime staff review."""
+    case_id = state.get("fincrime_case_id")
+    action_plan = list(state.get("action_plan", []))
+
+    for item in action_plan:
+        if item.get("intent") == "replace_card" and item.get("status") in ("pending", "executing"):
+            item["status"] = "awaiting_fincrime_approval"
+            item["case_id"] = case_id
+
+    # Pause execution and save checkpoint via genuine LangGraph interrupt
+    approval_payload = interrupt({
+        "type": "fincrime_approval",
+        "case_id": case_id,
+        "status": "pending_fincrime_approval",
+        "action_plan": action_plan,
+    })
+
+    status = approval_payload.get("status", "fincrime_approved") if isinstance(approval_payload, dict) else "fincrime_approved"
+    reason = approval_payload.get("reason", "") if isinstance(approval_payload, dict) else ""
+
+    if status == "fincrime_rejected":
+        for item in action_plan:
+            if item.get("intent") == "replace_card":
+                item["status"] = "rejected_by_fincrime"
+                item["error"] = reason or "Rejected by FinCrime analyst."
+        result = HandoffResult(
+            source_agent="fincrime_staff",
+            status="failed",
+            message=f"Replacement request was rejected by FinCrime staff: {reason}",
+        )
+        return {
+            "action_plan": action_plan,
+            "handoff_history": list(state.get("handoff_history", [])) + [result],
+            "fincrime_approved": False,
+            "fincrime_approval_reason": reason,
+            "next_step": "supervisor",
+            "final_response": f"Your replacement request has been reviewed and rejected by FinCrime staff. Reason: {reason}. Your card remains securely blocked.",
+        }
+
+    for item in action_plan:
+        if item.get("intent") == "replace_card":
+            item["status"] = "approved_by_fincrime"
+
+    return {
+        "action_plan": action_plan,
+        "fincrime_approved": True,
+        "fincrime_approval_reason": reason,
+        "next_step": "supervisor",
+    }
 
 
 async def human_confirmation_node(state: BankingWorkflowState) -> dict[str, Any]:
@@ -188,6 +242,7 @@ def create_banking_workflow(
     builder.add_node("cards_agent", cards_node.execute)
     builder.add_node("fincrime_agent", fincrime_node.execute)
     builder.add_node("human_confirmation", human_confirmation_node)
+    builder.add_node("fincrime_approval", fincrime_approval_node)
     from card_chat.policy.planning import retrieve_for_plan, propose_plan
 
     async def search(state):
@@ -213,6 +268,7 @@ def create_banking_workflow(
             "cards_agent": "cards_agent",
             "fincrime_agent": "fincrime_agent",
             "human_confirmation": "human_confirmation",
+            "fincrime_approval": "fincrime_approval",
             "policy_search": "policy_search",
             END: END,
         },
@@ -222,6 +278,7 @@ def create_banking_workflow(
     builder.add_edge("cards_agent", "supervisor")
     builder.add_edge("fincrime_agent", "supervisor")
     builder.add_edge("human_confirmation", "supervisor")
+    builder.add_edge("fincrime_approval", "supervisor")
 
     memory = checkpointer or DurableSqliteSaver()
     return builder.compile(checkpointer=memory)

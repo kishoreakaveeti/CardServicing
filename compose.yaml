@@ -79,6 +79,9 @@ services:
       POLICY_AUDIT_LOG: /data/policy_audit.json
       POLICY_VECTOR_STORE: ${POLICY_VECTOR_STORE:-qdrant}
       POLICIES_DIR: /app/policies
+      OPA_URL: ${OPA_URL:-http://opa:8181}
+      POLICY_STORE_DB: /data/policy_store.db
+      FINCRIME_CASES_DB: /data/fincrime_cases.db
     volumes:
       - agent_data:/data
       - ./policies:/app/policies:ro
@@ -87,6 +90,7 @@ services:
       mcp-server: {condition: service_healthy}
       fincrime-agent: {condition: service_healthy}
       qdrant: {condition: service_healthy}
+      opa: {condition: service_healthy}
   fincrime-agent:
     container_name: fincrime-agent
     build: {context: ., dockerfile: Dockerfile.fincrime-agent, target: runtime}
@@ -213,6 +217,19 @@ services:
       test: [CMD, bash, -c, "exec 3<>/dev/tcp/127.0.0.1/6333; printf 'GET /readyz HTTP/1.0\r\n\r\n' >&3; grep -q '200 OK' <&3"]
       interval: 5s
       timeout: 4s
+      retries: 20
+      start_period: 5s
+  opa:
+    container_name: card-servicing-opa
+    image: openpolicyagent/opa:0.68.0-static
+    command: ["run", "--server", "--log-level=info", "--addr=0.0.0.0:8181", "/policies"]
+    ports: ["127.0.0.1:8181:8181"]
+    volumes:
+      - ./policies:/policies:ro
+    healthcheck:
+      test: ["CMD", "/opa", "check", "/policies"]
+      interval: 5s
+      timeout: 3s
       retries: 20
       start_period: 5s
 volumes:

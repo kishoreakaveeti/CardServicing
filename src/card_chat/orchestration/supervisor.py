@@ -43,6 +43,9 @@ def normalise_compound_intents(intents: list[str], allowed_tools: dict) -> list[
         if 'replace_card' in allowed_tools:
             intents = ['replace_card' if i in ('issue_card', 'create_card') else i for i in intents]
         intents = ['block_card'] + [i for i in intents if i != 'block_card']
+    if 'create_account' in intents and any(i in ('issue_card', 'create_card') for i in intents):
+        # Unified under create_account (which incorporates debit card issuance via issue_card field)
+        intents = ['create_account'] + [i for i in intents if i not in ('create_account', 'issue_card', 'create_card')]
     return list(dict.fromkeys(intents))
 
 
@@ -199,89 +202,94 @@ class SupervisorAgent:
         # 1. Interactive policy question handling (e.g. customer responds to unblock or replacement offer)
         pending_q = state.get("pending_customer_question")
         if pending_q and user_text.strip():
-            facts = await self._retrieve_domain_facts(state, "")
-            eval_result = self.policy_evaluator.evaluate(
-                intent=None,
-                user_text=user_text,
-                facts=facts,
-                pending_question=pending_q,
-                **({'state': state} if hasattr(self.policy_evaluator, 'geographic_decision') else {}),
-                pinned_policies=state.get("pinned_policies", {}),
-            )
-            if eval_result.recommended_delegation in ("cards_agent", "fincrime_agent"):
-                target_agent = eval_result.recommended_delegation
-                target_intent = eval_result.recommended_intent or ""
-                context = dict(eval_result.recommended_context)
-                subsequent = context.pop("subsequent_intent", None) or pending_q.get("subsequent_intent")
-                if subsequent and subsequent not in planned_intents:
-                    planned_intents.append(subsequent)
-
-                handoff = AgentHandoff(
-                    origin_agent="supervisor",
-                    target_agent=target_agent,
-                    intent=target_intent,
-                    relevant_context=context,
-                    session_id=session_id,
-                    workflow_id=workflow_id,
+            from card_chat.policy.evaluator import AFFIRMATIVE_TERMS, NEGATIVE_TERMS
+            clean_user = re.sub(r"[^\w\s]", "", user_text.strip().lower())
+            is_simple_answer = clean_user in AFFIRMATIVE_TERMS or clean_user in NEGATIVE_TERMS or len(clean_user.split()) <= 3
+            has_action_verbs = any(k in clean_user.split() for k in ("block", "freeze", "stop", "unfreeze", "reissue", "create", "open"))
+            if is_simple_answer and not has_action_verbs:
+                facts = await self._retrieve_domain_facts(state, "")
+                eval_result = self.policy_evaluator.evaluate(
+                    intent=None,
+                    user_text=user_text,
+                    facts=facts,
+                    pending_question=pending_q,
+                    **({'state': state} if hasattr(self.policy_evaluator, 'geographic_decision') else {}),
+                    pinned_policies=state.get("pinned_policies", {}),
                 )
-                action_plan = [
-                    {
-                        "intent": target_intent,
-                        "target_agent": target_agent,
-                        "status": "executing",
-                        "tool_proposal": None,
-                        "result": None,
-                        "error": None,
-                    }
-                ]
-                if planned_intents:
-                    action_plan.extend([
+                if eval_result.recommended_delegation in ("cards_agent", "fincrime_agent"):
+                    target_agent = eval_result.recommended_delegation
+                    target_intent = eval_result.recommended_intent or ""
+                    context = dict(eval_result.recommended_context)
+                    subsequent = context.pop("subsequent_intent", None) or pending_q.get("subsequent_intent")
+                    if subsequent and subsequent not in planned_intents:
+                        planned_intents.append(subsequent)
+
+                    handoff = AgentHandoff(
+                        origin_agent="supervisor",
+                        target_agent=target_agent,
+                        intent=target_intent,
+                        relevant_context=context,
+                        session_id=session_id,
+                        workflow_id=workflow_id,
+                    )
+                    action_plan = [
                         {
-                            "intent": pi,
-                            "target_agent": get_target_agent_for_intent(pi),
-                            "status": "pending",
+                            "intent": target_intent,
+                            "target_agent": target_agent,
+                            "status": "executing",
                             "tool_proposal": None,
                             "result": None,
                             "error": None,
                         }
-                        for pi in planned_intents
-                    ])
+                    ]
+                    if planned_intents:
+                        action_plan.extend([
+                            {
+                                "intent": pi,
+                                "target_agent": get_target_agent_for_intent(pi),
+                                "status": "pending",
+                                "tool_proposal": None,
+                                "result": None,
+                                "error": None,
+                            }
+                            for pi in planned_intents
+                        ])
 
-                emit_agent_trace(
-                    "supervisor_policy_decision",
-                    decision="customer_accepted",
-                    target_agent=target_agent,
-                    intent=target_intent,
-                    pinned_policies=eval_result.pinned_versions,
-                )
+                    emit_agent_trace(
+                        "supervisor_policy_decision",
+                        decision="customer_accepted",
+                        target_agent=target_agent,
+                        intent=target_intent,
+                        pinned_policies=eval_result.pinned_versions,
+                    )
 
-                return {
-                    "iteration_count": iterations,
-                    "pending_customer_question": None,
-                    "customer_decision": "accepted",
-                    "pinned_policies": eval_result.pinned_versions,
-                    "policy_evaluation": eval_result.model_dump(),
-                    "retrieved_policies": eval_result.retrieved_policies,
-                    "planned_intents": planned_intents,
-                    "completed_intents": completed_intents,
-                    "action_plan": action_plan,
-                    "current_handoff": handoff,
-                    "active_agent": target_agent,
-                    "next_step": target_agent,
-                }
-            elif eval_result.prohibited or not eval_result.permitted or eval_result.recommended_delegation == "respond":
-                decision_type = "declined" if eval_result.prohibited else "concluded"
-                return {
-                    "iteration_count": iterations,
-                    "pending_customer_question": eval_result.pending_question.model_dump() if eval_result.pending_question else None,
-                    "customer_decision": decision_type,
-                    "pinned_policies": eval_result.pinned_versions,
-                    "policy_evaluation": eval_result.model_dump(),
-                    "retrieved_policies": eval_result.retrieved_policies,
-                    "next_step": "respond",
-                    "final_response": eval_result.decision_reason,
-                    "action_plan": action_plan,
-                }
+                    return {
+                        "iteration_count": iterations,
+                        "pending_customer_question": None,
+                        "customer_decision": "accepted",
+                        "pinned_policies": eval_result.pinned_versions,
+                        "policy_evaluation": eval_result.model_dump(),
+                        "retrieved_policies": eval_result.retrieved_policies,
+                        "planned_intents": planned_intents,
+                        "completed_intents": completed_intents,
+                        "action_plan": action_plan,
+                        "current_handoff": handoff,
+                        "active_agent": target_agent,
+                        "next_step": target_agent,
+                    }
+                elif eval_result.prohibited or not eval_result.permitted or eval_result.recommended_delegation == "respond":
+                    decision_type = "declined" if eval_result.prohibited else "concluded"
+                    return {
+                        "iteration_count": iterations,
+                        "pending_customer_question": eval_result.pending_question.model_dump() if eval_result.pending_question else None,
+                        "customer_decision": decision_type,
+                        "pinned_policies": eval_result.pinned_versions,
+                        "policy_evaluation": eval_result.model_dump(),
+                        "retrieved_policies": eval_result.retrieved_policies,
+                        "next_step": "respond",
+                        "final_response": eval_result.decision_reason,
+                        "action_plan": action_plan,
+                    }
 
         # 2. Check if we are resuming after a specialist result in this execution cycle
         active_agent = state.get("active_agent") or (handoff_history[-1].source_agent if handoff_history else None)
@@ -336,7 +344,79 @@ class SupervisorAgent:
                         'policy_evaluation': decision.model_dump(),
                         'verified_domain_facts': facts,
                     }
-                    if not decision.permitted or decision.prohibited or decision.policy_error:
+                    geo_dec = decision.geographic_decision or {}
+                    is_approval_required = (
+                        decision.requires_human_approval
+                        or geo_dec.get("decision") in ("requires_human_approval", "REQUIRES_HUMAN_APPROVAL")
+                    )
+
+                    if next_intent == "replace_card" and is_approval_required and not state.get("fincrime_approved"):
+                        from fincrime_servicing.cases import FinCrimeCaseStore
+                        case_store = getattr(self, "case_store", None) or getattr(self, "fincrime_store", None) or FinCrimeCaseStore()
+                        country_ctx = state.get("country_context", {})
+                        existing_case = case_store.get_case_by_thread(workflow_id)
+                        if existing_case:
+                            case_id = existing_case.case_id
+                        else:
+                            card_ref = facts.get("blocked_card_id") or facts.get("last_blocked_card_id") or ""
+                            case = case_store.create_case(
+                                customer_id=state.get("owner", "customer"),
+                                customer_username=state.get("verified_draft", {}).get("arguments", {}).get("user_name") or state.get("owner", "customer"),
+                                account_number=facts.get("account_number") or "",
+                                card_id=card_ref,
+                                card_last4=str(card_ref)[-4:],
+                                declared_country=country_ctx.get("code") or "UNKNOWN",
+                                is_overseas=bool(geo_dec.get("is_overseas", True)),
+                                policy_id=geo_dec.get("policy_id", "POL-006"),
+                                policy_version=geo_dec.get("version", "1.0.0"),
+                                rules_version=geo_dec.get("rules_version", "1.0.0"),
+                                reason_for_escalation=geo_dec.get("explanation", "Overseas replacement requires FinCrime staff approval"),
+                                rag_evidence=decision.retrieved_policies,
+                                evaluation_result=geo_dec,
+                                thread_id=workflow_id,
+                            )
+                            case_id = case.case_id
+
+                        for item in action_plan:
+                            if item.get("intent") == "replace_card":
+                                item["status"] = "awaiting_fincrime_approval"
+                                item["case_id"] = case_id
+                                break
+
+                        emit_agent_trace(
+                            "fincrime_approval_escalation",
+                            case_id=case_id,
+                            intent="replace_card",
+                            declared_country=country_ctx.get("code"),
+                        )
+
+                        country_name = country_ctx.get("code") or "your location"
+                        return {
+                            "iteration_count": iterations,
+                            "next_step": "fincrime_approval",
+                            "active_agent": "fincrime_staff",
+                            "fincrime_case_id": case_id,
+                            "pending_fincrime_approval": True,
+                            "final_response": f"Your debit card has been successfully blocked. Your replacement request for {country_name} is pending FinCrime staff approval (Case: {case_id}). You can refresh status to check for updates.",
+                            "planned_intents": [next_intent] + planned_intents,
+                            "action_plan": action_plan,
+                            **policy_updates,
+                        }
+
+                    if state.get("fincrime_approved"):
+                        # Revalidate active policy against current release before completion
+                        geo, _ = self.policy_evaluator.geographic_decision(state.get("country_context"), None)
+                        if geo.decision in ("denied", "DENY", "unavailable", "UNAVAILABLE"):
+                            return {
+                                "iteration_count": iterations,
+                                "next_step": "respond",
+                                "active_agent": None,
+                                "final_response": "Active replacement policy changed while your review was pending. Replacement from your location is no longer permitted under POL-006.",
+                                "action_plan": action_plan,
+                                **policy_updates,
+                            }
+
+                    if not state.get("fincrime_approved") and (not decision.permitted or decision.prohibited or decision.policy_error):
                         return {
                             'iteration_count': iterations, 'next_step': 'respond', 'active_agent': None,
                             'final_response': decision.pending_question.question_text if decision.pending_question else decision.decision_reason,
@@ -345,7 +425,7 @@ class SupervisorAgent:
                         }
 
                     for item in action_plan:
-                        if item.get("intent") == next_intent and item.get("status") == "pending":
+                        if item.get("intent") == next_intent and item.get("status") in ("pending", "approved_by_fincrime"):
                             item["status"] = "executing"
                             break
 
@@ -353,6 +433,13 @@ class SupervisorAgent:
                     if last_result.data and isinstance(last_result.data, dict):
                         handoff_context.update(last_result.data)
                     acc_num = state.get("verified_domain_facts", {}).get("account_number") or state.get("verified_draft", {}).get("arguments", {}).get("account_number")
+                    if acc_num:
+                        handoff_context["account_number"] = acc_num
+                    if state.get("fincrime_approved"):
+                        handoff_context["fincrime_approval"] = True
+                        handoff_context["case_id"] = state.get("fincrime_case_id")
+                        if not handoff_context.get("card_id"):
+                            handoff_context["card_id"] = facts.get("blocked_card_id") or facts.get("last_blocked_card_id")
                     if acc_num:
                         handoff_context["account_number"] = acc_num
 
@@ -406,11 +493,16 @@ class SupervisorAgent:
                             'policy_evaluation': eval_result.model_dump(), 'action_plan': action_plan,
                         }
 
+                    final_msg = last_result.message
+                    geo_note = state.get("geographic_notice")
+                    if geo_note and "not permitted" not in str(final_msg).lower() and "prohibited" not in str(final_msg).lower():
+                        final_msg = f"{final_msg} Replacement notice: {geo_note}"
+
                     return {
                         "iteration_count": iterations,
                         "active_agent": None,
                         "next_step": "respond",
-                        "final_response": last_result.message,
+                        "final_response": final_msg,
                         "action_plan": action_plan,
                     }
             if last_result.status == "failed":
@@ -431,8 +523,9 @@ class SupervisorAgent:
                 }
 
         # 3. Analyze intent and detect compound requests
-        from card_chat.policy.geography import declared_country
+        from card_chat.policy.geography import declared_country, normalize_country
         clarified = declared_country(user_text)
+        is_pure_country = bool(normalize_country(user_text.strip().rstrip('.!')))
         from card_chat.policy.planning import needs_policy_planning
         planning = state.get('policy_planning')
         if needs_policy_planning(user_text) and not planning:
@@ -440,7 +533,7 @@ class SupervisorAgent:
             return {'next_step': 'policy_search', 'iteration_count': iterations}
         if planning and planning.get('plan') and needs_policy_planning(user_text):
             target_agent, detected_intents, direct_reply = 'fincrime_agent', ['block_card'], None
-        elif clarified and state.get('geographic_pending_intents'):
+        elif clarified and is_pure_country and state.get('geographic_pending_intents'):
             detected_intents = list(state['geographic_pending_intents'])
             target_agent, direct_reply = get_target_agent_for_intent(detected_intents[0]), None
         else:
@@ -459,7 +552,7 @@ class SupervisorAgent:
         if hasattr(country, 'model_dump'):
             country = country.model_dump()
         state = {**state, 'country_context': country}
-        geo_updates = {'country_context': country}
+        geo_updates = {'country_context': country, 'geographic_pending_intents': []}
         geographic_notice = ''
         # Explicit replacement language cannot become additional issuance merely
         # because a model returned a different tool name.
@@ -485,13 +578,20 @@ class SupervisorAgent:
                 geographic_pending_intents=['replace_card'] if geo.decision == 'clarification_required' else [],
                 pinned_policies={**{p.policy_id: p.version for p in geo_evidence}, **state.get('pinned_policies', {})},
                 retrieved_policies=[p.model_dump() for p in geo_evidence])
-            if geo.decision != 'allowed':
+            if geo.decision in ('denied', 'DENY'):
                 detected_intents = [i for i in detected_intents if i not in ('replace_card', 'issue_card', 'create_card')]
                 if not detected_intents:
                     return {**geo_updates, 'next_step': 'respond', 'final_response': geographic_notice,
                         'proposed_tool': None, 'planned_intents': [], 'pending_customer_question': None,
                         'action_plan': [{'intent':'replace_card', 'target_agent':'cards_agent',
                             'status':'denied', 'error':geo.reason_code}]}
+            elif geo.decision in ('clarification_required', 'REQUIRE_CLARIFICATION'):
+                detected_intents = [i for i in detected_intents if i not in ('replace_card', 'issue_card', 'create_card')]
+                if not detected_intents:
+                    return {**geo_updates, 'next_step': 'respond', 'final_response': geographic_notice,
+                        'proposed_tool': None, 'planned_intents': [], 'pending_customer_question': None,
+                        'action_plan': [{'intent':'replace_card', 'target_agent':'cards_agent',
+                            'status':'clarification_required', 'error':geo.reason_code}]}
         state = {**state, **geo_updates}
 
         if direct_reply or not detected_intents:
@@ -556,8 +656,78 @@ class SupervisorAgent:
                 **state_policy_updates,
             }
 
+        # FinCrime human-in-the-loop approval escalation
+        if primary_intent == "replace_card" and (
+            eval_result.requires_human_approval
+            or (geo_updates.get("geographic_decision") or {}).get("decision") in ("requires_human_approval", "REQUIRES_HUMAN_APPROVAL")
+        ):
+            if not state.get("fincrime_approved"):
+                from fincrime_servicing.cases import FinCrimeCaseStore
+                case_store = getattr(self, "case_store", None) or FinCrimeCaseStore()
+                existing_case = case_store.get_case_by_thread(workflow_id)
+                if existing_case:
+                    case_id = existing_case.case_id
+                else:
+                    card_ref = facts.get("blocked_card_id") or facts.get("last_blocked_card_id") or state.get("verified_draft", {}).get("arguments", {}).get("card_id") or ""
+                    geo_dec = geo_updates.get("geographic_decision") or {}
+                    case = case_store.create_case(
+                        customer_id=state.get("owner", "customer"),
+                        customer_username=state.get("verified_draft", {}).get("arguments", {}).get("user_name") or state.get("owner", "customer"),
+                        account_number=facts.get("account_number") or "",
+                        card_id=card_ref,
+                        card_last4=str(card_ref)[-4:],
+                        declared_country=country.get("code") or "UNKNOWN",
+                        is_overseas=bool(geo_dec.get("is_overseas", True)),
+                        policy_id=geo_dec.get("policy_id", "POL-006"),
+                        policy_version=geo_dec.get("version", "1.0.0"),
+                        rules_version=geo_dec.get("rules_version", "1.0.0"),
+                        reason_for_escalation=geo_dec.get("explanation", "Overseas replacement requires FinCrime staff approval"),
+                        rag_evidence=eval_result.retrieved_policies,
+                        evaluation_result=geo_dec,
+                        thread_id=workflow_id,
+                    )
+                    case_id = case.case_id
+
+                for item in action_plan:
+                    if item.get("intent") == "replace_card":
+                        item["status"] = "awaiting_fincrime_approval"
+                        item["case_id"] = case_id
+                        break
+
+                emit_agent_trace(
+                    "fincrime_approval_escalation",
+                    case_id=case_id,
+                    intent="replace_card",
+                    declared_country=country.get("code"),
+                )
+
+                country_name = country.get("code") or "your location"
+                return {
+                    "iteration_count": iterations,
+                    "next_step": "fincrime_approval",
+                    "active_agent": "fincrime_staff",
+                    "fincrime_case_id": case_id,
+                    "pending_fincrime_approval": True,
+                    "final_response": f"Your replacement request for {country_name} is pending FinCrime staff approval (Case: {case_id}). You can refresh status to check for updates.",
+                    "planned_intents": remaining_intents,
+                    "action_plan": action_plan,
+                    **state_policy_updates,
+                }
+            else:
+                # Revalidate active policy before completion
+                geo, _ = self.policy_evaluator.geographic_decision(country, state.get("pinned_policies"))
+                if geo.decision in ("denied", "DENY"):
+                    return {
+                        "iteration_count": iterations,
+                        "next_step": "respond",
+                        "active_agent": None,
+                        "final_response": "Active replacement policy changed while your review was pending. Replacement from your location is no longer permitted under POL-006.",
+                        "action_plan": action_plan,
+                        **state_policy_updates,
+                    }
+
         # Policy prohibits operation
-        if eval_result.prohibited or not eval_result.permitted:
+        if not state.get("fincrime_approved") and (eval_result.prohibited or not eval_result.permitted):
             return {
                 "iteration_count": iterations,
                 "next_step": "respond",
@@ -567,11 +737,21 @@ class SupervisorAgent:
             }
 
         # 5. Permitted delegation to specialist
+        handoff_ctx = dict(state.get("verified_draft", {}).get("arguments", {}))
+        if primary_intent == "create_account":
+            last_msg = next((m.get("content", "").lower() for m in reversed(messages) if m.get("role") == "user"), "")
+            if "saving" in last_msg:
+                handoff_ctx["account_type"] = "savings"
+            elif "transaction" in last_msg or "everyday" in last_msg:
+                handoff_ctx["account_type"] = "transaction"
+            if "card" in last_msg:
+                handoff_ctx["issue_card"] = True
+
         handoff = AgentHandoff(
             origin_agent="supervisor",
             target_agent=target_agent,
             intent=primary_intent,
-            relevant_context=state.get("verified_draft", {}).get("arguments", {}),
+            relevant_context=handoff_ctx,
             session_id=session_id,
             workflow_id=workflow_id,
         )
@@ -768,7 +948,23 @@ class SupervisorAgent:
                 intent_candidates.append((target_tool, pos_issue))
 
         # Create account
-        pos_create_acc = _find_keyword_pos(lower, ("create account", "open account", "new account", "create an account", "open an account"))
+        pos_create_acc = _find_keyword_pos(
+            lower,
+            (
+                "create account", "open account", "new account", "create an account", "open an account",
+                "create a transaction account", "open a transaction account", "new transaction account",
+                "create a savings account", "open a savings account", "new savings account",
+                "create transaction account", "open transaction account",
+                "create savings account", "open savings account",
+                "create a new account", "open a new account", "create a bank account", "open a bank account",
+                "start an account", "start a new account", "apply for an account", "want an account", "want to open",
+            ),
+        )
+        if pos_create_acc == -1 and has_account and any(w in lower for w in ("create", "open", "new", "start", "want", "apply")):
+            pos_create_acc = min(
+                (lower.find(w) for w in ("create", "open", "new", "start", "want") if lower.find(w) != -1),
+                default=-1,
+            )
         if pos_create_acc != -1 and has_account:
             intent_candidates.append(("create_account", pos_create_acc))
 

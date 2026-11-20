@@ -52,8 +52,8 @@ if ($Build) {
     Invoke-Compose -Arguments ($composeArgs + @('build'))
 }
 if (-not $WaitForDebugger -or $Build) {
-    Write-Host 'Stage 2/3: starting Qdrant and updating approved policy indexes.'
-    Invoke-Compose -Arguments ($composeArgs + @('up', '-d', '--wait', '--wait-timeout', '120', 'qdrant'))
+    Write-Host 'Stage 2/3: starting Qdrant, OPA and updating approved policy indexes.'
+    Invoke-Compose -Arguments ($composeArgs + @('up', '-d', '--wait', '--wait-timeout', '120', 'qdrant', 'opa'))
     Invoke-Compose -Arguments ($composeArgs + @('run', '--rm', '--no-deps', '--workdir', '/data',
         '--entrypoint', 'python', 'cards-agent', '-m', 'card_chat.policy.pipeline.cli', 'ingest'))
     Write-Host 'Policy indexing completed. Stage 3/3: starting application containers.'

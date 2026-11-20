@@ -59,6 +59,12 @@ class BankingWorkflowState(TypedDict, total=False):
     confirmation_label: str | None
     input_tool: str | None
 
+    # FinCrime human-in-the-loop approval lifecycle
+    fincrime_case_id: str | None
+    fincrime_approved: bool | None
+    fincrime_approval_reason: str | None
+    pending_fincrime_approval: bool | None
+
     # Reasoning loop control
     iteration_count: int
     final_response: str | None

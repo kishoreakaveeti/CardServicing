@@ -94,6 +94,13 @@ def create_app(model=None, gateway=None, *, config=None, policy_retriever=None):
             fincrime_agent = local_fincrime
         from card_chat.orchestration.persistence import DurableSqliteSaver
         from card_chat.policy.factory import build_runtime_policy_services
+        from fincrime_servicing.cases import FinCrimeCaseStore
+        from card_chat.policy.release_store import PolicyReleaseStore
+        case_store = config.get("CASE_STORE") or FinCrimeCaseStore(config.get("FINCRIME_CASES_DB", ":memory:" if config.get("AGENT_DB") == ":memory:" else None))
+        release_store = config.get("RELEASE_STORE") or PolicyReleaseStore(config.get("POLICY_STORE_DB", ":memory:" if config.get("AGENT_DB") == ":memory:" else None), policies_dir=config.get("POLICIES_DIR", "policies"))
+        app.state.case_store = case_store
+        app.state.release_store = release_store
+
         checkpointer = DurableSqliteSaver(config.get('AGENT_DB', ':memory:'))
         retriever, policy_evaluator = build_runtime_policy_services(config, retriever=policy_retriever)
         app.state.policy_retriever = retriever
@@ -164,15 +171,19 @@ def create_app(model=None, gateway=None, *, config=None, policy_retriever=None):
             policy_evaluator=policy_evaluator,
             facts_retriever_fn=get_verified_domain_facts,
         )
+        app.state.orchestrator.case_store = case_store
+        app.state.orchestrator.supervisor.case_store = case_store
         app.state.agent = app.state.orchestrator
         try:
             if gateway is not None:
                 app.state.gateway = gateway
+                app.state.orchestrator.gateway = gateway
                 recover()
                 yield
             else:
                 async with connect(config) as connected:
                     app.state.gateway = connected
+                    app.state.orchestrator.gateway = connected
                     recover()
                     yield
         finally:
@@ -464,6 +475,12 @@ def create_app(model=None, gateway=None, *, config=None, policy_retriever=None):
                         if isinstance(c_obj, dict) and (str(c_obj.get('id')) == blocked_id or str(c_obj.get('card_number')) == blocked_id):
                             c_obj['status'] = 'blocked'
                             c_obj['reason'] = submission['arguments'].get('reason', 'lost')
+                elif spec.name == 'unblock_card':
+                    unblocked_id = str(submission['arguments'].get('card_id'))
+                    for c_obj in cust.get('cards', []):
+                        if isinstance(c_obj, dict) and (str(c_obj.get('id')) == unblocked_id or str(c_obj.get('card_number')) == unblocked_id):
+                            c_obj['status'] = 'created'
+                            c_obj['reason'] = None
             c.usage['completed_actions'] = c.usage.get('completed_actions', 0) + 1
             metrics = {'tool': spec.name, **c.usage}
             logger.warning('workflow_usage %s', json.dumps(metrics, sort_keys=True),
@@ -658,6 +675,7 @@ def create_app(model=None, gateway=None, *, config=None, policy_retriever=None):
         if c.submission and c.submission['result'] is not None:
             c.submission, c.proposal, c.review, c.draft = None, None, None, {}
             c.compound_approval = None
+            c.country_required = False
 
     def build_trace(safe_text, c, turn=None, spec=None, can_confirm=False, backend_outcome=None, start_time=None):
         from time import perf_counter
@@ -793,7 +811,9 @@ def create_app(model=None, gateway=None, *, config=None, policy_retriever=None):
             from card_chat.policy.geography import declared_country
             country = declared_country(safe_text)
             if country is not None:
-                continuing_country_form = c.country_required
+                from card_chat.policy.geography import normalize_country
+                is_pure_country_reply = bool(normalize_country(safe_text.strip().rstrip('.!')))
+                continuing_country_form = c.country_required and is_pure_country_reply
                 c.country_required = country.status != 'explicit'
                 c.country_context = country.model_dump()
                 c.geographic_binding = None
@@ -803,7 +823,6 @@ def create_app(model=None, gateway=None, *, config=None, policy_retriever=None):
                         c.geographic_binding = await method(cid, c.country_context)
                     except Exception:
                         c.geographic_binding = None
-                from card_chat.policy.geography import normalize_country
                 if continuing_country_form:
                     pending_intents = (['block_card', 'replace_card'] if c.draft.get('tool') == 'block_card'
                                        else ['replace_card'])
@@ -811,7 +830,12 @@ def create_app(model=None, gateway=None, *, config=None, policy_retriever=None):
                         {'configurable': {'thread_id': f'{owner()}:{cid}'}},
                         {'country_context': c.country_context, 'geographic_pending_intents': pending_intents},
                         as_node='supervisor')
-                if normalize_country(safe_text.strip().rstrip('.!')):
+                elif not is_pure_country_reply:
+                    await app.state.orchestrator.workflow.aupdate_state(
+                        {'configurable': {'thread_id': f'{owner()}:{cid}'}},
+                        {'country_context': c.country_context, 'geographic_pending_intents': []},
+                        as_node='supervisor')
+                if is_pure_country_reply:
                     graph_config = {'configurable': {'thread_id': f'{owner()}:{cid}'}}
                     snapshot = await app.state.orchestrator.workflow.aget_state(graph_config)
                     if not snapshot.values.get('geographic_pending_intents'):
@@ -898,7 +922,7 @@ def create_app(model=None, gateway=None, *, config=None, policy_retriever=None):
                 turn = ProposedToolCall(turn.name, {
                     key: value for key, value in turn.arguments.items()
                     if key in spec.input_schema['properties']})
-            if turn.name == 'issue_card' and not caller().get('accounts') and 'create_account' in catalogue:
+            if turn.name in ('issue_card', 'create_card') and not caller().get('accounts') and 'create_account' in catalogue:
                 c.draft = {'tool': 'create_account', 'arguments': {}}
                 return reply(c, 'Create an account first. You can choose to issue a card with it.', input_tool='create_account')
             if turn.name in ('block_card', 'unblock_card', 'replace_card') and 'card_id' not in turn.arguments:
@@ -1013,6 +1037,18 @@ def create_app(model=None, gateway=None, *, config=None, policy_retriever=None):
             for key, value in body.fields.items():
                 if key not in spec.input_schema['properties']:
                     raise ValueError('Unknown input')
+                prop = spec.input_schema['properties'][key]
+                if prop.get('type') == 'boolean' and isinstance(value, str):
+                    if value.strip().lower() in ('true', 'yes', '1'):
+                        value = True
+                    elif value.strip().lower() in ('false', 'no', '0'):
+                        value = False
+                if key == 'account_type' and isinstance(value, str):
+                    v_low = value.strip().lower()
+                    if 'sav' in v_low:
+                        value = 'savings'
+                    elif 'trans' in v_low or 'every' in v_low:
+                        value = 'transaction'
                 if key in spec.entry.context_fields:
                     if isinstance(value, str) and sanitise(value) != value:
                         raise ValueError('Private text is not model-visible')
@@ -1188,6 +1224,138 @@ def create_app(model=None, gateway=None, *, config=None, policy_retriever=None):
     @app.post('/conversations/{cid}/inputs', response_model=Reply, responses={202: {'model': Operation}})
     async def submit_inputs(cid: str, body: StructuredInput, request: Request):
         return await submit(cid, body, 'inputs', request)
+
+    # FinCrime Staff & Case Management Endpoints
+    @app.get('/fincrime/cases')
+    async def list_fincrime_cases(status: str | None = None, country: str | None = None, limit: int = 100):
+        cases = app.state.case_store.list_cases(status=status, country=country, limit=limit)
+        return {'cases': [c.model_dump() for c in cases]}
+
+    @app.get('/fincrime/cases/{case_id}')
+    async def get_fincrime_case(case_id: str):
+        case = app.state.case_store.get_case(case_id)
+        if not case:
+            raise HTTPException(404, f"Case {case_id} not found")
+        audit = app.state.case_store.get_case_audit(case_id)
+        return {'case': case.model_dump(), 'audit': audit}
+
+    @app.get('/fincrime/cases/customer/{customer_id}')
+    async def get_customer_fincrime_cases(customer_id: str):
+        cases = app.state.case_store.list_cases_for_customer(customer_id)
+        return {'cases': [c.model_dump() for c in cases]}
+
+    @app.post('/fincrime/cases/{case_id}/approve')
+    async def approve_fincrime_case(case_id: str, request: Request):
+        body = await request.json() if request.headers.get('content-length', '0') != '0' else {}
+        reason = body.get('reason', 'Customer travel and identity verified')
+        analyst = body.get('analyst', 'fincrime.analyst')
+        try:
+            result = await app.state.orchestrator.resume_fincrime_case(
+                case_id=case_id,
+                decision='approved',
+                reason=reason,
+                analyst_username=analyst,
+                gateway=app.state.gateway,
+                case_store=app.state.case_store,
+            )
+            return result
+        except KeyError:
+            raise HTTPException(404, f"Case {case_id} not found")
+        except ValueError as exc:
+            raise HTTPException(409, str(exc))
+
+    @app.post('/fincrime/cases/{case_id}/reject')
+    async def reject_fincrime_case(case_id: str, request: Request):
+        body = await request.json() if request.headers.get('content-length', '0') != '0' else {}
+        reason = body.get('reason', 'High risk activity detected')
+        analyst = body.get('analyst', 'fincrime.analyst')
+        try:
+            result = await app.state.orchestrator.resume_fincrime_case(
+                case_id=case_id,
+                decision='rejected',
+                reason=reason,
+                analyst_username=analyst,
+                gateway=app.state.gateway,
+                case_store=app.state.case_store,
+            )
+            return result
+        except KeyError:
+            raise HTTPException(404, f"Case {case_id} not found")
+        except ValueError as exc:
+            raise HTTPException(409, str(exc))
+
+    @app.get('/fincrime/policies')
+    async def get_fincrime_policies():
+        active = app.state.release_store.get_active_release('POL-006')
+        releases = app.state.release_store.list_releases('POL-006')
+        all_docs = app.state.policy_retriever._doc_source.list_documents()
+        return {
+            'active_release': active,
+            'releases': releases,
+            'policies': [{'policy_id': d.policy_id, 'version': d.version, 'title': d.title, 'effective_date': d.effective_date} for d in all_docs]
+        }
+
+    @app.get('/fincrime/policies/{policy_id}')
+    async def get_fincrime_policy(policy_id: str):
+        draft = app.state.release_store.get_draft(policy_id)
+        active = app.state.release_store.get_active_release(policy_id)
+        return {'draft': draft, 'active': active}
+
+    @app.post('/fincrime/policies/draft')
+    async def save_fincrime_policy_draft(request: Request):
+        body = await request.json()
+        policy_id = body.get('policy_id', 'POL-006')
+        markdown = body.get('markdown', '')
+        rules_json = body.get('rules_json') or json.dumps(body.get('rules', {}))
+        user = body.get('user', 'fincrime.admin')
+        res = app.state.release_store.save_draft(policy_id, markdown, rules_json, user)
+        return res
+
+    @app.post('/fincrime/policies/validate')
+    async def validate_fincrime_policy(request: Request):
+        body = await request.json()
+        markdown = body.get('markdown', '')
+        rules = body.get('rules') or (json.loads(body.get('rules_json', '{}')) if body.get('rules_json') else {})
+        valid, err, _ = app.state.release_store.validate_candidate(markdown, rules)
+        return {'valid': valid, 'error': err}
+
+    @app.post('/fincrime/policies/apply')
+    async def apply_fincrime_policy(request: Request):
+        body = await request.json()
+        policy_id = body.get('policy_id', 'POL-006')
+        markdown = body.get('markdown', '')
+        rules = body.get('rules') or (json.loads(body.get('rules_json', '{}')) if body.get('rules_json') else {})
+        user = body.get('user', 'fincrime.admin')
+        new_version = body.get('version')
+        from card_chat.policy.adapters.opa_evaluator import OPAGeographicEvaluator
+        opa_client = OPAGeographicEvaluator(config.get('OPA_URL'))
+        result = app.state.release_store.apply_release(
+            policy_id=policy_id,
+            markdown=markdown,
+            rules_dict_or_json=rules,
+            user=user,
+            embedding_provider=app.state.policy_retriever._embedder,
+            vector_store=app.state.policy_retriever._store,
+            opa_client=opa_client,
+            new_version=new_version,
+        )
+        return result
+
+    @app.get('/fincrime/audit')
+    async def get_fincrime_audit():
+        logs = app.state.release_store.get_audit_trail()
+        return {'audit_logs': logs}
+
+    @app.get('/fincrime/qdrant/status')
+    async def get_qdrant_status():
+        store = app.state.policy_retriever._store
+        count = store.count() if hasattr(store, 'count') else 0
+        return {
+            'status': 'connected',
+            'collection_name': getattr(store, 'collection_name', 'banking_policies'),
+            'vector_count': count,
+            'dimension': getattr(app.state.policy_retriever._embedder, 'dimension', 384),
+        }
 
     return app
 

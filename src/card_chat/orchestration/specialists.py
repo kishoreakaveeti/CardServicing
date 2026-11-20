@@ -80,9 +80,19 @@ class CardsSpecialistNode:
 
         # Deterministic create_account proposal if model has no queued outputs
         if intent == "create_account" and _is_unconfigured_stub(self.agent):
+            last_user_text = next((m.get("content", "").lower() for m in reversed(messages) if m.get("role") == "user"), "")
+            acc_type = context_arguments.get("account_type")
+            if not acc_type:
+                if "saving" in last_user_text:
+                    acc_type = "savings"
+                else:
+                    acc_type = "transaction"
+            issue_c = context_arguments.get("issue_card")
+            if issue_c is None:
+                issue_c = True
             tool_args = {
-                "account_type": context_arguments.get("account_type", "transaction"),
-                "issue_card": context_arguments.get("issue_card", True),
+                "account_type": acc_type,
+                "issue_card": bool(issue_c),
             }
             result = HandoffResult(
                 source_agent=self.name,

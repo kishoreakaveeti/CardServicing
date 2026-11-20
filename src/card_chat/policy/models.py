@@ -77,6 +77,7 @@ class PolicyEvaluationResult(BaseModel):
     """Structured result of evaluating retrieved policies against verified domain facts."""
     permitted: bool = True
     clarification_required: bool = False
+    requires_human_approval: bool = False
     geographic_decision: dict[str, Any] | None = None
     prohibited: bool = False
     decision_reason: str = ""

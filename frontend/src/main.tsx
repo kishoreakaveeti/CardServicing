@@ -300,12 +300,40 @@ function App() {
     const toolDef = tools.find((t) => t.name === toolName);
     const selections: Record<string, string> = {};
     const fields: Record<string, any> = {};
-    for (const [k, v] of Object.entries(formVals)) {
+
+    // Ensure defaults if any required select field is missing from formVals
+    const resolvedVals: Record<string, any> = { ...formVals };
+    if (toolDef) {
+      for (const f of toolDef.fields) {
+        if (resolvedVals[f.name] === undefined || resolvedVals[f.name] === '') {
+          if (f.name === 'account_type') {
+            resolvedVals[f.name] = 'transaction';
+          } else if (f.name === 'issue_card' || f.name === 'additional_card' || f.type === 'boolean') {
+            resolvedVals[f.name] = true;
+          } else if (f.name === 'reason') {
+            resolvedVals[f.name] = 'lost';
+          } else if (f.options && f.options.length > 0 && f.required) {
+            resolvedVals[f.name] = f.options[0].ref;
+          }
+        }
+      }
+    }
+
+    for (const [k, v] of Object.entries(resolvedVals)) {
       const fieldDef = toolDef?.fields.find((f) => f.name === k);
       if (fieldDef?.options && fieldDef.options.length > 0) {
         selections[k] = v;
       } else {
-        fields[k] = v === 'true' ? true : v === 'false' ? false : v;
+        const str = String(v).trim().toLowerCase();
+        if (fieldDef?.type === 'boolean' || k === 'issue_card' || k === 'additional_card') {
+          fields[k] = str === 'true' || str === 'yes' || str === '1' || v === true;
+        } else if (str === 'true') {
+          fields[k] = true;
+        } else if (str === 'false') {
+          fields[k] = false;
+        } else {
+          fields[k] = v;
+        }
       }
     }
     await request({
@@ -658,10 +686,32 @@ function App() {
 // Helper to validate and read session response
 async function readSessionResponse(response: Response): Promise<Session> {
   const data = await response.json();
+  if (!response.ok) {
+    throw new Error(data?.detail || (response.status === 401 ? 'Invalid username or password' : 'Authentication failed'));
+  }
   if (typeof data?.name !== 'string' || typeof data?.csrf !== 'string') {
     throw new Error('Malformed session returned by service');
   }
   return { name: data.name, csrf: data.csrf };
 }
 
-createRoot(document.getElementById('root')!).render(<App />);
+import { FinCrimeApp } from './fincrime/FinCrimeApp';
+
+// Root Router supporting Customer Portal (/) and FinCrime Portal (/fincrime)
+function RootRouter() {
+  const [path, setPath] = useState(window.location.pathname);
+
+  useEffect(() => {
+    const handlePopState = () => setPath(window.location.pathname);
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, []);
+
+  if (path.startsWith('/fincrime')) {
+    return <FinCrimeApp />;
+  }
+
+  return <App />;
+}
+
+createRoot(document.getElementById('root')!).render(<RootRouter />);

@@ -105,13 +105,16 @@ def declared_country(text: str, proposed: RequestInterpretation | None = None) -
 
 
 class GeographicRules(BaseModel):
-    model_config = ConfigDict(extra='forbid')
+    model_config = ConfigDict(extra='ignore')
     policy_id: Literal['POL-006'] = 'POL-006'
     version: str = Field(pattern=r'^\d+\.\d+\.\d+$')
     country_basis: Literal['declared_current_location'] = 'declared_current_location'
-    excluded_country_codes: list[str]
-    on_unknown_country: Literal['require_clarification'] = 'require_clarification'
-    allow_security_card_block: Literal[True] = True
+    home_country_code: str = 'AU'
+    excluded_country_codes: list[str] = Field(default_factory=list)
+    overseas_replacement_requires_fincrime_approval: bool = True
+    domestic_replacement_requires_fincrime_approval: bool = False
+    unknown_country_action: str = 'REQUIRE_CLARIFICATION'
+    security_card_blocking_allowed: bool = True
 
     @field_validator('excluded_country_codes')
     @classmethod
@@ -119,6 +122,22 @@ class GeographicRules(BaseModel):
         if len(set(codes)) != len(codes) or any(normalize_country(code) != code for code in codes):
             raise ValueError('Exclusions require unique canonical ISO alpha-2 codes')
         return codes
+
+
+def _normalize_conditions(cond: dict) -> dict:
+    if not isinstance(cond, dict):
+        return {}
+    res = dict(cond)
+    res.pop('policy_id', None)
+    if 'on_unknown_country' in res and 'unknown_country_action' not in res:
+        res['unknown_country_action'] = res.pop('on_unknown_country').upper()
+    elif 'on_unknown_country' in res:
+        res.pop('on_unknown_country', None)
+    if 'allow_security_card_block' in res and 'security_card_blocking_allowed' not in res:
+        res['security_card_blocking_allowed'] = res.pop('allow_security_card_block')
+    elif 'allow_security_card_block' in res:
+        res.pop('allow_security_card_block', None)
+    return res
 
 
 class RulesSource(Protocol):
@@ -130,7 +149,8 @@ class FileRulesSource:
         self.directory = Path(directory or os.getenv('POLICIES_DIR', 'policies'))
 
     def load(self):
-        rules = GeographicRules.model_validate_json((self.directory / 'geographic-replacement-rules.json').read_text())
+        content = (self.directory / 'geographic-replacement-rules.json').read_text()
+        rules = GeographicRules.model_validate_json(content)
         if any(normalize_country(code) != code for code in rules.excluded_country_codes):
             raise ValueError('Rules require canonical ISO alpha-2 codes')
         return rules
@@ -140,23 +160,29 @@ class GeographicDecision(BaseModel):
     action: Literal['replace_card'] = 'replace_card'
     country_code: str | None = None
     evidence_source: str = 'customer_declaration'
-    decision: Literal['allowed', 'denied', 'clarification_required', 'unavailable']
+    decision: Literal[
+        'allowed', 'denied', 'clarification_required', 'requires_human_approval', 'unavailable',
+        'ALLOW', 'DENY', 'REQUIRES_HUMAN_APPROVAL', 'REQUIRE_CLARIFICATION', 'UNAVAILABLE'
+    ]
+    is_overseas: bool = False
     policy_id: str = 'POL-006'
     version: str = ''
+    rules_version: str = ''
     artifact_hash: str = ''
     rule_id: str = 'declared_location_replacement'
     reason_code: str
     explanation: str
     evidence_citations: list[dict[str, str]] = Field(default_factory=list)
+    review_requirements: list[str] = Field(default_factory=list)
 
 
 def evaluate_geography(context, rules: GeographicRules, evidence, pinned_version=None):
-    base = {'country_code': None, 'version': rules.version}
+    base = {'country_code': None, 'version': rules.version, 'rules_version': rules.version}
     governing = [p for p in evidence if p.policy_id == rules.policy_id and p.mandatory]
     base['artifact_hash'] = hashlib.sha256((rules.model_dump_json() +
         ''.join(sorted({p.content_hash for p in governing}))).encode()).hexdigest()
-    expected = rules.model_dump(exclude={'policy_id'})
-    if (not governing or any(p.version != rules.version or p.conditions != expected for p in governing)
+    expected = _normalize_conditions(rules.model_dump(exclude={'policy_id'}))
+    if (not governing or any(p.version != rules.version or _normalize_conditions(p.conditions) != expected for p in governing)
             or (pinned_version and pinned_version != rules.version)):
         return GeographicDecision(**base, decision='unavailable', reason_code='geographic_policy_conflict',
             explanation='Replacement policy changed or is unavailable. Please start a new request or contact support.')
@@ -165,12 +191,46 @@ def evaluate_geography(context, rules: GeographicRules, evidence, pinned_version
     if ctx.status != 'explicit' or not ctx.code or normalize_country(ctx.code) != ctx.code:
         return GeographicDecision(**base, decision='clarification_required', reason_code='country_required',
             explanation='Which country should your replacement card be issued for? Your declaration is required before replacement can be reviewed. Card blocking remains available.')
-    denied = ctx.code in rules.excluded_country_codes
-    return GeographicDecision(**base, decision='denied' if denied else 'allowed',
-        reason_code='excluded_declared_country' if denied else 'country_eligible',
-        explanation=('Replacement is restricted from your declared location under our synthetic demonstration policy. '
-                     'You can still block your card securely and contact specialist support.' if denied else
-                     'Your declared country is eligible under the demonstration geographic policy; other replacement controls still apply.'))
+    
+    # Check exclusion first
+    if ctx.code in rules.excluded_country_codes:
+        return GeographicDecision(
+            **base,
+            is_overseas=(ctx.code != rules.home_country_code),
+            decision='denied',
+            reason_code='excluded_declared_country',
+            explanation='Replacement is restricted from your declared location under our synthetic demonstration policy. You can still block your card securely and contact specialist support.'
+        )
+
+    # Determine overseas classification
+    is_overseas = (ctx.code != rules.home_country_code)
+    base['is_overseas'] = is_overseas
+
+    # Check human approval requirement
+    if is_overseas and rules.overseas_replacement_requires_fincrime_approval:
+        return GeographicDecision(
+            **base,
+            decision='requires_human_approval',
+            reason_code='overseas_fincrime_approval_required',
+            explanation='Replacement card request for an overseas location requires FinCrime staff approval before issuance. Your request will be reviewed by an authorized analyst.',
+            review_requirements=['FINCRIME_OVERSEAS_APPROVAL']
+        )
+
+    if not is_overseas and rules.domestic_replacement_requires_fincrime_approval:
+        return GeographicDecision(
+            **base,
+            decision='requires_human_approval',
+            reason_code='domestic_fincrime_approval_required',
+            explanation='Replacement card request for a domestic location requires FinCrime staff approval before issuance.',
+            review_requirements=['FINCRIME_DOMESTIC_APPROVAL']
+        )
+
+    return GeographicDecision(
+        **base,
+        decision='allowed',
+        reason_code='country_eligible',
+        explanation='Your declared country is eligible under the demonstration geographic policy; other replacement controls still apply.'
+    )
 
 
 def local_geographic_decision(context, source=None, pinned_version=None, document_source=None):

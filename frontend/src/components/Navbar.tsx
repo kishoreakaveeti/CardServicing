@@ -66,6 +66,24 @@ export const Navbar: React.FC<NavbarProps> = ({
         )}
 
         <div className="header-right">
+          <a
+            href="/fincrime"
+            target="_blank"
+            rel="noopener noreferrer"
+            style={{
+              fontSize: '0.8rem',
+              fontWeight: 600,
+              color: '#ef4444',
+              textDecoration: 'none',
+              padding: '5px 10px',
+              borderRadius: '6px',
+              backgroundColor: '#fef2f2',
+              border: '1px solid #fecaca',
+            }}
+            title="Open FinCrime Staff Portal in separate tab"
+          >
+            FinCrime Staff ↗
+          </a>
           {session ? (
             <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
               <div className="user-badge" title="Authenticated Customer">
