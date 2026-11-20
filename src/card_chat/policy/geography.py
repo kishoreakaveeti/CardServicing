@@ -10,6 +10,7 @@ import os
 import re
 from pathlib import Path
 from typing import Literal, Protocol
+from datetime import datetime, timezone
 
 import pycountry
 from pydantic import BaseModel, ConfigDict, Field, field_validator
@@ -23,6 +24,8 @@ class CountryContext(BaseModel):
     revision: int = 1
     updated_at: str | None = None
     verification_status: Literal['unverified', 'verified', 'disputed'] = 'unverified'
+    previous_code: str | None = None
+    previous_updated_at: str | None = None
 
 
 class RequestInterpretation(BaseModel):
@@ -81,7 +84,7 @@ def declared_country(
 
     # Distinguish historical mentions and future travel
     has_explicit_current_indicator = bool(re.search(
-        r"\b(?:i(?:'m| am|’m)\s+(?:currently\s+|now\s+)?(?:in|located in)|my current (?:location|country) is|currently (?:in|located in)|now in|now located in)\b",
+        r"\b(?:i(?:'m| am|’m)\s+(?:currently\s+|now\s+)?(?:in|located in)|my current (?:location|country) is|currently (?:in|located in)|now in|now located in|i (?:came|am) back (?:in|to))\b",
         text,
         re.I,
     ))
@@ -104,6 +107,7 @@ def declared_country(
 
     patterns = (
         r"(?:i(?:'m| am|’m)\s+(?:currently\s+|now\s+)?(?:in|located in)|my current (?:location|country) is)\s+([^.!?;]+)",
+        r"(?:i (?:came|am) back (?:in|to))\s+([^.!?;]+)",
         r"(?:i(?:'m| am|’m)\s+(?:travelling|traveling|commuting|riding|on vacation|on holiday|visiting|staying)\s+(?:(?:on|in)\s+[^.!?;]+\s+)?in)\s+([^.!?;]+)",
         r"(?:(?:currently\s+)?(?:travelling|traveling|commuting|on vacation|on holiday|visiting|staying|vacationing)\s+(?:(?:on|in)\s+[^.!?;]+\s+)?in)\s+([^.!?;]+)",
     )
@@ -175,6 +179,11 @@ class GeographicRules(BaseModel):
     domestic_replacement_requires_fincrime_approval: bool = False
     unknown_country_action: str = 'REQUIRE_CLARIFICATION'
     security_card_blocking_allowed: bool = True
+    transition_review_enabled: bool = True
+    transition_review_lookback_hours: int = Field(default=72, ge=1, le=8760)
+    transition_review_applicable_intents: list[str] = Field(default_factory=lambda: ['replace_card'])
+    transition_review_decision: Literal['REQUIRES_HUMAN_APPROVAL'] = 'REQUIRES_HUMAN_APPROVAL'
+    transition_review_reason_code: str = 'RECENT_EXCLUDED_COUNTRY_TRANSITION'
 
     @field_validator('excluded_country_codes')
     @classmethod
@@ -261,6 +270,26 @@ def evaluate_geography(context, rules: GeographicRules, evidence, pinned_version
             reason_code='excluded_declared_country',
             explanation='Replacement is restricted from your declared location under our synthetic demonstration policy. You can still block your card securely and contact specialist support.'
         )
+
+    # A permitted current declaration does not erase a recent excluded-country
+    # declaration. It is an unverified risk signal only, never proof of travel.
+    if (rules.transition_review_enabled and 'replace_card' in rules.transition_review_applicable_intents
+            and ctx.previous_code in rules.excluded_country_codes and ctx.previous_updated_at):
+        try:
+            previous_at = datetime.fromisoformat(ctx.previous_updated_at.replace('Z', '+00:00'))
+            age_hours = (datetime.now(timezone.utc) - previous_at.astimezone(timezone.utc)).total_seconds() / 3600
+        except (TypeError, ValueError):
+            age_hours = rules.transition_review_lookback_hours + 1
+        if 0 <= age_hours <= rules.transition_review_lookback_hours:
+            return GeographicDecision(
+                **base,
+                is_overseas=(ctx.code != rules.home_country_code),
+                decision='requires_human_approval',
+                rule_id='FC-COUNTRY-TRANSITION-001',
+                reason_code=rules.transition_review_reason_code,
+                explanation='A recent declaration changed from an excluded country to a permitted country. This replacement requires FinCrime staff review under the synthetic transition policy.',
+                review_requirements=['FINCRIME_COUNTRY_TRANSITION_APPROVAL'],
+            )
 
     # Determine overseas classification
     is_overseas = (ctx.code != rules.home_country_code)

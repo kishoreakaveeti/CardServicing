@@ -157,6 +157,7 @@ def test_domain_boundary_denies_and_keeps_idempotency(banking):
             assert exc.value.status_code in (403,409)
         assert len(bank.cards(customer['sub'])) == 1
     context = bank.declare_country(customer,uuid4().hex,CountryContext(code='AU',status='explicit').model_dump())
+    context = {**context, 'fincrime_approval': True, 'case_id': 'FC-DOMAIN-TRANSITION'}
     first,replayed = bank.replace_card(customer,card.id,'replace',geographic_context=context,with_replay=True)
     second,replayed = bank.replace_card(customer,card.id,'replace',geographic_context=context,with_replay=True)
     assert first.id == second.id and replayed
@@ -204,9 +205,10 @@ def test_cards_http_boundary_and_metadata_tampering(identity, tmp_path):
         ctx = declare('AU')
         other = headers(user='another-customer',audience='cards',permission='cards:write',client='mcp-service')
         assert client.post(path,headers={**other,'Idempotency-Key':'x','X-Replacement-Context':json.dumps(ctx)},json={'reason':'lost'}).status_code == 409
-        success = client.post(path,headers={**h,'X-Replacement-Context':json.dumps(ctx)},json={'reason':'lost'})
+        success_context = {**ctx, 'fincrime_approval': True, 'case_id': 'FC-TRANSITION-TEST'}
+        success = client.post(path,headers={**h,'X-Replacement-Context':json.dumps(success_context)},json={'reason':'lost'})
         assert success.status_code == 201, success.text
-        repeat = client.post(path,headers={**h,'X-Replacement-Context':json.dumps(ctx)},json={'reason':'lost'})
+        repeat = client.post(path,headers={**h,'X-Replacement-Context':json.dumps(success_context)},json={'reason':'lost'})
         assert repeat.json()['id'] == success.json()['id']
         assert repeat.headers['Idempotency-Replayed'] == 'true'
         assert len(bank.cards(cust['sub'])) == 2

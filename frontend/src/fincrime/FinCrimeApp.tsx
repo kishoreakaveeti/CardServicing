@@ -159,7 +159,7 @@ export const FinCrimeApp: React.FC = () => {
         body: JSON.stringify({ reason }),
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.detail || 'Approval execution failed');
+      if (!res.ok || data.ok === false) throw new Error(data.error || data.detail || 'Approval execution failed');
       await refreshAllData();
     } finally {
       setIsSubmittingAction(false);
@@ -183,6 +183,19 @@ export const FinCrimeApp: React.FC = () => {
     } finally {
       setIsSubmittingAction(false);
     }
+  };
+
+  const handleRetryCase = async (caseId: string, reason: string) => {
+    setIsSubmittingAction(true);
+    try {
+      const res = await fetch(`/api/fincrime/cases/${caseId}/retry`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': session?.csrf || '' },
+        body: JSON.stringify({ reason }),
+      });
+      const data = await res.json();
+      if (!res.ok || data.ok === false) throw new Error(data.error || data.detail || 'Retry failed');
+      await refreshAllData();
+    } finally { setIsSubmittingAction(false); }
   };
 
   if (loadingSession) {
@@ -390,6 +403,7 @@ export const FinCrimeApp: React.FC = () => {
             onSelectCase={setSelectedCase}
             onApprove={handleApproveCase}
             onReject={handleRejectCase}
+            onRetry={handleRetryCase}
             onRefresh={refreshAllData}
             isSubmitting={isSubmittingAction}
           />

@@ -7,6 +7,7 @@ interface CaseManagementViewProps {
   onSelectCase: (caseItem: FinCrimeCase | null) => void;
   onApprove: (caseId: string, reason: string) => Promise<void>;
   onReject: (caseId: string, reason: string) => Promise<void>;
+  onRetry: (caseId: string, reason: string) => Promise<void>;
   onRefresh: () => void;
   isSubmitting: boolean;
 }
@@ -17,6 +18,7 @@ export const CaseManagementView: React.FC<CaseManagementViewProps> = ({
   onSelectCase,
   onApprove,
   onReject,
+  onRetry,
   onRefresh,
   isSubmitting,
 }) => {
@@ -29,7 +31,7 @@ export const CaseManagementView: React.FC<CaseManagementViewProps> = ({
     if (!c) return false;
     if (filter === 'ALL') return true;
     if (filter === 'PENDING') return c.status === 'PENDING';
-    if (filter === 'APPROVED') return c.status === 'APPROVED' || c.status === 'COMPLETED';
+    if (filter === 'APPROVED') return c.status === 'APPROVED_PENDING_EXECUTION' || c.status === 'PROCESSING' || c.status === 'COMPLETED';
     if (filter === 'REJECTED') return c.status === 'REJECTED';
     return true;
   });
@@ -63,6 +65,17 @@ export const CaseManagementView: React.FC<CaseManagementViewProps> = ({
       onSelectCase(null);
     } catch (err: any) {
       setErrorNotice(err.message || 'Rejection failed');
+    }
+  };
+
+  const handleRetry = async () => {
+    if (!selectedCase) return;
+    setErrorNotice(null);
+    try {
+      await onRetry(selectedCase.case_id, 'Authorised retry of incomplete replacement execution');
+      onSelectCase(null);
+    } catch (err: any) {
+      setErrorNotice(err.message || 'Retry failed');
     }
   };
 
@@ -128,7 +141,7 @@ export const CaseManagementView: React.FC<CaseManagementViewProps> = ({
                   </td>
                   <td>
                     {c.status === 'PENDING' && <span className="badge-pending">PENDING</span>}
-                    {c.status === 'APPROVED' && <span className="badge-approved">APPROVED</span>}
+                    {(c.status === 'APPROVED_PENDING_EXECUTION' || c.status === 'PROCESSING') && <span className="badge-approved">{c.status.replaceAll('_', ' ')}</span>}
                     {c.status === 'COMPLETED' && <span className="badge-completed">COMPLETED</span>}
                     {c.status === 'REJECTED' && <span className="badge-rejected">REJECTED</span>}
                     {c.status === 'FAILED' && <span className="badge-rejected">FAILED</span>}
@@ -242,6 +255,12 @@ export const CaseManagementView: React.FC<CaseManagementViewProps> = ({
                   <strong>Reason:</strong> {selectedCase.decision_reason || 'N/A'}<br />
                   <strong>Timestamp:</strong> {new Date(selectedCase.updated_at).toLocaleString()}
                 </div>
+                {(selectedCase.status === 'FAILED' || selectedCase.status === 'APPROVED') && (
+                  <button className="fincrime-btn-approve" disabled={isSubmitting}
+                    style={{ marginTop: '14px' }} onClick={handleRetry}>
+                    {isSubmitting ? 'Retrying...' : 'Retry Approved Execution'}
+                  </button>
+                )}
               </div>
             )}
           </div>

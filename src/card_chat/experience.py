@@ -540,6 +540,13 @@ def create_app(config=None):
         body['analyst'] = val['claims']['preferred_username']
         return await forward_agent(f'/fincrime/cases/{case_id}/reject', method='POST', body=body)
 
+    @app.post('/api/fincrime/cases/{case_id}/retry')
+    async def bff_retry_fincrime_case(case_id: str, request: Request):
+        val = staff_session(request, required_roles=['FinCrime Analyst', 'FinCrime Supervisor'])
+        body = await request.json()
+        body['analyst'] = val['claims']['preferred_username']
+        return await forward_agent(f'/fincrime/cases/{case_id}/retry', method='POST', body=body)
+
     @app.get('/api/fincrime/policies')
     async def bff_get_fincrime_policies(request: Request):
         staff_session(request)

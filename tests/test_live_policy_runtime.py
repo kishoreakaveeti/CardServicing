@@ -117,6 +117,19 @@ def test_http_unblock_offer_acceptance_requires_confirmation(policy_retriever):
         assert [call[0] for call in gateway.calls] == ['unblock_card', 'issue_card']
 
 
+def test_explicit_new_card_action_does_not_replay_stale_policy_question(policy_retriever):
+    """A new block request starts a fresh policy run instead of consuming an older plan."""
+    app, gateway = application(policy_retriever, reason='temporary freeze', status='blocked')
+    with TestClient(app) as client:
+        cid = client.post('/conversations').json()['id']
+        client.post(f'/conversations/{cid}/messages', json={'text': 'I want another card'})
+        assert checkpoint(client, app, cid)['pending_customer_question']
+        response = client.post(
+            f'/conversations/{cid}/messages', json={'text': 'Just block my card'}).json()
+        assert 'policy compliance failure' not in response['message'].lower()
+        assert checkpoint(client, app, cid).get('pending_customer_question') is None
+
+
 def test_http_vector_failure_blocks_issuance(policy_retriever):
     app, gateway = application(policy_retriever)
     with TestClient(app) as client:

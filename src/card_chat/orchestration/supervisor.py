@@ -95,7 +95,9 @@ class SupervisorAgent:
         facts.pop('retrieval_failed', None)
         verified_draft = state.get("verified_draft", {})
         draft_args = verified_draft.get("arguments", {})
-        account_number = draft_args.get("account_number") or facts.get("account_number")
+        authorized_args = state.get("authorized_arguments", {})
+        account_number = (authorized_args.get("account_number") or draft_args.get("account_number")
+                          or facts.get("account_number"))
 
         if self.facts_retriever_fn:
             try:
@@ -119,8 +121,9 @@ class SupervisorAgent:
                 logger.warning("Error checking blocked account: %s", e)
                 facts['retrieval_failed'] = True
 
-        if not facts.get("has_blocked_card") and draft_args.get("card_id"):
-            facts["card_id"] = draft_args.get("card_id")
+        selected_card_id = authorized_args.get("card_id") or draft_args.get("card_id")
+        if selected_card_id:
+            facts["card_id"] = selected_card_id
 
         facts.setdefault('is_temporary_freeze', facts.get('temporary_freeze', False))
         facts.setdefault('is_permanently_compromised', facts.get('compromised', False))
@@ -355,15 +358,30 @@ class SupervisorAgent:
                         from fincrime_servicing.cases import FinCrimeCaseStore
                         case_store = getattr(self, "case_store", None) or getattr(self, "fincrime_store", None) or FinCrimeCaseStore()
                         country_ctx = state.get("country_context", {})
+                        card_ref = (facts.get("blocked_card_id") or facts.get("last_blocked_card_id")
+                                    or state.get("authorized_arguments", {}).get("card_id")
+                                    or state.get("verified_draft", {}).get("arguments", {}).get("card_id") or "")
+                        account_number = facts.get("account_number") or ""
                         existing_case = case_store.get_case_by_thread(workflow_id)
-                        if existing_case:
+                        if (existing_case and existing_case.status == "PENDING"
+                                and existing_case.card_id == card_ref
+                                and existing_case.declared_country == (country_ctx.get("code") or "UNKNOWN")):
                             case_id = existing_case.case_id
                         else:
-                            card_ref = facts.get("blocked_card_id") or facts.get("last_blocked_card_id") or ""
+                            if not card_ref or (facts.get("accounts") and not account_number):
+                                return {
+                                    "iteration_count": iterations,
+                                    "next_step": "respond",
+                                    "active_agent": None,
+                                    "final_response": "Select the blocked card you want to replace so I can submit the correct card and account for review.",
+                                    "planned_intents": [],
+                                    "action_plan": action_plan,
+                                    **policy_updates,
+                                }
                             case = case_store.create_case(
                                 customer_id=state.get("owner", "customer"),
                                 customer_username=state.get("verified_draft", {}).get("arguments", {}).get("user_name") or state.get("owner", "customer"),
-                                account_number=facts.get("account_number") or "",
+                                account_number=account_number,
                                 card_id=card_ref,
                                 card_last4=str(card_ref)[-4:],
                                 declared_country=country_ctx.get("code") or "UNKNOWN",
@@ -531,6 +549,16 @@ class SupervisorAgent:
 
         clarified = declared_country(user_text, current_context=prev_country)
         is_pure_country = bool(normalize_country(user_text.strip().rstrip('.!')))
+        transition_context = bool(prev_country.get('previous_code') or
+                                  (prev_country.get('code') in set((state.get('geographic_decision') or {}).get('excluded_country_codes', []))))
+        if (transition_context
+                and re.search(r"\b(?:i\s+)?(?:need|want|get|order|request)\s+(?:a\s+)?(?:new\s+)?card\b", user_text, re.I)
+                and not re.search(r"\b(?:replace|replacement|reissue|re-issue|first|additional|another|extra)\b", user_text, re.I)):
+            return {
+                'next_step': 'respond', 'proposed_tool': None, 'planned_intents': [],
+                'final_response': 'Do you want to replace an existing card, request your first card, or add another card?',
+                'pending_customer_question': {'kind': 'card_request_type'},
+            }
         from card_chat.policy.planning import needs_policy_planning
         planning = state.get('policy_planning')
         if needs_policy_planning(user_text) and not planning:
@@ -687,16 +715,31 @@ class SupervisorAgent:
             if not state.get("fincrime_approved"):
                 from fincrime_servicing.cases import FinCrimeCaseStore
                 case_store = getattr(self, "case_store", None) or FinCrimeCaseStore()
+                card_ref = (facts.get("blocked_card_id") or facts.get("last_blocked_card_id")
+                            or state.get("authorized_arguments", {}).get("card_id")
+                            or state.get("verified_draft", {}).get("arguments", {}).get("card_id") or "")
+                account_number = facts.get("account_number") or ""
                 existing_case = case_store.get_case_by_thread(workflow_id)
-                if existing_case:
+                if (existing_case and existing_case.status == "PENDING"
+                        and existing_case.card_id == card_ref
+                        and existing_case.declared_country == (country.get("code") or "UNKNOWN")):
                     case_id = existing_case.case_id
                 else:
-                    card_ref = facts.get("blocked_card_id") or facts.get("last_blocked_card_id") or state.get("verified_draft", {}).get("arguments", {}).get("card_id") or ""
+                    if not card_ref or (facts.get("accounts") and not account_number):
+                        return {
+                            "iteration_count": iterations,
+                            "next_step": "respond",
+                            "active_agent": None,
+                            "final_response": "Select the blocked card you want to replace so I can submit the correct card and account for review.",
+                            "planned_intents": [],
+                            "action_plan": action_plan,
+                            **state_policy_updates,
+                        }
                     geo_dec = geo_updates.get("geographic_decision") or {}
                     case = case_store.create_case(
                         customer_id=state.get("owner", "customer"),
                         customer_username=state.get("verified_draft", {}).get("arguments", {}).get("user_name") or state.get("owner", "customer"),
-                        account_number=facts.get("account_number") or "",
+                        account_number=account_number,
                         card_id=card_ref,
                         card_last4=str(card_ref)[-4:],
                         declared_country=country.get("code") or "UNKNOWN",
@@ -706,7 +749,8 @@ class SupervisorAgent:
                         rules_version=geo_dec.get("rules_version", "1.0.0"),
                         reason_for_escalation=geo_dec.get("explanation", "Overseas replacement requires FinCrime staff approval"),
                         rag_evidence=eval_result.retrieved_policies,
-                        evaluation_result=geo_dec,
+                        evaluation_result={**geo_dec,
+                            "geographic_binding": state.get("geographic_binding")},
                         thread_id=workflow_id,
                     )
                     case_id = case.case_id
@@ -994,7 +1038,7 @@ class SupervisorAgent:
         # View cards (requires explicit viewing action verbs, never just "my card" to avoid false positive in "lost my card")
         pos_view_card = _find_keyword_pos(
             lower,
-            ("view card", "view cards", "view my card", "show card", "show cards", "show my card", "show all my cards", "list card", "list cards", "see card", "see cards", "display card", "display cards", "all my cards"),
+            ("view card", "view cards", "view my card", "show card", "show cards", "show my card", "show all my cards", "show me my active cards", "list card", "list cards", "list my", "see card", "see cards", "display card", "display cards", "all my cards", "active cards", "currently have", "what cards do i", "existing cards", "which of my cards", "do i have any active cards", "can i see my cards"),
         )
         if pos_view_card != -1 and has_card:
             intent_candidates.append(("view_cards", pos_view_card))

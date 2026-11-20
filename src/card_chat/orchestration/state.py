@@ -17,6 +17,7 @@ class BankingWorkflowState(TypedDict, total=False):
     # Sanitized messages and draft facts
     messages: list[dict[str, Any]]
     verified_draft: dict[str, Any]
+    authorized_arguments: dict[str, Any]
     allowed_tools: dict[str, Any]
 
     # Customer intent and verified domain facts
@@ -31,6 +32,7 @@ class BankingWorkflowState(TypedDict, total=False):
     policy_error: str | None
     policy_planning: dict[str, Any] | None
     country_context: dict[str, Any]
+    geographic_binding: dict[str, Any] | None
     geographic_decision: dict[str, Any] | None
     geographic_notice: str | None
     geographic_pending_intents: list[str]

@@ -63,7 +63,7 @@
       "operation_id": "view_cards",
       "label": "View my cards",
       "confirmation": "none",
-      "description": "View my cards. Open the secure form for required details. If no account exists, guide the customer to create an account first.",
+      "description": "List the authenticated customer's existing cards for card inquiries such as active, blocked, debit, current, all, or 'do I have any cards?'. This is read-only and distinct from issuing, replacing, blocking, or unblocking. Never invent card details; use only the privacy-safe tool result.",
       "result_labels": {
         "message": "Details"
       }

@@ -188,7 +188,12 @@ def create_server(config):
                 raise HTTPException(403, f"Tool '{name}' is not permitted for agent '{caller_agent}'")
         headers = await security.headers()
         if name == 'replace_card' and meta_dict.get('replacement_context'):
-            headers['X-Replacement-Context'] = json.dumps(meta_dict['replacement_context'])
+            replacement = meta_dict['replacement_context']
+            headers['X-Replacement-Context'] = json.dumps(replacement)
+            if replacement.get('fincrime_approval'):
+                headers['X-Approved-Case-Execution'] = '1'
+                headers['X-Approved-Customer-ID'] = replacement.get('customer_id', '')
+                headers['X-Approved-Account'] = replacement.get('account_number', '')
         return await anyio.to_thread.run_sync(execute, catalogue[name], arguments, key,
                     config.get('CARD_API_BASE_URL', 'http://127.0.0.1:8010'), headers)
 

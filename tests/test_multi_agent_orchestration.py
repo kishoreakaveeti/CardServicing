@@ -59,6 +59,25 @@ def test_supervisor_routes_to_cards_specialist():
     asyncio.run(scenario())
 
 
+@pytest.mark.parametrize("message", [
+    "Show me my active cards.", "What cards do I currently have?", "List my debit cards.",
+    "Show all my cards.", "Do I have any active cards?", "Can I see my cards?",
+    "Which of my cards are blocked?", "Show my existing cards.",
+])
+def test_supervisor_routes_card_inquiry_phrases_to_view_cards(message):
+    async def scenario():
+        supervisor = SupervisorAgent(StubModel())
+        result = await supervisor.plan_or_route({
+            "messages": [{"role": "user", "content": message}],
+            "allowed_tools": {"view_cards": {}, "issue_card": {}, "replace_card": {},
+                              "block_card": {}, "unblock_card": {}},
+            "iteration_count": 0, "handoff_history": [],
+        })
+        assert result["next_step"] == "cards_agent"
+        assert result["current_handoff"].intent == "view_cards"
+    asyncio.run(scenario())
+
+
 def test_supervisor_routes_to_fincrime_specialist():
     """Verify Supervisor delegates fraud, freeze, and unblock intents to FinCrimeAgent."""
     async def scenario():

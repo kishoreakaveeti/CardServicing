@@ -5,6 +5,13 @@ Korea) from replacement based on the customer's declared current location. It
 does not exclude KR (South Korea) or AU (Australia). This is not a real bank rule,
 a complete sanctions list, legal advice or compliance certification.
 
+POL-006 also contains the synthetic `FC-COUNTRY-TRANSITION-001` control. When
+enabled, an explicit declaration changing from an excluded country to a permitted
+country inside the configured lookback requires FinCrime approval for replacement.
+Declarations are unverified statements, not location evidence. Policy Management
+exposes the enable switch and lookback hours; Apply versions the rules and document,
+reindexes Qdrant, and refreshes deterministic enforcement.
+
 ## Responsibilities and architecture
 
 ```mermaid

@@ -45,6 +45,17 @@ requires_domestic_approval {
     input.rules.domestic_replacement_requires_fincrime_approval == true
 }
 
+requires_transition_approval {
+    not is_excluded
+    input.rules.transition_review_enabled == true
+    input.previous_country_code in input.rules.excluded_country_codes
+    input.hours_since_previous_declaration <= input.rules.transition_review_lookback_hours
+}
+
+review_required {
+    requires_transition_approval
+}
+
 review_required {
     requires_overseas_approval
 }
@@ -74,22 +85,38 @@ reason_code = "excluded_declared_country" {
     is_excluded
 }
 
-# 3. Requires Human Approval -> REQUIRES_HUMAN_APPROVAL
+# 3. Recent excluded-to-permitted transition -> REQUIRES_HUMAN_APPROVAL
 decision = "REQUIRES_HUMAN_APPROVAL" {
     not missing_or_ambiguous
     not is_excluded
+    requires_transition_approval
+}
+
+reason_code = "RECENT_EXCLUDED_COUNTRY_TRANSITION" {
+    not missing_or_ambiguous
+    not is_excluded
+    requires_transition_approval
+}
+
+# 4. Overseas/domestic configured approval -> REQUIRES_HUMAN_APPROVAL
+decision = "REQUIRES_HUMAN_APPROVAL" {
+    not missing_or_ambiguous
+    not is_excluded
+    not requires_transition_approval
     requires_overseas_approval
 }
 
 reason_code = "overseas_fincrime_approval_required" {
     not missing_or_ambiguous
     not is_excluded
+    not requires_transition_approval
     requires_overseas_approval
 }
 
 decision = "REQUIRES_HUMAN_APPROVAL" {
     not missing_or_ambiguous
     not is_excluded
+    not requires_transition_approval
     not requires_overseas_approval
     requires_domestic_approval
 }
@@ -97,14 +124,16 @@ decision = "REQUIRES_HUMAN_APPROVAL" {
 reason_code = "domestic_fincrime_approval_required" {
     not missing_or_ambiguous
     not is_excluded
+    not requires_transition_approval
     not requires_overseas_approval
     requires_domestic_approval
 }
 
-# 4. Otherwise -> ALLOW
+# 5. Otherwise -> ALLOW
 decision = "ALLOW" {
     not missing_or_ambiguous
     not is_excluded
+    not requires_transition_approval
     not requires_overseas_approval
     not requires_domestic_approval
 }
@@ -112,6 +141,7 @@ decision = "ALLOW" {
 reason_code = "country_eligible" {
     not missing_or_ambiguous
     not is_excluded
+    not requires_transition_approval
     not requires_overseas_approval
     not requires_domestic_approval
 }

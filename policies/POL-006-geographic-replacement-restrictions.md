@@ -17,11 +17,18 @@ conditions:
   domestic_replacement_requires_fincrime_approval: false
   unknown_country_action: REQUIRE_CLARIFICATION
   security_card_blocking_allowed: true
+  transition_review_enabled: true
+  transition_review_lookback_hours: 72
+  transition_review_applicable_intents:
+    - replace_card
+  transition_review_decision: REQUIRES_HUMAN_APPROVAL
+  transition_review_reason_code: RECENT_EXCLUDED_COUNTRY_TRANSITION
 required_actions:
   - validate_declared_current_country
   - enforce_geographic_rules_before_replacement
   - require_customer_confirmation
   - require_fincrime_approval_for_overseas_replacement
+  - require_fincrime_approval_for_recent_excluded_to_permitted_country_transition
 restrictions:
   - never_bypass_replacement_denial_with_additional_issuance
 source: policies/POL-006-geographic-replacement-restrictions.md

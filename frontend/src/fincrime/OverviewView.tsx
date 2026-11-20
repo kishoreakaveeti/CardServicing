@@ -18,7 +18,7 @@ export const OverviewView: React.FC<OverviewViewProps> = ({
 }) => {
   const safeCases = Array.isArray(cases) ? cases : [];
   const pendingCases = safeCases.filter((c) => c && c.status === 'PENDING');
-  const approvedCases = safeCases.filter((c) => c && (c.status === 'APPROVED' || c.status === 'COMPLETED'));
+  const approvedCases = safeCases.filter((c) => c && (c.status === 'APPROVED_PENDING_EXECUTION' || c.status === 'PROCESSING' || c.status === 'COMPLETED'));
   const rejectedCases = safeCases.filter((c) => c && c.status === 'REJECTED');
 
   return (

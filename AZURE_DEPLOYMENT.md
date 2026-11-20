@@ -4,6 +4,15 @@ This is the operational source of truth for the single-VM Azure demo. Run comman
 from Windows PowerShell 5.1 or PowerShell 7 in the repository root. No cloud
 resources are created by reading this guide or running the local tests.
 
+The Cards service now performs a non-destructive SQLite schema-v4 migration on
+normal startup, adding the append-only `country_declaration_history` table with
+`CREATE TABLE IF NOT EXISTS`. Existing cards, cases, policy releases, Qdrant
+collections, LangGraph checkpoints, and persistent volumes are retained. The
+transition-review settings live in the versioned POL-006 artifact; the existing
+Policy Apply flow reindexes Qdrant and synchronizes deterministic enforcement.
+Both local and Azure Compose builds already package the shared Cards, Agent, MCP,
+policy, and frontend sources, and no new secret or environment variable is needed.
+
 ## A. Prerequisites
 
 Install Azure CLI, Git, Windows OpenSSH Client (`ssh`, `scp`, `ssh-keygen`), `tar`,

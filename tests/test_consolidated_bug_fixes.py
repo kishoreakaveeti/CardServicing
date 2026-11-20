@@ -207,6 +207,29 @@ def test_bug2_replacement_request_does_not_route_to_account_creation(identity):
         assert "account first" not in data.get("message", "").lower()
 
 
+def test_empty_card_customer_gets_view_cards_navigation(identity):
+    """An empty portfolio gets explicit guidance and a working Cards navigation action."""
+    config, headers = identity
+    app = agent_app(StubModel(), MockGateway(), config=config)
+    with TestClient(app) as client:
+        token = Security(config).issue_customer({
+            "sub": "cust_no_cards",
+            "preferred_username": "no.cards",
+            "accounts": [],
+            "cards": [],
+            "permissions": ["tools:execute"],
+        })
+        h = {**headers(), "X-Customer-Delegation": token}
+        cid = client.post("/conversations", headers=h).json()["id"]
+        response = client.post(
+            f"/conversations/{cid}/messages", json={"text": "Show me my cards"}, headers=h
+        )
+        assert response.status_code == 200
+        body = response.json()
+        assert "no" in body["message"].lower() and "cards" in body["message"].lower()
+        assert body["suggested_actions"] == ["view_cards"]
+
+
 # =============================================================================
 # BUG 3: FinCrime Staff Portal Security & Resilient Architecture
 # =============================================================================

@@ -186,13 +186,13 @@ export const CardsView: React.FC<CardsViewProps> = ({
             backgroundColor:
               replacementStatus.active_replacement_case.status === 'PENDING'
                 ? '#fffbeb'
-                : replacementStatus.active_replacement_case.status === 'APPROVED' || replacementStatus.active_replacement_case.status === 'COMPLETED'
+                : replacementStatus.active_replacement_case.status === 'APPROVED_PENDING_EXECUTION' || replacementStatus.active_replacement_case.status === 'PROCESSING' || replacementStatus.active_replacement_case.status === 'COMPLETED'
                 ? '#f0fdf4'
                 : '#fef2f2',
             border: `1px solid ${
               replacementStatus.active_replacement_case.status === 'PENDING'
                 ? '#fcd34d'
-                : replacementStatus.active_replacement_case.status === 'APPROVED' || replacementStatus.active_replacement_case.status === 'COMPLETED'
+                : replacementStatus.active_replacement_case.status === 'APPROVED_PENDING_EXECUTION' || replacementStatus.active_replacement_case.status === 'PROCESSING' || replacementStatus.active_replacement_case.status === 'COMPLETED'
                 ? '#86efac'
                 : '#fca5a5'
             }`,
@@ -209,7 +209,7 @@ export const CardsView: React.FC<CardsViewProps> = ({
               <span style={{ fontSize: '1.2rem' }}>
                 {replacementStatus.active_replacement_case.status === 'PENDING'
                   ? '⏳'
-                  : replacementStatus.active_replacement_case.status === 'APPROVED' || replacementStatus.active_replacement_case.status === 'COMPLETED'
+                  : replacementStatus.active_replacement_case.status === 'APPROVED_PENDING_EXECUTION' || replacementStatus.active_replacement_case.status === 'PROCESSING' || replacementStatus.active_replacement_case.status === 'COMPLETED'
                   ? '✅'
                   : '❌'}
               </span>
@@ -218,7 +218,7 @@ export const CardsView: React.FC<CardsViewProps> = ({
                   color:
                     replacementStatus.active_replacement_case.status === 'PENDING'
                       ? '#92400e'
-                      : replacementStatus.active_replacement_case.status === 'APPROVED' || replacementStatus.active_replacement_case.status === 'COMPLETED'
+                      : replacementStatus.active_replacement_case.status === 'APPROVED_PENDING_EXECUTION' || replacementStatus.active_replacement_case.status === 'PROCESSING' || replacementStatus.active_replacement_case.status === 'COMPLETED'
                       ? '#166534'
                       : '#991b1b',
                   fontSize: '0.95rem',
@@ -226,7 +226,7 @@ export const CardsView: React.FC<CardsViewProps> = ({
               >
                 {replacementStatus.active_replacement_case.status === 'PENDING' &&
                   'Card Replacement Pending FinCrime Staff Approval'}
-                {(replacementStatus.active_replacement_case.status === 'APPROVED' ||
+                {(replacementStatus.active_replacement_case.status === 'APPROVED_PENDING_EXECUTION' || replacementStatus.active_replacement_case.status === 'PROCESSING' ||
                   replacementStatus.active_replacement_case.status === 'COMPLETED') &&
                   'Replacement Card Approved & Issued'}
                 {replacementStatus.active_replacement_case.status === 'REJECTED' &&
@@ -240,13 +240,13 @@ export const CardsView: React.FC<CardsViewProps> = ({
                   backgroundColor:
                     replacementStatus.active_replacement_case.status === 'PENDING'
                       ? '#fef3c7'
-                      : replacementStatus.active_replacement_case.status === 'APPROVED' || replacementStatus.active_replacement_case.status === 'COMPLETED'
+                      : replacementStatus.active_replacement_case.status === 'APPROVED_PENDING_EXECUTION' || replacementStatus.active_replacement_case.status === 'PROCESSING' || replacementStatus.active_replacement_case.status === 'COMPLETED'
                       ? '#dcfce7'
                       : '#fee2e2',
                   color:
                     replacementStatus.active_replacement_case.status === 'PENDING'
                       ? '#b45309'
-                      : replacementStatus.active_replacement_case.status === 'APPROVED' || replacementStatus.active_replacement_case.status === 'COMPLETED'
+                      : replacementStatus.active_replacement_case.status === 'APPROVED_PENDING_EXECUTION' || replacementStatus.active_replacement_case.status === 'PROCESSING' || replacementStatus.active_replacement_case.status === 'COMPLETED'
                       ? '#15803d'
                       : '#b91c1c',
                   fontWeight: 700,
@@ -259,7 +259,7 @@ export const CardsView: React.FC<CardsViewProps> = ({
             <p style={{ margin: 0, fontSize: '0.85rem', color: '#475569' }}>
               {replacementStatus.active_replacement_case.status === 'PENDING' &&
                 `Your overseas card replacement request (Country: ${replacementStatus.active_replacement_case.country || 'Overseas'}) is undergoing human review in our FinCrime portal. Click 'Refresh Status' after review.`}
-              {(replacementStatus.active_replacement_case.status === 'APPROVED' ||
+              {(replacementStatus.active_replacement_case.status === 'APPROVED_PENDING_EXECUTION' || replacementStatus.active_replacement_case.status === 'PROCESSING' ||
                 replacementStatus.active_replacement_case.status === 'COMPLETED') &&
                 `Staff approval verified (${replacementStatus.active_replacement_case.decision_reason || 'Verified'}). Your replacement Visa Debit card has been issued and appears in your cards below.`}
               {replacementStatus.active_replacement_case.status === 'REJECTED' &&

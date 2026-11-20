@@ -178,6 +178,7 @@ def test_previous_schema_database_replays_after_additive_migration(tmp_path):
         assert replay.json() == expected
         assert replay.headers['Idempotency-Replayed'] == 'true'
     with closing(sqlite3.connect(path)) as db:
-        assert db.execute('PRAGMA user_version').fetchone()[0] == 3
+        assert db.execute('PRAGMA user_version').fetchone()[0] == 4
+        assert db.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='country_declaration_history'").fetchone()
         assert db.execute('SELECT count(*) FROM cards').fetchone()[0] == 1
         assert db.execute('SELECT count(*) FROM card_idempotency').fetchone()[0] == 1

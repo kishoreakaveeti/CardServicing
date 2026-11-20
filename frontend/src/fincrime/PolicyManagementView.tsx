@@ -20,6 +20,8 @@ export const PolicyManagementView: React.FC<PolicyManagementViewProps> = ({
   const [newCountryCode, setNewCountryCode] = useState('');
   const [overseasRequiresApproval, setOverseasRequiresApproval] = useState(true);
   const [domesticRequiresApproval, setDomesticRequiresApproval] = useState(false);
+  const [transitionReviewEnabled, setTransitionReviewEnabled] = useState(true);
+  const [transitionLookbackHours, setTransitionLookbackHours] = useState(72);
   const [markdownContent, setMarkdownContent] = useState('');
   const [showAdvancedJson, setShowAdvancedJson] = useState(false);
   const [changeSummary, setChangeSummary] = useState('');
@@ -46,6 +48,8 @@ export const PolicyManagementView: React.FC<PolicyManagementViewProps> = ({
           if (typeof data.rules.domestic_replacement_requires_fincrime_approval === 'boolean') {
             setDomesticRequiresApproval(data.rules.domestic_replacement_requires_fincrime_approval);
           }
+          if (typeof data.rules.transition_review_enabled === 'boolean') setTransitionReviewEnabled(data.rules.transition_review_enabled);
+          if (typeof data.rules.transition_review_lookback_hours === 'number') setTransitionLookbackHours(data.rules.transition_review_lookback_hours);
         }
       })
       .catch(() => {});
@@ -76,6 +80,11 @@ export const PolicyManagementView: React.FC<PolicyManagementViewProps> = ({
     domestic_replacement_requires_fincrime_approval: domesticRequiresApproval,
     unknown_country_action: 'REQUIRE_CLARIFICATION',
     security_card_blocking_allowed: true,
+    transition_review_enabled: transitionReviewEnabled,
+    transition_review_lookback_hours: transitionLookbackHours,
+    transition_review_applicable_intents: ['replace_card'],
+    transition_review_decision: 'REQUIRES_HUMAN_APPROVAL',
+    transition_review_reason_code: 'RECENT_EXCLUDED_COUNTRY_TRANSITION',
   });
 
   const handleSaveDraft = async () => {
@@ -325,6 +334,17 @@ export const PolicyManagementView: React.FC<PolicyManagementViewProps> = ({
                       style={{ width: '16px', height: '16px' }}
                     />
                     <span>Domestic (AU) replacements require FinCrime staff approval</span>
+                  </label>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: '10px', fontSize: '0.88rem', cursor: 'pointer' }}>
+                    <input type="checkbox" checked={transitionReviewEnabled}
+                      onChange={(e) => setTransitionReviewEnabled(e.target.checked)} style={{ width: '16px', height: '16px' }} />
+                    <span>Review recent excluded-to-permitted country transitions</span>
+                  </label>
+                  <label style={{ fontSize: '0.85rem', fontWeight: 600, color: '#cbd5e1' }}>
+                    Transition lookback (hours)
+                    <input type="number" min={1} max={8760} className="fincrime-input-text"
+                      value={transitionLookbackHours}
+                      onChange={(e) => setTransitionLookbackHours(Math.max(1, Number(e.target.value) || 1))} />
                   </label>
                 </div>
               </div>

@@ -32,7 +32,7 @@ class FinCrimeCase(BaseModel):
     rag_evidence: list[dict[str, Any]] = Field(default_factory=list)
     evaluation_result: dict[str, Any] = Field(default_factory=dict)
     thread_id: str
-    status: str = "PENDING"  # PENDING, APPROVED, REJECTED, COMPLETED, FAILED
+    status: str = "PENDING"  # PENDING, APPROVED_PENDING_EXECUTION, PROCESSING, COMPLETED, REJECTED, FAILED
     decision_by: str | None = None
     decision_reason: str | None = None
     decided_at: str | None = None
@@ -293,7 +293,7 @@ class FinCrimeCaseStore:
             conn.execute(
                 """
                 UPDATE fincrime_cases
-                SET status='APPROVED', decision_by=?, decision_reason=?, decided_at=?, updated_at=?
+                SET status='APPROVED_PENDING_EXECUTION', decision_by=?, decision_reason=?, decided_at=?, updated_at=?
                 WHERE case_id=? AND status='PENDING'
                 """,
                 (analyst_username, reason.strip(), now, now, case_id),
@@ -301,6 +301,22 @@ class FinCrimeCaseStore:
             conn.commit()
 
         self._record_audit(case_id, "STAFF_APPROVED", analyst_username, reason)
+        case = self.get_case(case_id)
+        assert case is not None
+        return case
+
+    def mark_processing(self, case_id: str) -> FinCrimeCase:
+        """Claim execution without changing the immutable analyst decision."""
+        now = datetime.now(timezone.utc).isoformat()
+        with self._get_conn() as conn:
+            current = conn.execute("SELECT status FROM fincrime_cases WHERE case_id=?", (case_id,)).fetchone()
+            if not current:
+                raise KeyError(f"Case {case_id} not found")
+            if current["status"] not in ("APPROVED", "APPROVED_PENDING_EXECUTION", "FAILED"):
+                raise ValueError(f"Case {case_id} cannot execute from {current['status']}")
+            conn.execute("UPDATE fincrime_cases SET status='PROCESSING', updated_at=? WHERE case_id=?",
+                         (now, case_id))
+        self._record_audit(case_id, "EXECUTION_STARTED", "system", "Replacement execution started")
         case = self.get_case(case_id)
         assert case is not None
         return case
@@ -340,7 +356,7 @@ class FinCrimeCaseStore:
                 """
                 UPDATE fincrime_cases
                 SET status='COMPLETED', replacement_card_id=?, updated_at=?
-                WHERE case_id=?
+                WHERE case_id=? AND status='PROCESSING'
                 """,
                 (replacement_card_id, now, case_id),
             )
@@ -357,7 +373,7 @@ class FinCrimeCaseStore:
                 """
                 UPDATE fincrime_cases
                 SET status='FAILED', updated_at=?
-                WHERE case_id=?
+                WHERE case_id=? AND status IN ('PROCESSING','APPROVED_PENDING_EXECUTION')
                 """,
                 (now, case_id),
             )

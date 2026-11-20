@@ -16,7 +16,7 @@ export interface FinCrimeCase {
   action: string;
   current_country: string;
   home_country: string;
-  status: 'PENDING' | 'APPROVED' | 'REJECTED' | 'COMPLETED' | 'FAILED';
+  status: 'PENDING' | 'APPROVED' | 'APPROVED_PENDING_EXECUTION' | 'PROCESSING' | 'REJECTED' | 'COMPLETED' | 'FAILED' | 'REVALIDATION_REQUIRED';
   risk_score: number;
   risk_level: string;
   reasons: string[];

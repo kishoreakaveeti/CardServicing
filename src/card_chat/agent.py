@@ -150,6 +150,8 @@ class AgentOrchestrator:
         session_id: str | None = None,
         owner: str | None = None,
         country_context: dict | None = None,
+        geographic_binding: dict | None = None,
+        authorized_arguments: dict | None = None,
     ) -> CustomerReply | ProposedToolCall:
         """Execute a LangGraph multi-agent reasoning turn."""
         policy = self.agent_tools_policy
@@ -173,9 +175,23 @@ class AgentOrchestrator:
             except Exception:
                 pass
 
-        # Build LangGraph workflow state, preserving multi-turn context
+        latest_user_text = next((str(item.get("content", "")) for item in reversed(history)
+                                 if isinstance(item, dict) and item.get("role") == "user"), "").strip().lower()
+        # Only a short answer continues an explicit policy question. A fresh
+        # customer request must not inherit the previous action plan or policy
+        # pins (for example, "just block it" after a denied replacement).
+        import re
+        explicit_new_action = bool(re.search(
+            r"\b(block|freeze|unblock|unfreeze|replace|replacement|create|issue|show|view|list|open|close)\b",
+            latest_user_text))
+        continues_question = bool(prior_state.get("pending_customer_question")) and not explicit_new_action
+
+        # Build LangGraph workflow state. Durable checkpoints retain audit and
+        # intentional interrupt state, while each new explicit request starts a
+        # clean policy evaluation.
         initial_state = {
             'country_context': country_context or prior_state.get('country_context', {}),
+            'geographic_binding': geographic_binding or prior_state.get('geographic_binding'),
             'geographic_notice': None,
             'geographic_pending_intents': prior_state.get('geographic_pending_intents', []),
             "owner": owner or prior_state.get("owner", "customer"),
@@ -183,17 +199,18 @@ class AgentOrchestrator:
             "workflow_id": workflow_id or prior_state.get("workflow_id", stable_thread),
             "messages": history,
             "verified_draft": collected,
+            "authorized_arguments": authorized_arguments or {},
             "allowed_tools": allowed_tools,
             "handoff_history": [],
             "iteration_count": 0,
             "active_agent": None,
-            "planned_intents": prior_state.get("planned_intents", []),
+            "planned_intents": prior_state.get("planned_intents", []) if continues_question else [],
             "completed_intents": prior_state.get("completed_intents", []),
-            "action_plan": prior_state.get("action_plan", []),
-            "pending_customer_question": prior_state.get("pending_customer_question"),
-            "pinned_policies": prior_state.get("pinned_policies", {}),
+            "action_plan": prior_state.get("action_plan", []) if continues_question else [],
+            "pending_customer_question": prior_state.get("pending_customer_question") if continues_question else None,
+            "pinned_policies": prior_state.get("pinned_policies", {}) if continues_question else {},
             "policy_planning": None,
-            "verified_domain_facts": prior_state.get("verified_domain_facts", {}),
+            "verified_domain_facts": {},
             # Domain events are consumed during execution resumption, not replayed
             # as fresh events when another customer message starts a graph run.
             "last_domain_event": None,
@@ -349,6 +366,7 @@ class AgentOrchestrator:
         analyst_username: str,
         gateway: Any | None = None,
         case_store: Any | None = None,
+        retry_execution: bool = False,
     ) -> dict[str, Any]:
         """Resume LangGraph workflow after FinCrime staff approval or rejection."""
         from fincrime_servicing.cases import FinCrimeCaseStore
@@ -358,12 +376,13 @@ class AgentOrchestrator:
             raise KeyError(f"FinCrime case {case_id} not found")
 
         # Atomic decision recording
-        if case.status == "PENDING":
+        first_decision = case.status == "PENDING"
+        if first_decision:
             if decision == "approved":
                 case = store.approve_case(case_id, analyst_username, reason)
             else:
                 case = store.reject_case(case_id, analyst_username, reason)
-        else:
+        elif not (retry_execution and decision == "approved" and case.status in ("APPROVED", "APPROVED_PENDING_EXECUTION", "FAILED")):
             raise ValueError(f"Case {case_id} is already in state {case.status}, duplicate decision rejected")
 
         thread_id = case.thread_id
@@ -377,10 +396,15 @@ class AgentOrchestrator:
         }
 
         try:
-            final_state = await self.workflow.ainvoke(Command(resume=resume_payload), config=config)
+            if first_decision:
+                final_state = await self.workflow.ainvoke(Command(resume=resume_payload), config=config)
+            else:
+                snapshot = await self.workflow.aget_state(config)
+                final_state = snapshot.values if snapshot else {}
         except Exception as exc:
             logger.exception("Failed to resume LangGraph workflow for case %s (thread %s): %s", case_id, thread_id, exc)
-            return {"ok": False, "status": "FAILED", "error": str(exc)}
+            store.mark_failed(case_id, "Workflow resumption failed")
+            return {"ok": False, "status": "FAILED", "error": "Workflow resumption failed"}
 
         if decision == "rejected":
             return {"ok": True, "status": "REJECTED", "case_id": case_id}
@@ -391,28 +415,38 @@ class AgentOrchestrator:
 
         if proposal and isinstance(proposal, dict) and proposal.get("name") == "replace_card" and gw:
             tool_args = dict(proposal.get("arguments", {}))
-            if not tool_args.get("card_id"):
-                tool_args["card_id"] = case.card_id
+            # The approved case is the immutable execution request. A checkpoint
+            # proposal may still contain a model-safe/opaque UI reference.
+            tool_args["card_id"] = case.card_id
 
-            rep_ctx = {
-                "workflow": thread_id,
-                "policy_version": case.policy_version,
+            rep_ctx = dict((case.evaluation_result or {}).get("geographic_binding") or {})
+            rep_ctx.update({
                 "fincrime_approval": True,
                 "case_id": case_id,
-            }
-            if hasattr(gw, "execute"):
-                exec_res = await gw.execute(
-                    "replace_card",
-                    tool_args,
-                    key=f"fc-approve:{case_id}",
-                    replacement_context=rep_ctx,
-                )
-            else:
-                import inspect
-                res = gw("replace_card", tool_args, key=f"fc-approve:{case_id}", replacement_context=rep_ctx)
-                if inspect.isawaitable(res):
-                    res = await res
-                exec_res = res if isinstance(res, dict) and "ok" in res else {"ok": True, "result": res}
+                "customer_id": case.customer_id,
+                "account_number": case.account_number,
+            })
+            store.mark_processing(case_id)
+            try:
+                if hasattr(gw, "execute_approved_replacement"):
+                    exec_res = await gw.execute_approved_replacement(
+                        tool_args, key=f"fc-approve:{case_id}", replacement_context=rep_ctx)
+                elif hasattr(gw, "execute"):
+                    exec_res = await gw.execute(
+                        "replace_card", tool_args, key=f"fc-approve:{case_id}",
+                        replacement_context=rep_ctx,
+                    )
+                else:
+                    import inspect
+                    res = gw("replace_card", tool_args, key=f"fc-approve:{case_id}", replacement_context=rep_ctx)
+                    if inspect.isawaitable(res):
+                        res = await res
+                    exec_res = res if isinstance(res, dict) and "ok" in res else {"ok": True, "result": res}
+            except Exception:
+                logger.exception("Replacement execution failed for approved case %s", case_id)
+                store.mark_failed(case_id, "Replacement execution failed")
+                return {"ok": False, "status": "FAILED", "case_id": case_id,
+                        "error": "Replacement execution failed"}
             if exec_res.get("ok"):
                 res_data = exec_res.get("result", {})
                 new_card_id = res_data.get("id") or res_data.get("card_id") or ""
@@ -438,4 +472,6 @@ class AgentOrchestrator:
                 store.mark_failed(case_id, str(final_resp))
                 return {"ok": False, "status": "FAILED", "case_id": case_id, "error": str(final_resp)}
 
-        return {"ok": True, "status": "APPROVED", "case_id": case_id, "state": final_state.get("final_response")}
+        store.mark_failed(case_id, "Approved workflow did not produce a replacement execution request")
+        return {"ok": False, "status": "FAILED", "case_id": case_id,
+                "error": "Approved workflow did not produce a replacement execution request"}

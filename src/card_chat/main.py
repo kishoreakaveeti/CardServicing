@@ -111,8 +111,23 @@ def create_app(model=None, gateway=None, *, config=None, policy_retriever=None):
             if state and account_number and state.get('session_id'):
                 binding = get(state['session_id']).bindings.get(account_number, {})
                 account_number = binding.get('value', account_number)
+            cards = [card for card in cust.get('cards', []) if isinstance(card, dict)]
+            state = state or {}
+            selected_card_id = ((state.get('authorized_arguments') or {}).get('card_id')
+                                or (state.get('verified_draft') or {}).get('arguments', {}).get('card_id'))
+            selected_card = next((card for card in cards
+                                  if str(card.get('id', card.get('card_id'))) == str(selected_card_id)), None)
+            if not account_number and selected_card:
+                account_number = selected_card.get('account_number')
             if not account_number and len(cust.get('accounts', [])) == 1:
-                account_number = cust['accounts'][0]
+                only_account = cust['accounts'][0]
+                account_number = (only_account.get('account_number')
+                                  if isinstance(only_account, dict) else only_account)
+            if not account_number:
+                blocked = [card for card in cards if card.get('status') == 'blocked']
+                blocked_accounts = {card.get('account_number') for card in blocked if card.get('account_number')}
+                if len(blocked_accounts) == 1:
+                    account_number = next(iter(blocked_accounts))
             facts = {
                 "accounts": cust.get("accounts", []),
                 "caller_cards": cust.get("cards", []),
@@ -153,6 +168,15 @@ def create_app(model=None, gateway=None, *, config=None, policy_retriever=None):
                         })
             facts['is_temporary_freeze'] = facts['temporary_freeze']
             facts['is_permanently_compromised'] = facts['compromised']
+            if facts['blocked_cards']:
+                unique_blocked = {str(card.get('id', card.get('card_id'))) for card in facts['blocked_cards']
+                                  if card.get('id', card.get('card_id'))}
+                if selected_card_id in unique_blocked:
+                    facts['blocked_card_id'] = str(selected_card_id)
+                elif len(unique_blocked) == 1:
+                    facts['blocked_card_id'] = next(iter(unique_blocked))
+                if facts.get('blocked_card_id'):
+                    facts['last_blocked_card_id'] = facts['blocked_card_id']
             if account_number and hasattr(app.state.gateway, 'policy_facts'):
                 remote = await app.state.gateway.policy_facts(account_number)
                 if remote is not None:
@@ -418,6 +442,8 @@ def create_app(model=None, gateway=None, *, config=None, policy_retriever=None):
                 if callable(method):
                     try:
                         c.geographic_binding = await method(cid, c.country_context)
+                        if isinstance(c.geographic_binding.get('country_context'), dict):
+                            c.country_context = c.geographic_binding['country_context']
                     except Exception:
                         pass
             from card_chat.security import replacement_context
@@ -449,6 +475,28 @@ def create_app(model=None, gateway=None, *, config=None, policy_retriever=None):
             fields = '; '.join(f'{label}: {mask(data[key]) if ("account" in key or "card_number" in key) and not str(data[key]).startswith("SIM-") else data[key]}'
                                for key, label in spec.entry.result_labels.items() if key in data)
             text = f'{spec.entry.label} succeeded.' + (' ' + fields if fields else '')
+            view_cards_empty = False
+            if proposal.name == 'view_cards':
+                cards = data.get('cards') if isinstance(data.get('cards'), list) else []
+                latest_request = next((str(t.get('content', '')) for t in reversed(c.history)
+                                       if t.get('role') == 'user'), '').lower()
+                requested_status = ('blocked' if 'blocked' in latest_request else
+                                    'active' if any(word in latest_request for word in ('active', 'currently', 'current')) else None)
+                if requested_status == 'active':
+                    cards = [card for card in cards if card.get('status') in ('created', 'active')]
+                elif requested_status == 'blocked':
+                    cards = [card for card in cards if card.get('status') == 'blocked']
+                label = f'{requested_status} ' if requested_status else ''
+                if not cards:
+                    view_cards_empty = True
+                    text = (f'You have no {label}cards right now. Select View Cards to open the Cards section, '
+                            'where you can see that there are no active cards and return to this conversation at any time.')
+                else:
+                    summaries = []
+                    for card in cards:
+                        reference = str(card.get('card_number') or card.get('id') or '')[-4:]
+                        summaries.append(f'card ending {reference} ({card.get("status", "unknown")})')
+                    text = f'You have {len(cards)} {label}card{"s" if len(cards) != 1 else ""}: ' + ', '.join(summaries) + '.'
             if proposal.name == 'replace_card' and approval and approval.get('status') == 'replacing':
                 text = approval['block_result'] + ' ' + text
                 approval['status'] = 'complete'
@@ -557,7 +605,8 @@ def create_app(model=None, gateway=None, *, config=None, policy_retriever=None):
             # next-step wording, so duplicate confirmation never regenerates it.
             if c.submission and c.submission['result'] is not None:
                 c.submission['result'] = text
-            response = reply(c, text)
+            response = reply(c, text,
+                             suggested_actions=['view_cards'] if view_cards_empty else None)
             if proposal.name in ('view_accounts', 'view_cards'):
                 response['data'] = data
             return response
@@ -791,6 +840,19 @@ def create_app(model=None, gateway=None, *, config=None, policy_retriever=None):
             # Every new turn invalidates any previous review before interpreting updates.
             c.review, c.proposal = None, None
             c.compound_approval = None
+            # Resolve a customer-owned card suffix at the trusted HTTP boundary
+            # before PII tokenisation. The raw suffix is never sent to the model.
+            import re
+            requested_card_id = None
+            ending_match = re.search(r'ending in\s+([0-9a-zA-Z]{4})', body.text, re.IGNORECASE)
+            if ending_match:
+                requested_last4 = ending_match.group(1).lower()
+                matching_cards = [card for card in caller().get('cards', [])
+                                  if isinstance(card, dict) and (
+                                      str(card.get('card_number', '')).lower().endswith(requested_last4)
+                                      or str(card.get('id', '')).lower().endswith(requested_last4))]
+                if len(matching_cards) == 1:
+                    requested_card_id = str(matching_cards[0].get('id'))
             if hasattr(app.state, 'pii_gateway'):
                 pii_res = app.state.pii_gateway.sanitize_input(body.text, owner=owner(), session_id=cid, private_values=tuple(private_values(c)))
                 for tok, raw_val in pii_res.tokens_created.items():
@@ -840,6 +902,8 @@ def create_app(model=None, gateway=None, *, config=None, policy_retriever=None):
                 if callable(method) and country.status == 'explicit':
                     try:
                         c.geographic_binding = await method(cid, c.country_context)
+                        if isinstance(c.geographic_binding.get('country_context'), dict):
+                            c.country_context = c.geographic_binding['country_context']
                     except Exception:
                         c.geographic_binding = None
                 if continuing_country_form:
@@ -867,12 +931,14 @@ def create_app(model=None, gateway=None, *, config=None, policy_retriever=None):
             if not catalogue:
                 return reply(c, 'No eligible actions are available for this caller.')
             verified_draft = {}
+            authorized_arguments = {}
             if c.draft.get('tool') in catalogue:
                 try:
                     draft_spec = catalogue[c.draft['tool']]
                     draft_values = resolve(draft_spec, c.draft.get('arguments', {}), c.bindings, cid, owner())
                     authorise(draft_spec, draft_values, caller())
                     verified_draft = c.draft
+                    authorized_arguments = draft_values
                 except (ValueError, HTTPException):
                     pass  # Unbound, legacy or revoked facts never enter model context.
             model_tools = tools_for_model(catalogue)
@@ -886,7 +952,8 @@ def create_app(model=None, gateway=None, *, config=None, policy_retriever=None):
                 turn = await app.state.agent.interpret_turn(
                     history, draft, tools,
                     thread_id=f"{owner()}:{cid}", owner=owner(), session_id=cid,
-                    country_context=c.country_context
+                    country_context=c.country_context, geographic_binding=c.geographic_binding,
+                    authorized_arguments=authorized_arguments
                 )
             except Exception as exc:
                 logger.exception("Language service / interpret_turn failed: %s", exc)
@@ -898,6 +965,16 @@ def create_app(model=None, gateway=None, *, config=None, policy_retriever=None):
             if turn is None:
                 return reply(c, 'The language service is unavailable or proposed an invalid action. Please try again.')
             if isinstance(turn, CustomerReply):
+                import re
+                asks_to_view_cards = bool(re.search(
+                    r"\b(show|view|see|list|display)\b.*\b(my\s+)?cards?\b|\bwhat cards?\b|\bdo i have (any )?cards?\b",
+                    safe_text, re.IGNORECASE))
+                if asks_to_view_cards and not caller().get('cards'):
+                    trace_obj = build_trace(safe_text, c, can_confirm=False,
+                                            backend_outcome="no_cards", start_time=start_turn_time)
+                    return reply(c,
+                        "You don't have any cards right now. Select View Cards to open the Cards section, where you can see that there are no active cards and return to this conversation at any time.",
+                        language=True, suggested_actions=['view_cards'], trace_data=trace_obj)
                 snapshot = await app.state.orchestrator.workflow.aget_state(
                     {'configurable': {'thread_id': f'{owner()}:{cid}'}})
                 c.country_required = (snapshot.values.get('geographic_decision') or {}).get('decision') == 'clarification_required'
@@ -946,20 +1023,23 @@ def create_app(model=None, gateway=None, *, config=None, policy_retriever=None):
             if turn.name in ('issue_card', 'create_card') and not caller().get('accounts') and 'create_account' in catalogue:
                 c.draft = {'tool': 'create_account', 'arguments': {}}
                 return reply(c, 'Create an account first. You can choose to issue a card with it.', input_tool='create_account')
-            if turn.name in ('block_card', 'unblock_card', 'replace_card') and 'card_id' not in turn.arguments:
-                import re
-                ending_match = re.search(r'ending in\s+([0-9a-zA-Z]{4})', safe_text, re.IGNORECASE)
-                if ending_match:
-                    last4 = ending_match.group(1).lower()
+            if turn.name in ('block_card', 'unblock_card', 'replace_card'):
+                supplied_card_id = turn.arguments.get('card_id')
+                owned_card = next((card for card in caller().get('cards', []) if isinstance(card, dict)
+                                   and str(card.get('id')) == str(supplied_card_id)), None)
+                if owned_card and requested_card_id == str(owned_card.get('id')):
+                    turn.arguments['card_id'] = bind(
+                        c.bindings, cid, owner(), turn.name, 'card_id', str(owned_card.get('id')))
+            if turn.name in ('block_card', 'unblock_card', 'replace_card') and not turn.arguments.get('card_id'):
+                if requested_card_id:
                     for card in caller().get('cards', []):
                         is_blocked = isinstance(card, dict) and card.get('status') == 'blocked'
                         if turn.name in ('unblock_card', 'replace_card') and not is_blocked:
                             continue
                         if turn.name == 'block_card' and is_blocked:
                             continue
-                        num = (card.get('card_number') if isinstance(card, dict) else str(card)).lower()
                         cid_val = card.get('id') if isinstance(card, dict) else str(card)
-                        if num.endswith(last4) or cid_val.endswith(last4):
+                        if str(cid_val) == requested_card_id:
                             ref = bind(c.bindings, cid, owner(), turn.name, 'card_id', cid_val)
                             turn.arguments['card_id'] = ref
                             break
@@ -1300,6 +1380,19 @@ def create_app(model=None, gateway=None, *, config=None, policy_retriever=None):
                 case_store=app.state.case_store,
             )
             return result
+        except KeyError:
+            raise HTTPException(404, f"Case {case_id} not found")
+        except ValueError as exc:
+            raise HTTPException(409, str(exc))
+
+    @app.post('/fincrime/cases/{case_id}/retry')
+    async def retry_fincrime_case(case_id: str, request: Request):
+        body = await request.json() if request.headers.get('content-length', '0') != '0' else {}
+        try:
+            return await app.state.orchestrator.resume_fincrime_case(
+                case_id=case_id, decision='approved', reason=body.get('reason', 'Authorised execution retry'),
+                analyst_username=body.get('analyst', 'fincrime.analyst'), gateway=app.state.gateway,
+                case_store=app.state.case_store, retry_execution=True)
         except KeyError:
             raise HTTPException(404, f"Case {case_id} not found")
         except ValueError as exc:

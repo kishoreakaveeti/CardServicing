@@ -109,17 +109,25 @@ def protect(app, config, audience, permission, client, *, customer=True):
                 if not auth.startswith('Bearer '):
                     raise HTTPException(401, 'Bearer credentials required')
                 declaration_entry = audience == 'cards' and request.url.path == '/banking/replacement-context'
+                approved_cards_execution = (audience == 'cards'
+                    and request.url.path.endswith('/replace')
+                    and request.headers.get('X-Approved-Case-Execution') == '1')
                 bff_banking = audience == 'cards' and request.url.path.startswith('/banking/') and request.headers.get('X-Banking-BFF') == '1'
                 await asyncio.to_thread(security.verify, auth[7:],
-                    'agent' if bff_banking else ('mcp' if declaration_entry else audience),
-                    'agent:invoke' if bff_banking else ('tools:execute' if declaration_entry else permission),
-                    'experience-service' if bff_banking else ('agent-service' if declaration_entry else client))
+                    'agent' if bff_banking else ('mcp' if declaration_entry or approved_cards_execution else audience),
+                    'agent:invoke' if bff_banking else ('tools:execute' if declaration_entry or approved_cards_execution else permission),
+                    'experience-service' if bff_banking else ('agent-service' if declaration_entry or approved_cards_execution else client))
                 public_entry = audience == 'agent' and request.url.path == '/entry/messages'
                 fincrime_entry = audience == 'agent' and request.url.path.startswith('/fincrime/')
+                approved_execution = (
+                    request.headers.get('X-Approved-Case-Execution') == '1'
+                    and ((audience == 'mcp' and request.url.path.startswith('/mcp'))
+                         or (audience == 'cards' and request.url.path.endswith('/replace')))
+                )
                 credential_entry = bff_banking and request.url.path in ('/banking/register', '/banking/login')
                 if request.url.path in ('/banking/register', '/banking/login') and not bff_banking:
                     raise HTTPException(403, 'Experience service required')
-                if customer and not public_entry and not credential_entry and not fincrime_entry:
+                if customer and not public_entry and not credential_entry and not fincrime_entry and not approved_execution:
                     principal.set(security.customer(delegation.get(), audience))
             response = await call_next(request)
         except HTTPException as exc:

@@ -69,7 +69,7 @@ class SQLiteCardStore:
         self.path.parent.mkdir(parents=True, exist_ok=True)
         with closing(self.connect()) as db, db:
             db.execute('BEGIN IMMEDIATE')
-            if db.execute('PRAGMA user_version').fetchone()[0] > 3:
+            if db.execute('PRAGMA user_version').fetchone()[0] > 4:
                 raise StorageUnavailable('Unsupported future database schema')
             for statement in SCHEMA.split(';'):
                 if statement.strip():
@@ -80,7 +80,7 @@ class SQLiteCardStore:
             for statement in BANKING_SCHEMA.split(';'):
                 if statement.strip():
                     db.execute(statement)
-            db.execute('PRAGMA user_version = 3')
+            db.execute('PRAGMA user_version = 4')
         self.ready = True
 
     @storage_operation
@@ -97,6 +97,7 @@ class SQLiteCardStore:
             db.execute('SELECT card_id,account_number FROM account_cards LIMIT 1').fetchone()
             db.execute('SELECT customer_id,request_key,fingerprint,account_number FROM banking_requests LIMIT 1').fetchone()
             db.execute('SELECT request_key,request_fingerprint,card_id,response_json FROM card_issuance_requests LIMIT 1').fetchone()
+            db.execute('SELECT customer_id,country_code,declared_at,revision FROM country_declaration_history LIMIT 1').fetchone()
             return db.execute("SELECT code FROM card_statuses WHERE code = 'created'").fetchone() is not None
 
     def create(self, instruction: CardCreate) -> Card:

@@ -10,4 +10,9 @@
   "domestic_replacement_requires_fincrime_approval": false,
   "unknown_country_action": "REQUIRE_CLARIFICATION",
   "security_card_blocking_allowed": true
+  ,"transition_review_enabled": true
+  ,"transition_review_lookback_hours": 72
+  ,"transition_review_applicable_intents": ["replace_card"]
+  ,"transition_review_decision": "REQUIRES_HUMAN_APPROVAL"
+  ,"transition_review_reason_code": "RECENT_EXCLUDED_COUNTRY_TRANSITION"
 }

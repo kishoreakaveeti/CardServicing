@@ -539,6 +539,7 @@ def test_7_customer_refresh_sees_completed_replacement(hitl_environment):
         reasons=["Overseas replacement"],
     )
     case_store.approve_case(case.case_id, "fincrime.analyst", "Verified")
+    case_store.mark_processing(case.case_id)
     case_store.mark_completed(case.case_id, "card_new_123")
 
     # Customer queries replacement status

@@ -60,6 +60,13 @@ CREATE TABLE IF NOT EXISTS replacement_contexts (
  country TEXT NOT NULL, policy_version TEXT NOT NULL,
  artifact_hash TEXT NOT NULL,
  PRIMARY KEY(customer_id, workflow));
+CREATE TABLE IF NOT EXISTS country_declaration_history (
+ id TEXT PRIMARY KEY, customer_id TEXT NOT NULL, workflow TEXT NOT NULL,
+ country_code TEXT NOT NULL, declared_at TEXT NOT NULL, source TEXT NOT NULL,
+ revision INTEGER NOT NULL, verification_status TEXT NOT NULL,
+ policy_version TEXT NOT NULL);
+CREATE INDEX IF NOT EXISTS ix_country_history_customer_time
+ ON country_declaration_history(customer_id, declared_at DESC);
 """
 
 
@@ -80,6 +87,15 @@ class BankingService:
             raise HTTPException(422, 'Use a canonical country code')
         rules = self.geographic_rules.load()
         from card_chat.policy.geography import local_geographic_decision
+        from datetime import datetime, timezone
+        now = datetime.now(timezone.utc).isoformat()
+        with closing(self.store.connect()) as db:
+            prior = db.execute(
+                'SELECT country_code,declared_at FROM country_declaration_history WHERE customer_id=? ORDER BY declared_at DESC LIMIT 1',
+                (customer['sub'],)).fetchone()
+        if prior and prior[0] != country.code:
+            country.previous_code, country.previous_updated_at = prior[0], prior[1]
+        country.updated_at = now
         approved = local_geographic_decision(country.model_dump(), self.geographic_rules,
             document_source=self.geographic_documents)
         if approved.decision == 'unavailable':
@@ -91,7 +107,12 @@ class BankingService:
             db.execute('DELETE FROM replacement_contexts WHERE customer_id=?', (customer['sub'],))
             db.execute('INSERT OR REPLACE INTO replacement_contexts VALUES(?,?,?,?,?,?)',
                 (customer['sub'], workflow, revision, country.model_dump_json(), rules.version, approved.artifact_hash))
-        return {'workflow': workflow, 'revision': revision, 'policy_version': rules.version, 'artifact_hash': approved.artifact_hash}
+            if country.status == 'explicit' and country.code:
+                db.execute('INSERT INTO country_declaration_history VALUES(?,?,?,?,?,?,?,?,?)',
+                    (uuid4().hex, customer['sub'], workflow, country.code, now, country.source,
+                     country.revision, country.verification_status, rules.version))
+        return {'workflow': workflow, 'revision': revision, 'policy_version': rules.version,
+                'artifact_hash': approved.artifact_hash, 'country_context': country.model_dump()}
 
     def geographic_authorization(self, customer, context, connection=None):
         from card_chat.policy.geography import local_geographic_decision
@@ -247,6 +268,24 @@ class BankingService:
             raise HTTPException(400, str(exc)) from None
         return (result, replayed) if with_replay else result
 
+    def resolve_approved_replacement_card(self, customer_id: str, account_number: str, card_id: str) -> str:
+        """Resolve an approved case target only at the authoritative Cards boundary."""
+        with closing(self.store.connect()) as db:
+            if not db.execute('SELECT 1 FROM accounts WHERE account_number=? AND customer_id=?',
+                              (account_number, customer_id)).fetchone():
+                raise HTTPException(403, 'Approved replacement account ownership changed')
+            exact = db.execute(
+                "SELECT id FROM cards WHERE account_number=? AND status='blocked' AND (id=? OR card_number=?)",
+                (account_number, str(card_id), str(card_id))).fetchone()
+            if exact:
+                return str(exact[0])
+            rows = db.execute(
+                "SELECT id FROM cards WHERE account_number=? AND status='blocked' ORDER BY created_at,id",
+                (account_number,)).fetchall()
+        if len(rows) != 1:
+            raise HTTPException(409, 'Approved replacement target requires revalidation')
+        return str(rows[0][0])
+
     @storage_operation
     def cards(self, customer):
         with closing(self.store.connect()) as db:
@@ -390,7 +429,18 @@ def replace_card(card_id: str, body: CardReplaceInput, request: Request, respons
                 raise ValueError('Invalid context')
         except (ValueError, TypeError):
             raise HTTPException(422, 'Invalid replacement context') from None
-        result, replayed = service(request).replace_card(customer(), card_id, idempotency_key, reason=body.reason,
+        approved_execution = request.headers.get('X-Approved-Case-Execution') == '1'
+        if approved_execution:
+            approved_customer = request.headers.get('X-Approved-Customer-ID', '')
+            approved_account = request.headers.get('X-Approved-Account', '')
+            if not approved_customer or not approved_account or not (context or {}).get('case_id'):
+                raise HTTPException(403, 'Incomplete approved replacement scope')
+            cust = {'sub': approved_customer}
+            card_id = service(request).resolve_approved_replacement_card(
+                approved_customer, approved_account, card_id)
+        else:
+            cust = customer()
+        result, replayed = service(request).replace_card(cust, card_id, idempotency_key, reason=body.reason,
             with_replay=True, geographic_context=context)
         response.status_code = 201
         response.headers['Idempotency-Replayed'] = str(replayed).lower()
