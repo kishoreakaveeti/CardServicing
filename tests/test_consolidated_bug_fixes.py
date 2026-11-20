@@ -20,6 +20,7 @@ from card_chat.main import create_app as agent_app
 from card_chat.orchestration.supervisor import SupervisorAgent
 from card_chat.policy.adapters.vector_stores.qdrant_store import QdrantVectorStore
 from card_chat.policy.factory import build_policy_evaluator, build_policy_retriever
+from card_chat.policy.adapters.evaluator import GroundedPolicyEvaluator
 from card_chat.policy.geography import (
     CountryContext,
     RequestInterpretation,
@@ -80,6 +81,17 @@ def test_bug1_navigation_css_and_navbar_contract():
     # Mobile breakpoint enables flex
     assert "@media (max-width: 768px)" in css_code
     assert "display: flex;" in css_code
+
+
+def test_block_and_replace_chip_confirms_an_existing_combined_review():
+    """The combined suggestion must execute a reviewed action, not resubmit the same prompt."""
+    main_code = Path("frontend/src/main.tsx").read_text(encoding="utf-8")
+    chat_code = Path("frontend/src/components/ChatView.tsx").read_text(encoding="utf-8")
+
+    assert "reviewedCombinedAction" in main_code
+    assert "await handleConfirmAction()" in main_code
+    assert "latestReply?.can_confirm === true" in main_code
+    assert 'type="button"' in chat_code
 
 
 # =============================================================================
@@ -228,6 +240,40 @@ def test_empty_card_customer_gets_view_cards_navigation(identity):
         body = response.json()
         assert "no" in body["message"].lower() and "cards" in body["message"].lower()
         assert body["suggested_actions"] == ["view_cards"]
+
+
+def test_read_only_cards_and_security_block_survive_policy_index_outage():
+    """Viewing is policy-independent and blocking remains safely available during an index outage."""
+    class UnavailableRetriever:
+        strict_index = True
+
+        def retrieve(self, *args, **kwargs):
+            raise RuntimeError("synthetic policy index outage")
+
+    evaluator = GroundedPolicyEvaluator(UnavailableRetriever())
+    view = evaluator.evaluate("view_cards", facts={})
+    block = evaluator.evaluate("block_card", facts={})
+    replace = evaluator.evaluate("replace_card", facts={}, state={"country_context": {"code": "AU"}})
+
+    assert view.permitted and not view.policy_error
+    assert block.permitted and not block.policy_error
+    assert not replace.permitted and replace.policy_error == "GeographicPolicyUnavailable"
+
+
+def test_remote_policy_facts_does_not_depend_on_replacement_write_context():
+    """The customer facts read must open a normal delegated MCP session."""
+    gateway_code = Path("src/card_chat/gateway.py").read_text(encoding="utf-8")
+    policy_facts = gateway_code.split("async def policy_facts", 1)[1].split(
+        "async def execute_approved_replacement", 1)[0]
+
+    assert "async with session() as connected" in policy_facts
+    assert "session(bool(replacement_context" not in policy_facts
+
+
+def test_every_fincrime_case_path_persists_the_geographic_binding():
+    """Both direct and post-block approval cases must carry the signed Cards binding."""
+    supervisor_code = Path("src/card_chat/orchestration/supervisor.py").read_text(encoding="utf-8")
+    assert supervisor_code.count('"geographic_binding": state.get("geographic_binding")') >= 2
 
 
 # =============================================================================

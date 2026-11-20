@@ -391,7 +391,10 @@ class SupervisorAgent:
                                 rules_version=geo_dec.get("rules_version", "1.0.0"),
                                 reason_for_escalation=geo_dec.get("explanation", "Overseas replacement requires FinCrime staff approval"),
                                 rag_evidence=decision.retrieved_policies,
-                                evaluation_result=geo_dec,
+                                evaluation_result={
+                                    **geo_dec,
+                                    "geographic_binding": state.get("geographic_binding"),
+                                },
                                 thread_id=workflow_id,
                             )
                             case_id = case.case_id

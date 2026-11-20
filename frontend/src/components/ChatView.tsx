@@ -9,7 +9,7 @@ interface ChatViewProps {
   onConfirmAction: () => Promise<void>;
   onCancelAction?: () => void;
   onSelectCountry: (countryCode: string) => Promise<void>;
-  onActionChipClick: (action: string) => void;
+  onActionChipClick: (action: string) => void | Promise<void>;
   onExploreProducts: () => void;
   tools: InputTool[];
   activeTool: string;
@@ -357,8 +357,9 @@ export const ChatView: React.FC<ChatViewProps> = ({
             return (
               <button
                 key={action}
+                type="button"
                 className="action-chip"
-                onClick={() => onActionChipClick(action)}
+                onClick={() => void onActionChipClick(action)}
                 disabled={isBusy}
               >
                 {labelMap[action] || action}

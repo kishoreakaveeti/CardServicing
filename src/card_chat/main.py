@@ -404,12 +404,20 @@ def create_app(model=None, gateway=None, *, config=None, policy_retriever=None):
             snapshot_state = {**snapshot.values, 'country_context': c.country_context,
                 'pinned_policies': {**snapshot.values.get('pinned_policies', {}),
                     **({'POL-006': c.geographic_pin} if c.geographic_pin else {})}}
-            facts = await app.state.facts_retriever(proposal.arguments.get('account_number'), state=snapshot.values)
-            card_id = proposal.arguments.get('card_id')
-            for card in caller().get('cards', []):
-                if isinstance(card, dict) and str(card.get('id', card.get('card_id'))) == str(card_id):
-                    facts = await app.state.facts_retriever(card.get('account_number'), state=snapshot.values)
-                    break
+            try:
+                facts = await app.state.facts_retriever(
+                    proposal.arguments.get('account_number'), state=snapshot.values)
+                card_id = proposal.arguments.get('card_id')
+                for card in caller().get('cards', []):
+                    if isinstance(card, dict) and str(card.get('id', card.get('card_id'))) == str(card_id):
+                        facts = await app.state.facts_retriever(
+                            card.get('account_number'), state=snapshot.values)
+                        break
+            except Exception:
+                if proposal.name != 'block_card':
+                    raise
+                logger.exception('Verified policy facts unavailable; continuing risk-reducing card block')
+                facts = {'retrieval_failed': True}
             decision = app.state.policy_evaluator.validate_execution(
                 proposal.name, proposal.arguments, facts, snapshot_state)
             if not decision.permitted:
@@ -545,11 +553,17 @@ def create_app(model=None, gateway=None, *, config=None, policy_retriever=None):
             resumed_turn = None
             if hasattr(app.state, 'orchestrator'):
                 thread_id = f"{owner()}:{cid}"
-                resumed_turn = await app.state.orchestrator.resume_execution(
-                    thread_id, owner(), cid, submission['tool'], result, ok=True, message=text,
-                    arguments=submission['arguments'],
-                    allowed_tools={name: tool.definition() for name, tool in permitted().items()}
-                )
+                try:
+                    resumed_turn = await app.state.orchestrator.resume_execution(
+                        thread_id, owner(), cid, submission['tool'], result, ok=True, message=text,
+                        arguments=submission['arguments'],
+                        allowed_tools={name: tool.definition() for name, tool in permitted().items()}
+                    )
+                except Exception:
+                    if proposal.name != 'block_card':
+                        raise
+                    logger.exception(
+                        'Card block succeeded but post-block policy continuation was unavailable')
 
             if proposal.name == 'block_card' and resumed_turn is not None:
                 snapshot = await app.state.orchestrator.workflow.aget_state(
@@ -571,7 +585,19 @@ def create_app(model=None, gateway=None, *, config=None, policy_retriever=None):
                     c.proposal = ProposedToolCall('replace_card', arguments)
                     c.submission = None
                     save(cid, c)  # Persist the reviewed continuation before its API write.
-                    return await execute(cid, c)
+                    try:
+                        return await execute(cid, c)
+                    except Exception:
+                        logger.exception(
+                            'Card block succeeded but automatic replacement preflight was unavailable')
+                        c.proposal, c.submission, c.review, c.draft = None, None, None, {}
+                        approval['status'] = 'block_complete_replacement_pending'
+                        save(cid, c)
+                        return reply(
+                            c,
+                            text + ' Your card is blocked, but the replacement request could not be completed. '
+                            'You can request the replacement again without blocking the card a second time.',
+                        )
                 # Next compound intent requires separate human confirmation!
                 next_spec = app.state.gateway.catalogue.get(resumed_turn.name)
                 next_proposal_args = dict(resumed_turn.arguments)
@@ -1245,6 +1271,7 @@ def create_app(model=None, gateway=None, *, config=None, policy_retriever=None):
             except asyncio.CancelledError:
                 raise
             except Exception as exc:
+                logger.exception('Background operation %s failed (%s)', oid, row['kind'])
                 error = exc.detail if isinstance(exc, HTTPException) else 'Operation failed; retry with a new request key.'
                 code = exc.status_code if isinstance(exc, HTTPException) else 503
                 journal.db.execute("UPDATE operations SET status='failed',error=? WHERE id=?",

@@ -686,10 +686,14 @@ function App() {
                   handleSendMessage('Cancel that action.');
                 }}
                 onSelectCountry={handleSelectCountry}
-                onActionChipClick={(action) => {
-                  if (action === 'block_and_replace') handleSendMessage('Please block and replace my card');
-                  else if (action === 'block_card') handleSendMessage('Please block my card');
-                  else if (action === 'replace_card') handleSendMessage('Please replace my card');
+                onActionChipClick={async (action) => {
+                  const reviewedCombinedAction = action === 'block_and_replace'
+                    && latestReply?.can_confirm === true
+                    && latestReply.confirmation_label?.toLowerCase().includes('block and replace');
+                  if (reviewedCombinedAction) await handleConfirmAction();
+                  else if (action === 'block_and_replace') await handleSendMessage('Please block and replace my card');
+                  else if (action === 'block_card') await handleSendMessage('Please block my card');
+                  else if (action === 'replace_card') await handleSendMessage('Please replace my card');
                   else if (action === 'view_cards') setCurrentTab('cards');
                   else if (action === 'view_accounts') setCurrentTab('accounts');
                 }}

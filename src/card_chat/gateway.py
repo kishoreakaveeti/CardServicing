@@ -74,7 +74,10 @@ async def connect(config=None):
         async def policy_facts(self, account_number):
             if not security.enabled:
                 return None  # Explicit isolated local mode uses injected verified facts.
-            async with session(bool(replacement_context and replacement_context.get('fincrime_approval'))) as connected:
+            # Policy facts are read under the current customer delegation. The
+            # approved-case replacement context applies only to the later write
+            # and is deliberately not consulted here.
+            async with session() as connected:
                 result = await connected.read_resource(AnyUrl(
                     'policy-facts://accounts/' + quote(account_number, safe='')))
                 if len(result.contents) != 1 or not hasattr(result.contents[0], 'text'):

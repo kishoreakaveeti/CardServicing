@@ -113,6 +113,11 @@ class GroundedPolicyEvaluator(PolicyEvaluator):
                         else getattr(geographic_pending, 'question_type', None))
         accepting_replacement = (pending_kind == 'replacement_offer' and
             is_affirmative(str(user_text)) and not is_negative(str(user_text)))
+        if intent in ('view_cards', 'view_accounts'):
+            return PolicyEvaluationResult(
+                permitted=True,
+                decision_reason='Read-only customer data retrieval does not require a servicing policy decision.',
+            )
         if intent == 'replace_card' or accepting_replacement:
             geo, geo_evidence = self.geographic_decision(
                 (state or {}).get('country_context') or facts.get('country_context'), pinned_policies)
@@ -133,11 +138,11 @@ class GroundedPolicyEvaluator(PolicyEvaluator):
                 )
         facts.setdefault("is_temporary_freeze", facts.get("temporary_freeze", False))
         facts.setdefault("is_permanently_compromised", facts.get("compromised", False))
+        effective_intent = intent
         try:
             if facts.get('retrieval_failed'):
                 raise RuntimeError('Verified banking facts unavailable')
             pending = pending_question or (state or {}).get("pending_customer_question")
-            effective_intent = intent
             if pending:
                 kind = pending.get("question_type") if isinstance(pending, dict) else pending.question_type
                 effective_intent = "unblock_card" if kind == "unblock_offer" else "replace_card"
@@ -194,6 +199,14 @@ class GroundedPolicyEvaluator(PolicyEvaluator):
             return result
         except Exception:
             logger.exception("Policy evaluation unavailable")
+            if effective_intent == 'block_card':
+                return PolicyEvaluationResult(
+                    permitted=True,
+                    decision_reason=(
+                        'Card blocking remains available as a risk-reducing security action while '
+                        'servicing policy retrieval is unavailable.'
+                    ),
+                )
             return PolicyEvaluationResult(permitted=False, prohibited=True,
                 policy_error="PolicyRetrievalUnavailable",
                 decision_reason="Required approved policies are unavailable. Please try again later.")

@@ -286,6 +286,30 @@ def test_http_combined_review_does_not_replace_after_failed_block(policy_retriev
         assert 'failed' in result['message'].lower()
 
 
+def test_confirmed_block_still_executes_when_policy_facts_lookup_is_unavailable(policy_retriever):
+    """A transient facts read cannot turn a reviewed security block into an HTTP 503."""
+    app, gateway = application(policy_retriever, status='active', reason='')
+    with TestClient(app) as client:
+        cid = client.post('/conversations').json()['id']
+        path = f'/conversations/{cid}'
+        client.post(path + '/messages', json={'text': 'I am in Australia. Block and replace my card'})
+        tools = client.get(path + '/inputs').json()['tools']
+        definition = next(tool for tool in tools if tool['name'] == 'block_card')
+        ref = next(field for field in definition['fields'] if field['name'] == 'card_id')['options'][0]['ref']
+        review = client.post(path + '/inputs', json={
+            'tool': 'block_card', 'fields': {'reason': 'lost'}, 'selections': {'card_id': ref},
+        }).json()
+
+        async def unavailable(*args, **kwargs):
+            raise RuntimeError('synthetic policy facts outage')
+
+        app.state.facts_retriever = unavailable
+        result = client.post(path + '/confirm', json={'review': review['review']})
+        assert result.status_code == 200, result.text
+        assert [call[0] for call in gateway.calls] == ['block_card']
+        assert 'blocked' in result.json()['message'].lower()
+
+
 def test_startup_requires_remote_policy_infrastructure():
     with pytest.raises(RuntimeError, match='persistent QDRANT_URL'):
         build_runtime_policy_services({'QDRANT_URL': ':memory:'})
