@@ -1098,6 +1098,9 @@ sequenceDiagram
 
 ---
 
+### Agentic AI Pattern
+![Architecture Diagram](./Diagrams/AgenticAI_Pattern.svg)
+
 ### Data and Persistence Guarantees
 
 SQLite schema version 3 stores customers, owned accounts, cards, card/account links, account retry records, original card snapshots and issuance-decision snapshots. Python provides SQLite access; no separate server/CLI installation is required. Existing data is preserved by additive initialization migrations.
