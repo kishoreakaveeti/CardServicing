@@ -4,7 +4,10 @@
 ### Agentic AI Pattern
 ![Architecture Diagram](./Diagrams/AgenticAI_Pattern.svg)
 
-## 11. Preserved System Runtime and Deployment Specifications
+### Agent Orchestration
+![Architecture Diagram](./Diagrams/AgenticOrchestration_LangGraph.svg)
+
+## Preserved System Runtime and Deployment Specifications
 
 The following specifications detail the existing runtime environment, multi-agent sequence mechanics, persistence models, and deployment topologies.
 
@@ -37,6 +40,7 @@ flowchart LR
     C --> D
     FC --> D
 ```
+
 
 
 ---
