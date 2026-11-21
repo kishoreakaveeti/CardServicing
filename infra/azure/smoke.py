@@ -127,17 +127,21 @@ def main():
             return False
     def https():
         # Real trust verification: no verify=False, cookie rewriting or TLS bypass.
-        for _ in range(90):
+        last_error = None
+        for attempt in range(120):
             try:
-                with httpx.Client(timeout=10) as client:
+                with httpx.Client(timeout=10, follow_redirects=True) as client:
                     assert client.get(origin+'/health').status_code==200
                     discovery=client.get(identity+'/realms/cards/.well-known/openid-configuration')
                     assert discovery.status_code==200
                     assert discovery.json()['issuer']==identity+'/realms/cards'
                 return
-            except (httpx.HTTPError,AssertionError):
+            except (httpx.HTTPError, AssertionError, Exception) as exc:
+                last_error = exc
+                if (attempt + 1) % 5 == 0 or attempt == 0:
+                    print(f"Waiting for public HTTPS ({origin}): attempt {attempt+1}/120: {type(exc).__name__}: {exc}", flush=True)
                 time.sleep(2)
-        raise RuntimeError('Public HTTPS readiness timed out')
+        raise RuntimeError(f'Public HTTPS readiness timed out: {type(last_error).__name__}: {last_error}')
     try:
         if not check('public-https',https,'Trusted TLS, frontend HTTP 200 and exact HTTPS OIDC issuer'):
             record(report,'public-workflows','NOT TESTED','HTTPS prerequisite failed')

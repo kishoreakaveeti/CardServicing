@@ -1,3 +1,6 @@
+{
+    email {$ACME_EMAIL}
+}
 https://{$APP_DOMAIN} {
     @identity path /realms/* /resources/* /admin /admin/* /robots.txt
     handle @identity {
