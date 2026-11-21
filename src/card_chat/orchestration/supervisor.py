@@ -1054,6 +1054,15 @@ class SupervisorAgent:
         if pos_view_acc != -1 and has_account:
             intent_candidates.append(("view_accounts", pos_view_acc))
 
+        # Phrases such as "get my active cards" describe retrieval, not new
+        # issuance.  The generic "get ... card" fallback above is deliberately
+        # broad, so an explicit read intent must take precedence.
+        if any(intent == "view_cards" for intent, _ in intent_candidates):
+            intent_candidates = [
+                item for item in intent_candidates
+                if item[0] not in ("issue_card", "create_card")
+            ]
+
         # If both block_card and replace_card/issue_card are present, block_card must ALWAYS precede
         intents_dict = dict(intent_candidates)
         sec_card_tool = "replace_card" if "replace_card" in intents_dict else ("issue_card" if "issue_card" in intents_dict else None)

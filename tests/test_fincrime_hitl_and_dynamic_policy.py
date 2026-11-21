@@ -550,6 +550,53 @@ def test_7_customer_refresh_sees_completed_replacement(hitl_environment):
     assert completed_case.replacement_card_id == "card_new_123"
 
 
+def test_confirmed_chat_case_executes_without_graph_tool_proposal(hitl_environment):
+    """A case created by chat confirmation is the immutable approved request."""
+    async def scenario():
+        env = hitl_environment
+        banking = env["banking"]
+        customer = env["customer"]
+        card = env["card"]
+        case_store = env["case_store"]
+        orchestrator = env["orchestrator"]
+
+        banking.block_card(customer, str(card.id), "lost")
+        binding = banking.declare_country(
+            customer,
+            "chat-confirmed-workflow",
+            {"code": "AU", "status": "explicit", "source": "customer_declaration"},
+        )
+        case = case_store.create_case(
+            customer_id=customer["sub"],
+            customer_username=customer["username"],
+            account_number=card.account_number,
+            card_id=str(card.id),
+            card_last4=str(card.id)[-4:],
+            declared_country="AU",
+            is_overseas=False,
+            policy_id="POL-006",
+            policy_version="1.0.0",
+            rules_version="1.0.0",
+            reason_for_escalation="Synthetic transition review",
+            rag_evidence=[],
+            evaluation_result={"geographic_binding": binding},
+            thread_id=f'{customer["sub"]}:chat-confirmed-workflow',
+        )
+
+        result = await orchestrator.resume_fincrime_case(
+            case_id=case.case_id,
+            decision="approved",
+            reason="Approved confirmed request",
+            analyst_username="fincrime.analyst",
+        )
+
+        assert result["ok"] is True
+        assert result["status"] == "COMPLETED"
+        assert case_store.get_case(case.case_id).replacement_card_id
+
+    asyncio.run(scenario())
+
+
 # -------------------------------------------------------------------------
 # Test 8: Live policy document update (editing approved policy content and applying updates RAG retrieval evidence)
 # -------------------------------------------------------------------------

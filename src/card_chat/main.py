@@ -48,6 +48,7 @@ class Conversation:
     geographic_pin: str | None = None
     geographic_hash: str | None = None
     geographic_notice: str = ''
+    country_transition_notice: str = ''
     sentiment: str = 'neutral'
     urgency: str = 'normal'
     trace_data: dict | None = None
@@ -321,11 +322,12 @@ def create_app(model=None, gateway=None, *, config=None, policy_retriever=None):
 
     async def review_compound(cid, c):
         c.compound_approval = None
-        notice = ''
+        notice = c.country_transition_notice
         if c.proposal and c.proposal.name == 'block_card':
             snapshot = await app.state.orchestrator.workflow.aget_state(
                 {'configurable': {'thread_id': f'{owner()}:{cid}'}})
-            notice = snapshot.values.get('geographic_notice') or ''
+            policy_notice = snapshot.values.get('geographic_notice') or ''
+            notice = ' '.join(part for part in (notice, policy_notice) if part)
             c.country_required = (snapshot.values.get('geographic_decision') or {}).get('decision') == 'clarification_required'
         if not c.proposal or c.proposal.name != 'block_card' or 'replace_card' not in permitted():
             return ''
@@ -335,7 +337,7 @@ def create_app(model=None, gateway=None, *, config=None, policy_retriever=None):
             return notice
         decision = await geographic_review(cid, c)
         if decision.decision != 'allowed':
-            return decision.explanation
+            return ' '.join(part for part in (notice, decision.explanation) if part)
         c.compound_approval = {'card_id': c.proposal.arguments['card_id'],
                                'replacement_reason': 'Customer requested replacement', 'status': 'reviewed'}
         return ' This confirmation also authorizes issuing a replacement for this same card after blocking succeeds.'
@@ -349,14 +351,17 @@ def create_app(model=None, gateway=None, *, config=None, policy_retriever=None):
         c.country_required = decision.decision == 'clarification_required'
         if decision.version and not c.geographic_pin:
             c.geographic_pin = decision.version
-        if decision.decision == 'allowed':
+        binding_eligible = decision.decision in (
+            'allowed', 'ALLOW', 'requires_human_approval', 'REQUIRES_HUMAN_APPROVAL'
+        )
+        if binding_eligible:
             if c.geographic_hash and c.geographic_hash != decision.artifact_hash:
                 from card_chat.policy.geography import GeographicDecision
                 return GeographicDecision(decision='unavailable', reason_code='geographic_policy_content_changed',
                     explanation='Replacement policy content changed. Please start a new conversation.')
             c.geographic_hash = decision.artifact_hash
-        c.geographic_notice = decision.explanation if decision.decision != 'allowed' else ''
-        if decision.decision == 'allowed' and c.geographic_binding is None:
+        c.geographic_notice = decision.explanation if decision.decision not in ('allowed', 'ALLOW') else ''
+        if binding_eligible and c.geographic_binding is None:
             method = getattr(app.state.gateway, 'declare_country', None)
             if callable(method):
                 try:
@@ -866,6 +871,12 @@ def create_app(model=None, gateway=None, *, config=None, policy_retriever=None):
             # Every new turn invalidates any previous review before interpreting updates.
             c.review, c.proposal = None, None
             c.compound_approval = None
+            # Suggestions are scoped to the response that created them. A new
+            # country declaration must never retain an earlier country's
+            # block-and-replace capability in the UI.
+            c.suggested_actions = []
+            c.product_offer = None
+            c.country_transition_notice = ''
             # Resolve a customer-owned card suffix at the trusted HTTP boundary
             # before PII tokenisation. The raw suffix is never sent to the model.
             import re
@@ -917,6 +928,9 @@ def create_app(model=None, gateway=None, *, config=None, policy_retriever=None):
 
                 # Invalidate stale draft/submission when country declaration changes
                 if prev_country_code and prev_country_code != country.code:
+                    c.country_transition_notice = (
+                        f'Your current country was updated from {prev_country_code} to {country.code}.'
+                    )
                     if c.draft.get('tool') == 'replace_card':
                         c.draft = {}
                     if c.proposal and c.proposal.name == 'replace_card':
@@ -1011,6 +1025,15 @@ def create_app(model=None, gateway=None, *, config=None, policy_retriever=None):
                     text = text.replace(f'POL-{number:03}', f'banking policy {number}')
                 offer = None
                 suggested_actions = None
+                geographic_decision = snapshot.values.get('geographic_decision') or {}
+                replacement_denied = geographic_decision.get('decision') in ('denied', 'DENY')
+                requested_security_block = bool(re.search(
+                    r'\b(?:block|freeze|lost|stolen|compromised)\b', safe_text, re.IGNORECASE
+                ))
+                if replacement_denied and requested_security_block:
+                    # Replacement is prohibited, but immediate blocking remains
+                    # available and must replace any stale combined suggestion.
+                    suggested_actions = ['block_card']
                 if c.sentiment in ('happy', 'delighted') and not c.draft:
                     from card_chat.policy.engagement import evaluate_engagement_policy
                     engagement = evaluate_engagement_policy(c.sentiment, c.urgency, workflow_completed=True, marketing_consent=True)
@@ -1091,7 +1114,8 @@ def create_app(model=None, gateway=None, *, config=None, policy_retriever=None):
                     name = missing[0]
                     label = spec.entry.field_labels.get(name, spec.input_schema['properties'][name].get('title', name))
                     trace_obj = build_trace(safe_text, c, turn=turn, spec=spec, can_confirm=False, start_time=start_turn_time)
-                    return reply(c, f'I can help with {spec.entry.label.lower()}. Please complete the private details below.',
+                    transition_prefix = (c.country_transition_notice + ' ') if c.country_transition_notice else ''
+                    return reply(c, f'{transition_prefix}I can help with {spec.entry.label.lower()}. Please complete the private details below.',
                                  input_tool=turn.name, trace_data=trace_obj)
                 arguments = spec.validate(partial)
             except ValueError:
@@ -1100,7 +1124,9 @@ def create_app(model=None, gateway=None, *, config=None, policy_retriever=None):
             c.draft = {'tool': turn.name, 'arguments': proposal_arguments}
             if turn.name == 'replace_card':
                 decision = await geographic_review(cid, c)
-                if decision.decision != 'allowed':
+                if decision.decision not in (
+                    'allowed', 'ALLOW', 'requires_human_approval', 'REQUIRES_HUMAN_APPROVAL'
+                ):
                     c.proposal, c.review = None, None
                     trace_obj = build_trace(safe_text, c, turn=turn, spec=spec, can_confirm=False, backend_outcome="replacement_denied_by_policy", start_time=start_turn_time)
                     return reply(c, decision.explanation, trace_data=trace_obj, suggested_actions=['block_card'])
@@ -1209,7 +1235,9 @@ def create_app(model=None, gateway=None, *, config=None, policy_retriever=None):
         c.proposal = ProposedToolCall(body.tool, arguments)
         if body.tool == 'replace_card':
             decision = await geographic_review(cid, c)
-            if decision.decision != 'allowed':
+            if decision.decision not in (
+                'allowed', 'ALLOW', 'requires_human_approval', 'REQUIRES_HUMAN_APPROVAL'
+            ):
                 c.proposal, c.review = None, None
                 return reply(c, decision.explanation)
         if spec.entry.confirmation == 'none':
@@ -1222,6 +1250,72 @@ def create_app(model=None, gateway=None, *, config=None, policy_retriever=None):
         details = '; '.join(f'{label}: {value}' for label, value in spec.masked(arguments).items())
         return reply(c, f'Please review: {spec.entry.label}. {details}.{compound_notice} Confirm with the button or update the secure form.')
 
+    async def submit_replacement_for_fincrime(cid: str, c, decision, evidence):
+        """Create the review case only after the customer confirms the chat action."""
+        from fincrime_servicing.cases import FinCrimeCaseStore
+
+        customer = caller()
+        card_id = str(c.proposal.arguments.get('card_id', ''))
+        owned_card = next(
+            (card for card in customer.get('cards', [])
+             if isinstance(card, dict) and str(card.get('id')) == card_id),
+            None,
+        )
+        if not owned_card:
+            raise HTTPException(409, 'The selected blocked card is no longer available. Review the action again.')
+        account_number = str(owned_card.get('account_number') or '')
+        if not account_number or not c.geographic_binding:
+            raise HTTPException(503, 'The replacement review context is unavailable. Please try again.')
+
+        supervisor = getattr(getattr(app.state, 'orchestrator', None), 'supervisor', None)
+        case_store = (getattr(supervisor, 'case_store', None)
+                      or getattr(supervisor, 'fincrime_store', None)
+                      or FinCrimeCaseStore())
+        thread_id = f'{owner()}:{cid}'
+        country_code = (c.country_context or {}).get('code') or 'UNKNOWN'
+        existing_case = case_store.get_case_by_thread(thread_id)
+        if (existing_case and existing_case.status == 'PENDING'
+                and existing_case.card_id == card_id
+                and existing_case.declared_country == country_code):
+            case = existing_case
+        else:
+            decision_data = decision.model_dump()
+            case = case_store.create_case(
+                customer_id=owner(),
+                customer_username=customer.get('username') or owner(),
+                account_number=account_number,
+                card_id=card_id,
+                card_last4=card_id[-4:],
+                declared_country=country_code,
+                is_overseas=bool(decision_data.get('is_overseas', True)),
+                policy_id=decision_data.get('policy_id', 'POL-006'),
+                policy_version=decision_data.get('version', '1.0.0'),
+                rules_version=decision_data.get('rules_version', '1.0.0'),
+                reason_for_escalation=decision.explanation,
+                rag_evidence=[item.model_dump() if hasattr(item, 'model_dump') else item for item in evidence],
+                evaluation_result={**decision_data, 'geographic_binding': c.geographic_binding},
+                thread_id=thread_id,
+            )
+
+        c.submission = {
+            'tool': 'replace_card',
+            'arguments': dict(c.proposal.arguments),
+            'key': f'fincrime-case:{case.case_id}',
+            'attempted': True,
+            'result': f'Pending FinCrime approval: {case.case_id}',
+        }
+        c.proposal = None
+        c.review = None
+        c.draft = {}
+        c.suggested_actions = []
+        save(cid, c)
+        return reply(
+            c,
+            f'Your replacement request for {country_code} is pending FinCrime staff approval '
+            f'(Case: {case.case_id}). The replacement will be created automatically if approved.',
+            suggested_actions=[],
+        )
+
     async def confirm(cid: str, body: Confirmation, c):
         async with c.lock:
             if not c.review or body.review != c.review or c.proposal is None:
@@ -1230,6 +1324,13 @@ def create_app(model=None, gateway=None, *, config=None, policy_retriever=None):
                 if c.proposal.arguments.get('card_id') != c.compound_approval['card_id']:
                     raise HTTPException(409, 'Review changed. Read the latest review before confirming.')
                 c.compound_approval['status'] = 'confirmed'
+            if c.proposal.name == 'replace_card':
+                decision, evidence = app.state.policy_evaluator.geographic_decision(
+                    c.country_context,
+                    {'POL-006': c.geographic_pin} if c.geographic_pin else {},
+                )
+                if decision.decision in ('requires_human_approval', 'REQUIRES_HUMAN_APPROVAL'):
+                    return await submit_replacement_for_fincrime(cid, c, decision, evidence)
             return await execute(cid, c)
 
     async def run_operation(oid):

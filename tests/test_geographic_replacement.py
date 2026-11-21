@@ -36,6 +36,13 @@ def test_country_mapping(name, code):
     assert normalize_country(name) == code
 
 
+def test_city_location_requires_explicit_country_confirmation():
+    context = declared_country("I am in Sydney")
+    assert context is not None
+    assert context.code == "AU"
+    assert context.status == "ambiguous"
+
+
 @pytest.mark.parametrize('text,code,status', [
     ("I'm currently in North Korea. Block and replace my card", 'KP','explicit'),
     ("I'm in South Korea, block and replace my card", 'KR','explicit'),

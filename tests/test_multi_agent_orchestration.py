@@ -61,6 +61,7 @@ def test_supervisor_routes_to_cards_specialist():
 
 @pytest.mark.parametrize("message", [
     "Show me my active cards.", "What cards do I currently have?", "List my debit cards.",
+    "Get my active cards.",
     "Show all my cards.", "Do I have any active cards?", "Can I see my cards?",
     "Which of my cards are blocked?", "Show my existing cards.",
 ])

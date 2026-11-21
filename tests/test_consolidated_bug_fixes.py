@@ -276,6 +276,16 @@ def test_every_fincrime_case_path_persists_the_geographic_binding():
     assert supervisor_code.count('"geographic_binding": state.get("geographic_binding")') >= 2
 
 
+def test_chat_fincrime_review_is_created_only_after_customer_confirmation():
+    """Transition review must render a confirmable action, then create its case on confirmation."""
+    main_code = Path("src/card_chat/main.py").read_text(encoding="utf-8")
+
+    assert "async def submit_replacement_for_fincrime" in main_code
+    assert "if c.proposal.name == 'replace_card':" in main_code
+    assert "return await submit_replacement_for_fincrime(cid, c, decision, evidence)" in main_code
+    assert "The replacement will be created automatically if approved." in main_code
+
+
 # =============================================================================
 # BUG 3: FinCrime Staff Portal Security & Resilient Architecture
 # =============================================================================
@@ -479,3 +489,55 @@ def test_bug4_multi_turn_au_to_kp_execution_boundary(identity):
         )
         # Stale/denied token must be rejected
         assert confirm_res.status_code in (403, 409)
+
+
+def test_au_to_kp_compound_request_never_offers_block_and_replace(identity):
+    """An explicit KP transition must revoke the prior AU replacement capability."""
+    config, headers = identity
+    app = agent_app(StubModel(), MockGateway(), config=config)
+    with TestClient(app) as client:
+        token = Security(config).issue_customer({
+            "sub": "cust_au_kp_compound",
+            "preferred_username": "au.kp.compound",
+            "accounts": ["ACC-77889900"],
+            "cards": [{"id": "CARD-9900", "account_number": "ACC-77889900", "status": "active"}],
+            "permissions": ["tools:execute"],
+        })
+        h = {**headers(), "X-Customer-Delegation": token}
+        cid = client.post("/conversations", headers=h).json()["id"]
+
+        client.post(
+            f"/conversations/{cid}/messages",
+            json={"text": "I am in Australia."},
+            headers=h,
+        )
+        response = client.post(
+            f"/conversations/{cid}/messages",
+            json={"text": "I am in North Korea and I want to block and replace my card."},
+            headers=h,
+        )
+
+        assert response.status_code == 200
+        body = response.json()
+        assert body.get("confirmation_label") != "Block and replace this card"
+        assert "block_and_replace" not in body.get("suggested_actions", [])
+        assert body.get("input_tool") == "block_card", body
+
+        options = client.get(f"/conversations/{cid}/inputs", headers=h).json()["tools"]
+        block_tool = next(tool for tool in options if tool["name"] == "block_card")
+        card_ref = next(field for field in block_tool["fields"] if field["name"] == "card_id")["options"][0]["ref"]
+        review = client.post(
+            f"/conversations/{cid}/inputs",
+            json={
+                "tool": "block_card",
+                "fields": {"reason": "lost"},
+                "selections": {"card_id": card_ref},
+            },
+            headers=h,
+        ).json()
+        assert review.get("can_confirm") is True
+        assert review.get("confirmation_label") != "Block and replace this card"
+        assert "block_and_replace" not in review.get("suggested_actions", [])
+        review_message = review.get("message", "").lower()
+        assert "updated from au to kp" in review_message
+        assert "restricted" in review_message

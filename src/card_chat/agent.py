@@ -413,13 +413,27 @@ class AgentOrchestrator:
         proposal = final_state.get("proposed_tool")
         gw = gateway or getattr(self, "gateway", None) or getattr(self, "_card_gateway", None)
 
+        # Cases created after an explicit in-chat replacement confirmation are
+        # themselves the immutable execution request. They do not necessarily
+        # have a graph interrupt containing a tool proposal, so reconstruct the
+        # minimum approved request from the case rather than failing approval.
+        geographic_binding = dict((case.evaluation_result or {}).get("geographic_binding") or {})
+        if decision == "approved" and not proposal and gw and geographic_binding:
+            proposal = {
+                "name": "replace_card",
+                "arguments": {
+                    "card_id": case.card_id,
+                    "reason": "Customer-confirmed replacement",
+                },
+            }
+
         if proposal and isinstance(proposal, dict) and proposal.get("name") == "replace_card" and gw:
             tool_args = dict(proposal.get("arguments", {}))
             # The approved case is the immutable execution request. A checkpoint
             # proposal may still contain a model-safe/opaque UI reference.
             tool_args["card_id"] = case.card_id
 
-            rep_ctx = dict((case.evaluation_result or {}).get("geographic_binding") or {})
+            rep_ctx = geographic_binding
             rep_ctx.update({
                 "fincrime_approval": True,
                 "case_id": case_id,

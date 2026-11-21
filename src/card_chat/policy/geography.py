@@ -120,6 +120,7 @@ def declared_country(
         return None
     codes = set()
     ambiguous = False
+    city_inferred = False
     for candidate in candidates:
         if re.search(r'\b(?:or|but|not|no longer|maybe|possibly)\b', candidate, re.I):
             ambiguous = True
@@ -136,14 +137,21 @@ def declared_country(
                         ambiguous = True
         # Split sentence boundaries and workflow instructions, not country names.
         candidate = re.split(r'[.!?;,]|\s+(?:and |please |block |replace |but |or )', candidate, maxsplit=1, flags=re.I)[0].strip()
+        clean_candidate = candidate.strip().casefold()
         code = normalize_country(candidate)
         if not code:
             ambiguous = True
         else:
             codes.add(code)
+            city_inferred = city_inferred or clean_candidate in CITY_TO_COUNTRY
     if ambiguous or len(codes) != 1:
         return CountryContext(status='ambiguous')
     code = next(iter(codes))
+    # A city-to-country mapping is useful as a suggested selection, but it is
+    # still an inference. Require the customer to explicitly confirm the
+    # country before geographic replacement policy can authorize anything.
+    if city_inferred:
+        return CountryContext(code=code, status='ambiguous')
     if proposed and proposed.country_status == 'explicit':
         if normalize_country(proposed.declared_country) != code or normalize_country(proposed.proposed_country_code) != code:
             return CountryContext(status='ambiguous')
