@@ -1323,6 +1323,33 @@ def create_app(model=None, gateway=None, *, config=None, policy_retriever=None):
             if c.proposal.name == 'block_card' and c.compound_approval and c.compound_approval.get('status') == 'reviewed':
                 if c.proposal.arguments.get('card_id') != c.compound_approval['card_id']:
                     raise HTTPException(409, 'Review changed. Read the latest review before confirming.')
+                # Re-derive the latest declaration at the execution boundary.
+                # This also protects reviews created before a stricter parser
+                # deployment from inheriting an older country's authorization.
+                from card_chat.policy.geography import declared_country
+                latest_user_text = next(
+                    (str(turn.get('content', '')) for turn in reversed(c.history)
+                     if turn.get('role') == 'user' and turn.get('kind') == 'chat'),
+                    '',
+                )
+                latest_country = declared_country(latest_user_text, current_context=c.country_context)
+                if (latest_country is not None and
+                        (latest_country.status != 'explicit'
+                         or latest_country.code != (c.country_context or {}).get('code'))):
+                    if latest_country.status == 'explicit':
+                        c.country_context = latest_country.model_dump()
+                    c.geographic_binding = None
+                    c.compound_approval = None
+                    save(cid, c)
+                    # Blocking is the safe subset already authorized by the
+                    # combined review. Execute only that security action; the
+                    # replacement continuation has been revoked.
+                    return await execute(cid, c)
+                current_decision = await geographic_review(cid, c)
+                if current_decision.decision not in ('allowed', 'ALLOW'):
+                    c.compound_approval = None
+                    save(cid, c)
+                    return await execute(cid, c)
                 c.compound_approval['status'] = 'confirmed'
             if c.proposal.name == 'replace_card':
                 decision, evidence = app.state.policy_evaluator.geographic_decision(

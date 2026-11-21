@@ -45,6 +45,7 @@ def test_city_location_requires_explicit_country_confirmation():
 
 @pytest.mark.parametrize('text,code,status', [
     ("I'm currently in North Korea. Block and replace my card", 'KP','explicit'),
+    ("I'm currently North Korea and I want to block and replace my card", 'KP','explicit'),
     ("I'm in South Korea, block and replace my card", 'KR','explicit'),
     ("I'm in Korea",None,'ambiguous'), ("I'm in Australia or North Korea",None,'ambiguous'),
     ("I'm not in North Korea",None,'ambiguous')])

@@ -541,3 +541,34 @@ def test_au_to_kp_compound_request_never_offers_block_and_replace(identity):
         review_message = review.get("message", "").lower()
         assert "updated from au to kp" in review_message
         assert "restricted" in review_message
+
+
+def test_au_to_kp_without_in_never_inherits_australia_authorization(identity):
+    """The observed phrase 'I'm currently North Korea' must revoke AU before review."""
+    config, headers = identity
+    app = agent_app(StubModel(), MockGateway(), config=config)
+    with TestClient(app) as client:
+        token = Security(config).issue_customer({
+            "sub": "cust_au_kp_without_in",
+            "preferred_username": "au.kp.without.in",
+            "accounts": ["ACC-44332211"],
+            "cards": [{"id": "CARD-2211", "account_number": "ACC-44332211", "status": "active"}],
+            "permissions": ["tools:execute"],
+        })
+        h = {**headers(), "X-Customer-Delegation": token}
+        cid = client.post("/conversations", headers=h).json()["id"]
+        client.post(
+            f"/conversations/{cid}/messages",
+            json={"text": "I am in Australia."},
+            headers=h,
+        )
+
+        response = client.post(
+            f"/conversations/{cid}/messages",
+            json={"text": "I'm currently North Korea and I want to block and replace my card"},
+            headers=h,
+        ).json()
+
+        assert response.get("confirmation_label") != "Block and replace this card"
+        assert "block_and_replace" not in response.get("suggested_actions", [])
+        assert response.get("input_tool") == "block_card"

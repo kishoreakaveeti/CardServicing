@@ -88,6 +88,11 @@ def declared_country(
         text,
         re.I,
     ))
+    has_explicit_current_indicator = has_explicit_current_indicator or bool(re.search(
+        r"\bi(?:'m| am)\s+currently\s+(?!in\b|located\s+in\b)",
+        text,
+        re.I,
+    ))
     has_historical_indicator = bool(re.search(
         r"\b(?:visited|was in|were in|went to|returned from|previously lived in|traveled to|travelled to|flew to|last year|last month|last week|yesterday|years ago|months ago)\b",
         text,
@@ -106,6 +111,7 @@ def declared_country(
             return None
 
     patterns = (
+        r"(?:i(?:'m| am)\s+currently)\s+(?!in\b|located\s+in\b)([^.!?;]+)",
         r"(?:i(?:'m| am|’m)\s+(?:currently\s+|now\s+)?(?:in|located in)|my current (?:location|country) is)\s+([^.!?;]+)",
         r"(?:i (?:came|am) back (?:in|to))\s+([^.!?;]+)",
         r"(?:i(?:'m| am|’m)\s+(?:travelling|traveling|commuting|riding|on vacation|on holiday|visiting|staying)\s+(?:(?:on|in)\s+[^.!?;]+\s+)?in)\s+([^.!?;]+)",
