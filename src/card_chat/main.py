@@ -489,6 +489,24 @@ def create_app(model=None, gateway=None, *, config=None, policy_retriever=None):
                                for key, label in spec.entry.result_labels.items() if key in data)
             text = f'{spec.entry.label} succeeded.' + (' ' + fields if fields else '')
             view_cards_empty = False
+            if proposal.name == 'view_accounts':
+                accounts = data.get('accounts') if isinstance(data.get('accounts'), list) else []
+                if not accounts:
+                    text = ('You do not have any accounts right now. Select View Accounts to open the '
+                            'Accounts section, then choose Create account if you would like to open one.')
+                else:
+                    summaries = []
+                    for account in accounts:
+                        if isinstance(account, dict):
+                            number = str(account.get('account_number') or account.get('id') or '')
+                            account_type = str(account.get('account_type') or account.get('type') or 'bank').replace('_', ' ')
+                            status = str(account.get('status') or 'active')
+                        else:
+                            number, account_type, status = str(account), 'bank', 'active'
+                        reference = number[-4:] if number else 'unknown'
+                        summaries.append(f'{account_type} account ending {reference} ({status})')
+                    text = (f'You have {len(accounts)} account{"s" if len(accounts) != 1 else ""}: '
+                            + ', '.join(summaries) + '. Select View Accounts to open the Accounts section.')
             if proposal.name == 'view_cards':
                 cards = data.get('cards') if isinstance(data.get('cards'), list) else []
                 latest_request = next((str(t.get('content', '')) for t in reversed(c.history)
@@ -637,7 +655,9 @@ def create_app(model=None, gateway=None, *, config=None, policy_retriever=None):
             if c.submission and c.submission['result'] is not None:
                 c.submission['result'] = text
             response = reply(c, text,
-                             suggested_actions=['view_cards'] if view_cards_empty else None)
+                             suggested_actions=(['view_cards'] if proposal.name == 'view_cards'
+                                                else ['view_accounts'] if proposal.name == 'view_accounts'
+                                                else None))
             if proposal.name in ('view_accounts', 'view_cards'):
                 response['data'] = data
             return response
@@ -905,6 +925,13 @@ def create_app(model=None, gateway=None, *, config=None, policy_retriever=None):
                 if safe_text == PRIVATE_PASTE or safe_text != body.text:
                     c.history.append({'role': 'user', 'content': safe_text, 'kind': 'chat'})
                     return reply(c, PRIVATE_NOTICE)
+            block_only_request = bool(re.search(r'\b(?:block|freeze|stop)\b.{0,40}\bcard\b',
+                                                safe_text, re.IGNORECASE)) and not bool(re.search(
+                r'\b(?:replace|replacement|reissue|re-issue)\b', safe_text, re.IGNORECASE))
+            if block_only_request:
+                c.country_required = False
+                if c.draft.get('tool') == 'replace_card':
+                    c.draft = {}
             c.history.append({'role': 'user', 'content': safe_text, 'kind': 'chat'})
             from time import perf_counter
             start_turn_time = perf_counter()
@@ -947,10 +974,14 @@ def create_app(model=None, gateway=None, *, config=None, policy_retriever=None):
                     except Exception:
                         c.geographic_binding = None
                 if continuing_country_form:
-                    pending_intents = (['block_card', 'replace_card'] if c.draft.get('tool') == 'block_card'
-                                       else ['replace_card'])
+                    graph_config = {'configurable': {'thread_id': f'{owner()}:{cid}'}}
+                    pending_snapshot = await app.state.orchestrator.workflow.aget_state(graph_config)
+                    pending_intents = list(pending_snapshot.values.get('geographic_pending_intents') or [])
+                    if not pending_intents:
+                        pending_intents = (['block_card', 'replace_card']
+                                           if c.draft.get('tool') == 'block_card' else ['replace_card'])
                     await app.state.orchestrator.workflow.aupdate_state(
-                        {'configurable': {'thread_id': f'{owner()}:{cid}'}},
+                        graph_config,
                         {'country_context': c.country_context, 'geographic_pending_intents': pending_intents},
                         as_node='supervisor')
                 elif not is_pure_country_reply:
@@ -987,6 +1018,12 @@ def create_app(model=None, gateway=None, *, config=None, policy_retriever=None):
                     'input_schema': {'type': 'object', 'properties': {}, 'additionalProperties': False}}
             history, draft, tools = build_context([turn for turn in c.history if turn.get('kind') in ('chat', 'model')],
                 verified_draft, model_tools, private_values=private_values(c))
+            # A unique last-four match is resolved against caller-owned cards at
+            # the trusted HTTP boundary. Make it available to policy/orchestration
+            # as an authorized fact without adding the raw identifier to model
+            # history or draft context.
+            if requested_card_id:
+                authorized_arguments = {**authorized_arguments, 'card_id': requested_card_id}
             c.usage['model_calls'] = c.usage.get('model_calls', 0) + 1
             try:
                 turn = await app.state.agent.interpret_turn(
@@ -1007,7 +1044,7 @@ def create_app(model=None, gateway=None, *, config=None, policy_retriever=None):
             if isinstance(turn, CustomerReply):
                 import re
                 asks_to_view_cards = bool(re.search(
-                    r"\b(show|view|see|list|display)\b.*\b(my\s+)?cards?\b|\bwhat cards?\b|\bdo i have (any )?cards?\b",
+                    r"\b(show|view|see|list|display)\b.*\b(my\s+)?cards?\b|\bwhat cards?\b|\bdo i have (any )?cards?\b|\bhow many cards?\b|\bnumber of (?:my )?cards?\b",
                     safe_text, re.IGNORECASE))
                 if asks_to_view_cards and not caller().get('cards'):
                     trace_obj = build_trace(safe_text, c, can_confirm=False,
@@ -1017,6 +1054,13 @@ def create_app(model=None, gateway=None, *, config=None, policy_retriever=None):
                         language=True, suggested_actions=['view_cards'], trace_data=trace_obj)
                 snapshot = await app.state.orchestrator.workflow.aget_state(
                     {'configurable': {'thread_id': f'{owner()}:{cid}'}})
+                pending_geo_intents = snapshot.values.get('geographic_pending_intents') or []
+                if requested_card_id and 'replace_card' in pending_geo_intents:
+                    # Preserve the trusted last-four selection across the
+                    # mandatory country-confirmation turn as an opaque binding.
+                    card_ref = bind(c.bindings, cid, owner(), 'replace_card',
+                                    'card_id', requested_card_id)
+                    c.draft = {'tool': 'replace_card', 'arguments': {'card_id': card_ref}}
                 c.country_required = (snapshot.values.get('geographic_decision') or {}).get('decision') == 'clarification_required'
                 # Numeric policy identifiers resemble private PINs to the conservative
                 # chat scrubber. Keep exact citations in graph state and render names.
@@ -1053,7 +1097,7 @@ def create_app(model=None, gateway=None, *, config=None, policy_retriever=None):
             graph_config = {'configurable': {'thread_id': f'{owner()}:{cid}'}}
             snapshot = await app.state.orchestrator.workflow.aget_state(graph_config)
             decision = snapshot.values.get('policy_evaluation', {})
-            geo_dec = snapshot.values.get('geographic_decision', {})
+            geo_dec = snapshot.values.get('geographic_decision') or {}
             if (turn.name in ('issue_card', 'create_card') and
                     geo_dec.get('decision') in ('denied', 'DENY') and
                     any(item.get('intent') == 'replace_card' for item in snapshot.values.get('action_plan', []))):
@@ -1114,7 +1158,19 @@ def create_app(model=None, gateway=None, *, config=None, policy_retriever=None):
                     name = missing[0]
                     label = spec.entry.field_labels.get(name, spec.input_schema['properties'][name].get('title', name))
                     trace_obj = build_trace(safe_text, c, turn=turn, spec=spec, can_confirm=False, start_time=start_turn_time)
-                    transition_prefix = (c.country_transition_notice + ' ') if c.country_transition_notice else ''
+                    prefix_parts = [c.country_transition_notice] if c.country_transition_notice else []
+                    geographic_notice = snapshot.values.get('geographic_notice')
+                    if turn.name == 'block_card' and geographic_notice:
+                        prefix_parts.append(f'Replacement notice: {geographic_notice}')
+                    transition_prefix = (' '.join(prefix_parts) + ' ') if prefix_parts else ''
+                    if turn.name == 'block_card' and name == 'card_id':
+                        active_cards = [card for card in caller().get('cards', [])
+                                        if not isinstance(card, dict) or card.get('status') != 'blocked']
+                        if not active_cards:
+                            c.draft = {}
+                            return reply(c,
+                                'You do not have an active card available to block. Select View Cards to review your cards.',
+                                suggested_actions=['view_cards'], trace_data=trace_obj)
                     return reply(c, f'{transition_prefix}I can help with {spec.entry.label.lower()}. Please complete the private details below.',
                                  input_tool=turn.name, trace_data=trace_obj)
                 arguments = spec.validate(partial)

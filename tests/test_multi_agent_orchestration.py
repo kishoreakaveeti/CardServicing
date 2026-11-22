@@ -2,6 +2,7 @@
 import asyncio
 import pytest
 from unittest.mock import AsyncMock
+from types import SimpleNamespace
 
 from card_chat.agent import CardServicingAgent, FinCrimeAgent, AgentOrchestrator
 from card_chat.orchestration.contracts import AgentHandoff, HandoffResult
@@ -62,6 +63,8 @@ def test_supervisor_routes_to_cards_specialist():
 @pytest.mark.parametrize("message", [
     "Show me my active cards.", "What cards do I currently have?", "List my debit cards.",
     "Get my active cards.",
+    "Get the list of my cards.",
+    "How many cards do I have?", "What is the number of cards I have?",
     "Show all my cards.", "Do I have any active cards?", "Can I see my cards?",
     "Which of my cards are blocked?", "Show my existing cards.",
 ])
@@ -76,6 +79,145 @@ def test_supervisor_routes_card_inquiry_phrases_to_view_cards(message):
         })
         assert result["next_step"] == "cards_agent"
         assert result["current_handoff"].intent == "view_cards"
+    asyncio.run(scenario())
+
+
+def test_supervisor_model_semantically_classifies_unseen_card_enquiry():
+    """The production model, not phrase matching, owns natural-language intent."""
+    async def scenario():
+        messages = AsyncMock(return_value=SimpleNamespace(
+            content=[SimpleNamespace(type="text", text=(
+                '{"intents":["view_cards"],"reply":null,"declared_country":null,'
+                '"proposed_country_code":null,"country_status":"unknown",'
+                '"policy_query":"geographic card replacement eligibility excluded countries"}'
+            ))]
+        ))
+        model = SimpleNamespace(
+            client=SimpleNamespace(messages=SimpleNamespace(create=messages)),
+            model="claude-test",
+        )
+        supervisor = SupervisorAgent(model)
+        result = await supervisor.plan_or_route({
+            "messages": [{"role": "user", "content": "Tell me the size of my plastic portfolio."}],
+            "allowed_tools": {"view_cards": {}, "issue_card": {}},
+            "iteration_count": 0,
+            "handoff_history": [],
+        })
+
+        assert result["current_handoff"].intent == "view_cards"
+        sent_text = messages.await_args.kwargs["messages"][0]["content"]
+        assert sent_text == "Tell me the size of my plastic portfolio."
+
+    asyncio.run(scenario())
+
+
+def test_cards_specialist_executes_validated_view_intent_without_second_model_call():
+    async def scenario():
+        agent = AsyncMock()
+        node = CardsSpecialistNode(agent)
+        result = await node.execute({
+            "current_handoff": AgentHandoff(
+                origin_agent="supervisor",
+                target_agent="cards_agent",
+                intent="view_cards",
+                session_id="session",
+            ),
+            "allowed_tools": {"view_cards": {
+                "name": "view_cards",
+                "description": "View the customer's cards",
+                "input_schema": {"type": "object", "properties": {}},
+            }},
+            "messages": [{"role": "user", "content": "Show me my cards"}],
+            "verified_draft": {},
+            "handoff_history": [],
+        })
+
+        assert result["proposed_tool"] == {"name": "view_cards", "arguments": {}}
+        agent.interpret_turn.assert_not_awaited()
+
+    asyncio.run(scenario())
+
+
+@pytest.mark.parametrize("intent", ["create_account", "issue_card", "create_card"])
+def test_cards_specialist_opens_validated_create_form_without_second_model_call(intent):
+    async def scenario():
+        agent = AsyncMock()
+        node = CardsSpecialistNode(agent)
+        result = await node.execute({
+            "current_handoff": AgentHandoff(
+                origin_agent="supervisor", target_agent="cards_agent",
+                intent=intent, session_id="session",
+            ),
+            "allowed_tools": {intent: {
+                "name": intent, "description": f"Open {intent}",
+                "input_schema": {"type": "object", "properties": {}},
+            }},
+            "messages": [{"role": "user", "content": "I want to create an account"}],
+            "verified_draft": {}, "handoff_history": [],
+        })
+
+        assert result["proposed_tool"]["name"] == intent
+        agent.interpret_turn.assert_not_awaited()
+    asyncio.run(scenario())
+
+
+@pytest.mark.parametrize("intent", ["block_card", "unblock_card"])
+def test_fincrime_specialist_opens_validated_form_without_remote_model_call(intent):
+    async def scenario():
+        agent = AsyncMock()
+        node = FinCrimeSpecialistNode(agent)
+        result = await node.execute({
+            "current_handoff": AgentHandoff(
+                origin_agent="supervisor", target_agent="fincrime_agent",
+                intent=intent, session_id="session",
+            ),
+            "allowed_tools": {intent: {
+                "name": intent, "description": f"Open {intent}",
+                "input_schema": {"type": "object", "properties": {}},
+            }},
+            "messages": [{"role": "user", "content": "Please secure my card"}],
+            "verified_draft": {}, "handoff_history": [],
+        })
+
+        assert result["proposed_tool"]["name"] == intent
+        agent.interpret_turn.assert_not_awaited()
+    asyncio.run(scenario())
+
+
+@pytest.mark.parametrize("message", [
+    "show my cards", "show me my cards", "view my cards", "list my cards",
+    "get my cards", "get me my cards",
+])
+def test_explicit_card_view_cannot_be_overridden_by_model_clarification(message):
+    async def scenario():
+        model = SimpleNamespace(
+            client=SimpleNamespace(messages=SimpleNamespace(create=AsyncMock())),
+            model="claude-test",
+        )
+        supervisor = SupervisorAgent(model)
+        target, intents, reply = await supervisor._classify_and_plan(
+            message, {"view_cards": {}, "issue_card": {}}, {}
+        )
+
+        assert (target, intents, reply) == ("cards_agent", ["view_cards"], None)
+        model.client.messages.create.assert_not_awaited()
+
+    asyncio.run(scenario())
+
+
+@pytest.mark.parametrize("message", ["Can I block my card?", "I want to block my card", "Block my card"])
+def test_explicit_block_only_request_never_becomes_replacement(message):
+    async def scenario():
+        model = SimpleNamespace(
+            client=SimpleNamespace(messages=SimpleNamespace(create=AsyncMock())),
+            model="claude-test",
+        )
+        supervisor = SupervisorAgent(model)
+        target, intents, reply = await supervisor._classify_and_plan(
+            message, {"block_card": {}, "replace_card": {}}, {}
+        )
+        assert (target, intents, reply) == ("fincrime_agent", ["block_card"], None)
+        model.client.messages.create.assert_not_awaited()
     asyncio.run(scenario())
 
 
@@ -391,7 +533,7 @@ def test_supervisor_routes_issue_new_card_to_cards_agent():
         model = StubModel()
         supervisor = SupervisorAgent(model)
         state = {
-            "messages": [{"role": "user", "content": "Issue a new card"}],
+            "messages": [{"role": "user", "content": "Hey, I want a new card on an account"}],
             "allowed_tools": {"issue_card": {}, "view_accounts": {}},
             "iteration_count": 0,
             "handoff_history": [],
@@ -401,6 +543,26 @@ def test_supervisor_routes_issue_new_card_to_cards_agent():
         assert result["active_agent"] == "cards_agent"
         assert result["current_handoff"].intent == "issue_card"
         assert result["current_handoff"].target_agent == "cards_agent"
+
+    asyncio.run(scenario())
+
+
+def test_card_issuance_does_not_infer_account_before_secure_selection():
+    """Account policy facts are retrieved only after the customer selects an account."""
+    async def scenario():
+        facts_retriever = AsyncMock(return_value={
+            "account_number": "should-not-be-inferred",
+            "has_blocked_card": True,
+        })
+        supervisor = SupervisorAgent(StubModel(), facts_retriever_fn=facts_retriever)
+
+        facts = await supervisor._retrieve_domain_facts({
+            "verified_draft": {"tool": "issue_card", "arguments": {}},
+            "authorized_arguments": {},
+        }, "issue_card")
+
+        assert facts == {}
+        facts_retriever.assert_not_awaited()
 
     asyncio.run(scenario())
 

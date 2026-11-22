@@ -78,8 +78,30 @@ class CardsSpecialistNode:
             safe_messages, safe_draft, _ = build_context(messages, draft, cards_tools)
             gateway.verify_outbound(str(safe_messages) + " " + str(safe_draft))
 
-        # Deterministic create_account proposal if model has no queued outputs
-        if intent == "create_account" and _is_unconfigured_stub(self.agent):
+        # The supervisor has already used the model to classify and authorize
+        # these unambiguous read-only intents. Do not ask a second model call to
+        # rediscover the same tool; that can turn a valid view request into a
+        # generic clarification. Execution remains constrained to the filtered
+        # specialist allow-list.
+        if intent in ("view_cards", "view_accounts") and intent in cards_tools:
+            result = HandoffResult(
+                source_agent=self.name,
+                status="requires_confirmation",
+                message=f"I have prepared {intent}.",
+                tool_proposal={"name": intent, "arguments": {}},
+            )
+            history = list(state.get("handoff_history", [])) + [result]
+            return {
+                "handoff_history": history,
+                "active_agent": self.name,
+                "proposed_tool": {"name": intent, "arguments": {}},
+                "next_step": "supervisor",
+            }
+
+        # The supervisor already classified and allow-listed account creation.
+        # Build the secure form proposal directly; a second model call adds no
+        # authority and can incorrectly turn a valid request into an error.
+        if intent == "create_account" and intent in cards_tools:
             last_user_text = next((m.get("content", "").lower() for m in reversed(messages) if m.get("role") == "user"), "")
             acc_type = context_arguments.get("account_type")
             if not acc_type:
@@ -108,8 +130,8 @@ class CardsSpecialistNode:
                 "next_step": "supervisor",
             }
 
-        # Deterministic issue_card / create_card proposal if model has no queued outputs
-        if intent in ("issue_card", "create_card") and _is_unconfigured_stub(self.agent):
+        # New-card intents likewise open their authorized secure form directly.
+        if intent in ("issue_card", "create_card") and intent in cards_tools:
             target_acc = (
                 context_arguments.get("account_number")
                 or verified_draft.get("arguments", {}).get("account_number")
@@ -248,8 +270,10 @@ class FinCrimeSpecialistNode:
             safe_messages, safe_draft, _ = build_context(messages, draft, fincrime_tools)
             gateway.verify_outbound(str(safe_messages) + " " + str(safe_draft))
 
-        # Deterministic unblock_card proposal if model has no queued outputs
-        if intent == "unblock_card" and _is_unconfigured_stub(self.agent):
+        # The supervisor has already classified and authorized the FinCrime
+        # intent. Open the secure form directly; the remote service executes
+        # the reviewed transaction and does not need to rediscover intent.
+        if intent == "unblock_card" and intent in fincrime_tools:
             target_card_id = (
                 context_arguments.get("card_id")
                 or verified_draft.get("arguments", {}).get("card_id")
@@ -273,9 +297,7 @@ class FinCrimeSpecialistNode:
                 "next_step": "supervisor",
             }
 
-        # Deterministic block_card proposal if card_id is known and model has no queued outputs
-        if intent == "block_card" and ((_is_unconfigured_stub(self.agent) and context_arguments.get("card_id"))
-                or state.get('planned_intents')):
+        if intent == "block_card" and intent in fincrime_tools:
             tool_args = {"reason": context_arguments.get("reason", "Customer requested blocking")}
             if context_arguments.get('card_id'):
                 tool_args['card_id'] = context_arguments['card_id']

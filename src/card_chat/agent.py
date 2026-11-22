@@ -193,7 +193,12 @@ class AgentOrchestrator:
             'country_context': country_context or prior_state.get('country_context', {}),
             'geographic_binding': geographic_binding or prior_state.get('geographic_binding'),
             'geographic_notice': None,
-            'geographic_pending_intents': prior_state.get('geographic_pending_intents', []),
+            'geographic_pending_intents': ([] if explicit_new_action
+                                           else prior_state.get('geographic_pending_intents', [])),
+            # A fresh explicit action must be evaluated from the latest country
+            # declaration. Never carry an earlier country's decision or staff
+            # approval case into the new request.
+            'geographic_decision': None if explicit_new_action else prior_state.get('geographic_decision'),
             "owner": owner or prior_state.get("owner", "customer"),
             "session_id": session_id or prior_state.get("session_id", "default"),
             "workflow_id": workflow_id or prior_state.get("workflow_id", stable_thread),
@@ -204,6 +209,7 @@ class AgentOrchestrator:
             "handoff_history": [],
             "iteration_count": 0,
             "active_agent": None,
+            "current_handoff": None,
             "planned_intents": prior_state.get("planned_intents", []) if continues_question else [],
             "completed_intents": prior_state.get("completed_intents", []),
             "action_plan": prior_state.get("action_plan", []) if continues_question else [],
@@ -211,6 +217,10 @@ class AgentOrchestrator:
             "pinned_policies": prior_state.get("pinned_policies", {}) if continues_question else {},
             "policy_planning": None,
             "verified_domain_facts": {},
+            "fincrime_case_id": None if explicit_new_action else prior_state.get("fincrime_case_id"),
+            "fincrime_approved": None if explicit_new_action else prior_state.get("fincrime_approved"),
+            "fincrime_approval_reason": None if explicit_new_action else prior_state.get("fincrime_approval_reason"),
+            "pending_fincrime_approval": None if explicit_new_action else prior_state.get("pending_fincrime_approval"),
             # Domain events are consumed during execution resumption, not replayed
             # as fresh events when another customer message starts a graph run.
             "last_domain_event": None,

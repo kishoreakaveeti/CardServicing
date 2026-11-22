@@ -108,6 +108,152 @@ class Gateway:
         return {'ok':True, 'result': {'card_id':arguments.get('card_id'), 'status':'blocked', 'last_block_reason':'lost'}}
 
 
+@pytest.mark.parametrize("prompt,expects_review", [
+    ("Please request a replacement for my blocked card ending in 7012.", True),
+    ("Replace my blocked card.", False),
+])
+def test_replacement_uses_unique_last_four_or_opens_blocked_card_picker(
+        geo_retriever, prompt, expects_review):
+    gateway = Gateway()
+    app = create_app(StubModel(), gateway, policy_retriever=geo_retriever, config={
+        'LOCAL_CUSTOMER': {'sub':'test', 'username':'demo', 'accounts':['ACC-SYNTHETIC'],
+            'permissions':['tools:execute'], 'cards':[
+                {'id':'CARD-7012', 'account_number':'ACC-SYNTHETIC',
+                 'card_number':'SIM-7012', 'status':'blocked', 'reason':'lost'},
+            ]}})
+    with TestClient(app) as client:
+        cid = client.post('/conversations').json()['id']
+        path = '/conversations/' + cid
+        client.post(path + '/messages', json={'text':'I am currently in Australia.'})
+        country_prompt = client.post(path + '/messages', json={'text':prompt}).json()
+        assert country_prompt['country_required'] is True, country_prompt
+        assert 'explicitly confirm the country' in country_prompt['message'].lower()
+        response = client.post(path + '/messages', json={'text':'Australia'}).json()
+
+        if expects_review:
+            assert response['can_confirm'] is True, response
+            assert response['input_tool'] is None
+            assert response['confirmation_label'] == 'Replace this card'
+        else:
+            assert response['can_confirm'] is False, response
+            assert response['input_tool'] == 'replace_card'
+            options = client.get(path + '/inputs').json()['tools']
+            tool = next(item for item in options if item['name'] == 'replace_card')
+            cards = next(field for field in tool['fields'] if field['name'] == 'card_id')['options']
+            assert len(cards) == 1 and cards[0]['label'].endswith('[BLOCKED]')
+
+
+def test_each_replacement_request_requires_fresh_country_confirmation(geo_retriever):
+    gateway = Gateway()
+    app = create_app(StubModel(), gateway, policy_retriever=geo_retriever, config={
+        'LOCAL_CUSTOMER': {'sub':'test', 'username':'demo', 'accounts':['ACC-SYNTHETIC'],
+            'permissions':['tools:execute'], 'cards':[
+                {'id':'CARD-7012', 'account_number':'ACC-SYNTHETIC',
+                 'card_number':'SIM-7012', 'status':'blocked', 'reason':'lost'},
+            ]}})
+    with TestClient(app) as client:
+        cid = client.post('/conversations').json()['id']
+        path = '/conversations/' + cid
+
+        first = client.post(path + '/messages', json={
+            'text':'I am in New Zealand. Replace my blocked card.'}).json()
+        assert first['country_required'] and 'explicitly confirm' in first['message'].lower()
+
+        # A later replacement request must not reuse New Zealand, and must not
+        # replay its FinCrime approval state when North Korea is declared.
+        client.post(path + '/messages', json={'text':'New Zealand'})
+        second = client.post(path + '/messages', json={
+            'text':'I am in North Korea, block it and replace it.'}).json()
+        assert second['country_required'] and 'explicitly confirm' in second['message'].lower()
+        assert 'new zealand' not in second['message'].lower()
+
+        confirmed = client.post(path + '/messages', json={'text':'North Korea'}).json()
+        assert 'new zealand' not in confirmed['message'].lower()
+        assert 'pending fincrime' not in confirmed['message'].lower()
+        state = client.portal.call(app.state.orchestrator.workflow.aget_state,
+            {'configurable':{'thread_id':f'isolated-test:{cid}'}}).values
+        assert state['country_context']['code'] == 'KP'
+        assert state['geographic_decision']['decision'] == 'denied'
+        assert not state.get('pending_fincrime_approval')
+
+
+def test_country_confirmation_preserves_block_then_replace_order(geo_retriever):
+    customer = {'sub':'test', 'username':'demo', 'accounts':['ACC-SYNTHETIC'],
+        'permissions':['tools:execute'], 'cards':[
+            {'id':'CARD-ACTIVE', 'account_number':'ACC-SYNTHETIC',
+             'card_number':'SIM-7012', 'status':'created'}]}
+    class UpdatingGateway(Gateway):
+        async def execute(self, name, arguments, key=None, **kwargs):
+            result = await super().execute(name, arguments, key, **kwargs)
+            if name == 'block_card':
+                customer['cards'][0].update(status='blocked', reason='lost')
+            return result
+    gateway = UpdatingGateway()
+    app = create_app(StubModel(), gateway, policy_retriever=geo_retriever,
+                     config={'LOCAL_CUSTOMER': customer})
+    with TestClient(app) as client:
+        cid = client.post('/conversations').json()['id']; path = '/conversations/' + cid
+        asked = client.post(path + '/messages', json={'text':
+            "I'm in Sydney, Australia. I lost my card; block it and issue a replacement."}).json()
+        assert asked['country_required']
+
+        resumed = client.post(path + '/messages', json={'text':'Australia'}).json()
+        assert resumed['input_tool'] == 'block_card', resumed
+        options = client.get(path + '/inputs').json()['tools']
+        block = next(t for t in options if t['name'] == 'block_card')
+        ref = next(f for f in block['fields'] if f['name'] == 'card_id')['options'][0]['ref']
+        review = client.post(path + '/inputs', json={'tool':'block_card',
+            'fields':{'reason':'lost'}, 'selections':{'card_id':ref}}).json()
+        assert review['confirmation_label'] == 'Block and replace this card', review
+
+        done = client.post(path + '/confirm', json={'review':review['review']}).json()
+        assert [call[0] for call in gateway.calls] == ['block_card', 'replace_card'], done
+
+
+def test_fresh_block_only_request_clears_pending_replacement_country_flow(geo_retriever):
+    gateway = Gateway()
+    app = create_app(StubModel(), gateway, policy_retriever=geo_retriever, config={
+        'LOCAL_CUSTOMER': {'sub':'test', 'username':'demo', 'accounts':['ACC-SYNTHETIC'],
+            'permissions':['tools:execute'], 'cards':[
+                {'id':'CARD-ACTIVE', 'account_number':'ACC-SYNTHETIC',
+                 'card_number':'SIM-7012', 'status':'created'}]}})
+    with TestClient(app) as client:
+        cid = client.post('/conversations').json()['id']; path = '/conversations/' + cid
+        replacement = client.post(path + '/messages', json={'text':'Replace my card'}).json()
+        assert replacement['country_required']
+
+        blocked = client.post(path + '/messages', json={'text':'I want to block my card'}).json()
+        assert blocked['country_required'] is False, blocked
+        assert blocked['input_tool'] == 'block_card', blocked
+        options = client.get(path + '/inputs').json()['tools']
+        block = next(t for t in options if t['name'] == 'block_card')
+        cards = next(f for f in block['fields'] if f['name'] == 'card_id')['options']
+        assert len(cards) == 1 and cards[0]['label'].endswith('[CREATED]')
+
+
+def test_north_korea_denies_replacement_but_still_opens_block_form(geo_retriever):
+    gateway = Gateway()
+    app = create_app(StubModel(), gateway, policy_retriever=geo_retriever, config={
+        'LOCAL_CUSTOMER': {'sub':'test', 'username':'demo', 'accounts':['ACC-SYNTHETIC'],
+            'permissions':['tools:execute'], 'cards':[
+                {'id':'CARD-ACTIVE', 'account_number':'ACC-SYNTHETIC',
+                 'card_number':'SIM-7012', 'status':'created'}]}})
+    with TestClient(app) as client:
+        cid = client.post('/conversations').json()['id']; path = '/conversations/' + cid
+        asked = client.post(path + '/messages', json={'text':
+            "I'm in North Korea and I lost my card; block it and replace it."}).json()
+        assert asked['country_required']
+
+        confirmed = client.post(path + '/messages', json={'text':'North Korea'}).json()
+        assert confirmed['input_tool'] == 'block_card', confirmed
+        assert 'unexpected response' not in confirmed['message'].lower()
+        assert 'replacement is restricted' in confirmed['message'].lower()
+        options = client.get(path + '/inputs').json()['tools']
+        block = next(t for t in options if t['name'] == 'block_card')
+        cards = next(f for f in block['fields'] if f['name'] == 'card_id')['options']
+        assert len(cards) == 1
+
+
 @pytest.mark.parametrize('country,combined,has_planned', [
     ('Australia', True, True),
     ('South Korea', False, True),

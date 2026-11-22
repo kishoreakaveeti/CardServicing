@@ -39,6 +39,8 @@ function App() {
   const [password, setPassword] = useState('');
 
   const usernameInputRef = useRef<HTMLInputElement | null>(null);
+  const conversationIdRef = useRef('');
+  const conversationStartRef = useRef<Promise<Reply | undefined> | null>(null);
 
   // Load session on startup
   useEffect(() => {
@@ -59,7 +61,10 @@ function App() {
       try {
         const savedCid = sessionStorage.getItem(`neobank_cid_${session.name}`);
         const savedMessages = sessionStorage.getItem(`neobank_chat_${session.name}`);
-        if (savedCid) setCid(savedCid);
+        if (savedCid) {
+          conversationIdRef.current = savedCid;
+          setCid(savedCid);
+        }
         if (savedMessages) {
           const parsed = JSON.parse(savedMessages);
           if (Array.isArray(parsed) && parsed.length > 0) {
@@ -191,6 +196,7 @@ function App() {
       }
 
       if (value.id) {
+        conversationIdRef.current = value.id;
         setCid(value.id);
       }
 
@@ -238,6 +244,29 @@ function App() {
     }
   }
 
+  function ensureConversation() {
+    const existingId = conversationIdRef.current || cid;
+    if (existingId) return Promise.resolve({ id: existingId } as Reply);
+    if (!conversationStartRef.current) {
+      conversationStartRef.current = request({
+        path: '/api/conversations',
+        body: {},
+        key: crypto.randomUUID(),
+      }).finally(() => {
+        conversationStartRef.current = null;
+      });
+    }
+    return conversationStartRef.current;
+  }
+
+  // Create the conversation as soon as chat opens so the greeting is the
+  // first message, rather than a response to the customer's first turn.
+  useEffect(() => {
+    if (session && currentTab === 'chat' && !cid) {
+      void ensureConversation();
+    }
+  }, [session, currentTab, cid]);
+
   function choose(name: string) {
     const read = name.startsWith('view_');
     return read ? request({ path: `/api/conversations/${cid}/inputs`, body: { tool: name, fields: {}, selections: {} }, key: crypto.randomUUID() }) : null;
@@ -272,6 +301,9 @@ function App() {
   async function handleSendMessage(text: string) {
     if (!text.trim() || busy) return;
 
+    const conversation = await ensureConversation();
+    if (!conversation?.id) return;
+
     const userMsg: ChatMessage = {
       id: crypto.randomUUID(),
       sender: 'user',
@@ -282,25 +314,11 @@ function App() {
     setMessages((prev) => [...prev, userMsg]);
     addActivity('Chat Inquiry', text.slice(0, 48) + (text.length > 48 ? '...' : ''), 'security');
 
-    if (!cid) {
-      const init = await request({
-        path: '/api/conversations',
-        body: {},
-        key: crypto.randomUUID(),
-      });
-      if (!init?.id) return;
-      await request({
-        path: `/api/conversations/${init.id}/messages`,
-        body: { text },
-        key: crypto.randomUUID(),
-      });
-    } else {
-      await request({
-        path: `/api/conversations/${cid}/messages`,
-        body: { text },
-        key: crypto.randomUUID(),
-      });
-    }
+    await request({
+      path: `/api/conversations/${conversation.id}/messages`,
+      body: { text },
+      key: crypto.randomUUID(),
+    });
   }
 
   async function handleConfirmAction() {
@@ -460,6 +478,7 @@ function App() {
       setAuthAction('');
       setUsername('');
       setCid('');
+      conversationIdRef.current = '';
       setMessages([]);
       addActivity('Authentication', `Logged in as ${data.name}`, 'auth');
       refreshBankingData();
@@ -484,6 +503,7 @@ function App() {
     }
     setSession(null);
     setCid('');
+    conversationIdRef.current = '';
     setMessages([]);
     setAccounts([]);
     setCards([]);

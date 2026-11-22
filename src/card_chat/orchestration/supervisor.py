@@ -99,6 +99,14 @@ class SupervisorAgent:
         account_number = (authorized_args.get("account_number") or draft_args.get("account_number")
                           or facts.get("account_number"))
 
+        # Do not infer an account for a new-card request. The customer must
+        # select it through the secure account picker before account-specific
+        # blocked-card policy is evaluated. This prevents an unrelated or sole
+        # blocked account from turning the initial form-opening turn into a
+        # restricted-issuance recommendation failure.
+        if intent in ('issue_card', 'create_card') and not account_number:
+            return {}
+
         if self.facts_retriever_fn:
             try:
                 retrieved = await self.facts_retriever_fn(account_number=account_number, state=state)
@@ -564,6 +572,7 @@ class SupervisorAgent:
             }
         from card_chat.policy.planning import needs_policy_planning
         planning = state.get('policy_planning')
+        confirmed_country_for_replacement = False
         if needs_policy_planning(user_text) and not planning:
             emit_agent_trace('policy_planning', intent='overseas_lost_card', outcome='retrieval_required')
             return {'next_step': 'policy_search', 'iteration_count': iterations}
@@ -572,6 +581,7 @@ class SupervisorAgent:
         elif clarified and is_pure_country and state.get('geographic_pending_intents'):
             detected_intents = list(state['geographic_pending_intents'])
             target_agent, direct_reply = get_target_agent_for_intent(detected_intents[0]), None
+            confirmed_country_for_replacement = True
         else:
             interpretation = {}
             target_agent, detected_intents, direct_reply = await self._classify_and_plan(
@@ -591,14 +601,20 @@ class SupervisorAgent:
         # Authoritative versioning and multi-turn country transition handling
         prev_code = prev_country.get('code')
         new_code = country.get('code')
-        country_changed = bool(clarified and clarified.status == 'explicit' and prev_code and prev_code != new_code)
+        previous_declared_code = country.get('previous_code')
+        country_changed = bool(
+            clarified and clarified.status == 'explicit' and (
+                (prev_code and prev_code != new_code)
+                or (previous_declared_code and previous_declared_code != new_code)
+            )
+        )
         if country_changed:
             # Country transitioned across conversation turns: invalidate stale decision and plans
             state = {**state, 'geographic_decision': None, 'action_plan': []}
             emit_agent_trace(
                 'geographic_policy',
                 outcome='country_declaration_transition',
-                previous_country=prev_code,
+                previous_country=previous_declared_code or prev_code,
                 new_country=new_code,
                 revision=country.get('revision'),
             )
@@ -623,6 +639,37 @@ class SupervisorAgent:
         original_intents = list(detected_intents)
         emit_agent_trace('geographic_policy', outcome='intents_classified', intents=original_intents,
             country_code=country.get('code'), evidence_source='customer_declaration')
+        # Every replacement request requires a fresh, explicit country
+        # confirmation. A country mentioned earlier (or in the request itself)
+        # is retained as context but is not sufficient authorization for this
+        # replacement journey. A pure-country reply resumes the saved intents.
+        if 'replace_card' in detected_intents and not confirmed_country_for_replacement:
+            pending_intents = list(detected_intents)
+            return {
+                'iteration_count': iterations,
+                'next_step': 'respond',
+                'active_agent': None,
+                'proposed_tool': None,
+                'planned_intents': [],
+                'geographic_pending_intents': pending_intents,
+                'country_context': country,
+                'geographic_decision': {
+                    'decision': 'clarification_required',
+                    'reason_code': 'EXPLICIT_COUNTRY_CONFIRMATION_REQUIRED',
+                    'explanation': 'Explicit country confirmation is required for each replacement request.',
+                },
+                'final_response': (
+                    'Please explicitly confirm the country you are currently in for this replacement request.'
+                ),
+                'action_plan': [{
+                    'intent': intent,
+                    'target_agent': get_target_agent_for_intent(intent),
+                    'status': 'awaiting_country_confirmation',
+                    'tool_proposal': None,
+                    'result': None,
+                    'error': None,
+                } for intent in pending_intents],
+            }
         if 'replace_card' in detected_intents and hasattr(self.policy_evaluator, 'geographic_decision'):
             from card_chat.policy.geographic_explanation import explain_geographic_decision, safe_query
             geo, geo_evidence = self.policy_evaluator.geographic_decision(country, state.get('pinned_policies'),
@@ -729,11 +776,22 @@ class SupervisorAgent:
                     case_id = existing_case.case_id
                 else:
                     if not card_ref or (facts.get("accounts") and not account_number):
+                        # Selection is a private input. Delegate to the
+                        # specialist with no card identifier so the HTTP
+                        # layer opens the eligible blocked-card picker.
+                        handoff = AgentHandoff(
+                            origin_agent="supervisor",
+                            target_agent="cards_agent",
+                            intent="replace_card",
+                            relevant_context={},
+                            session_id=session_id,
+                            workflow_id=workflow_id,
+                        )
                         return {
                             "iteration_count": iterations,
-                            "next_step": "respond",
-                            "active_agent": None,
-                            "final_response": "Select the blocked card you want to replace so I can submit the correct card and account for review.",
+                            "next_step": "cards_agent",
+                            "active_agent": "cards_agent",
+                            "current_handoff": handoff,
                             "planned_intents": [],
                             "action_plan": action_plan,
                             **state_policy_updates,
@@ -894,11 +952,47 @@ class SupervisorAgent:
                 "The selected action is not authorized or is currently unavailable.",
             )
 
-        # 2. Outbound PII protection before any external model invocation
+        # Blocking is an independent security transaction. Explicit block-only
+        # language must never inherit or be expanded into replacement, and does
+        # not require geographic confirmation.
+        explicit_block = bool(re.search(
+            r"\b(?:block|freeze|stop)\b.{0,40}\b(?:my\s+)?card\b|"
+            r"\b(?:my\s+)?card\b.{0,40}\b(?:block|freeze|stop)\b",
+            clean_text,
+            re.IGNORECASE,
+        ))
+        requests_replacement = bool(re.search(
+            r"\b(?:replace|replacement|reissue|re-issue)\b", clean_text, re.IGNORECASE
+        ))
+        if explicit_block and not requests_replacement:
+            if "block_card" in allowed_tools:
+                return "fincrime_agent", ["block_card"], None
+            return "fincrime_agent", [], "Blocking cards is not currently available."
+
+        # Explicit read-only requests have a single safe interpretation. Keep
+        # this guard ahead of the model so a model-generated clarification (or
+        # accidental issuance classification) cannot override view_cards.
+        explicit_card_view = bool(re.search(
+            r"\b(?:show|view|see|list|display)\b.{0,50}\b(?:my\s+)?cards?\b|"
+            r"\bget\s+(?:me\s+)?my\s+cards\b|"
+            r"\b(?:how many|what|which)\b.{0,40}\bcards?\b|"
+            r"\bcards?\b.{0,30}\b(?:i have|do i have|currently have)\b",
+            clean_text,
+            re.IGNORECASE,
+        ))
+        if explicit_card_view:
+            if "view_cards" in allowed_tools:
+                return "cards_agent", ["view_cards"], None
+            return "cards_agent", [], "Viewing cards is not currently available."
+
+        # 2. Outbound PII protection before any external model invocation.
+        # The HTTP boundary has already tokenised/masked PII; this second gate
+        # makes the classifier fail closed even when called independently.
         from card_chat.pii.gateway import get_default_pii_gateway
         gateway = get_default_pii_gateway()
-        if gateway and clean_text:
-            gateway.verify_outbound(clean_text)
+        model_text = sanitise(clean_text)
+        if gateway and model_text:
+            gateway.verify_outbound(model_text)
 
         # 3. LLM-based intent classification and compound-request planning
         if (
@@ -913,6 +1007,10 @@ class SupervisorAgent:
                     "Available banking capabilities:\n"
                     "- FinCrime domain (fincrime_agent): block_card, unblock_card\n"
                     "- Cards domain (cards_agent): create_account, view_accounts, view_cards, issue_card, create_card, replace_card, register, login, logout\n"
+                    "Classify by meaning rather than exact wording. Any request to enumerate, count, inspect, identify, or ask about the status of cards the customer already has is view_cards. "
+                    "Questions about how many cards exist, the size of the customer's card portfolio, or which cards are active or blocked are view_cards. "
+                    "Likewise, requests to enumerate, inspect, or ask about existing accounts or balances are view_accounts. "
+                    "Do not classify an enquiry about existing cards as issue_card merely because it contains words such as get, card, or cards. "
                     "For compound requests (e.g. 'block my card and reissue a new one'), use block_card then replace_card. "
                     "Reissue means replace_card, not additional card issuance. List all intents in execution order.\n"
                     "Requests expressing a desire, question, or need for a new card (such as 'I want a card', 'Can I get a card?', 'I need a debit card', 'How can I get my first card?', 'Please issue me a card', 'I want to create a card') express card issuance and must be classified as 'issue_card' (or 'create_card'). Do not treat them as ambiguous or unsupported.\n"
@@ -927,7 +1025,7 @@ class SupervisorAgent:
                     model=self.model.model,
                     max_tokens=250,
                     system=[{"type": "text", "text": system_prompt}],
-                    messages=[{"role": "user", "content": clean_text}],
+                    messages=[{"role": "user", "content": model_text}],
                 )
                 text = "".join(b.text for b in response.content if b.type == "text").strip()
                 data = json.loads(text)
@@ -1041,7 +1139,7 @@ class SupervisorAgent:
         # View cards (requires explicit viewing action verbs, never just "my card" to avoid false positive in "lost my card")
         pos_view_card = _find_keyword_pos(
             lower,
-            ("view card", "view cards", "view my card", "show card", "show cards", "show my card", "show all my cards", "show me my active cards", "list card", "list cards", "list my", "see card", "see cards", "display card", "display cards", "all my cards", "active cards", "currently have", "what cards do i", "existing cards", "which of my cards", "do i have any active cards", "can i see my cards"),
+            ("view card", "view cards", "view my card", "show card", "show cards", "show my card", "show all my cards", "show me my active cards", "list card", "list cards", "list my", "list of my cards", "see card", "see cards", "display card", "display cards", "all my cards", "active cards", "currently have", "what cards do i", "how many cards", "number of cards", "existing cards", "which of my cards", "do i have any active cards", "can i see my cards"),
         )
         if pos_view_card != -1 and has_card:
             intent_candidates.append(("view_cards", pos_view_card))

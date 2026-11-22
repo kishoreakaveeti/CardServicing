@@ -89,8 +89,11 @@ def test_full_customer_journey_and_cross_customer_access(identity, tmp_path, mon
                 assert 'succeeded' in done.json()['message'], done.text
                 assert browser.post(path+'/confirm', headers=csrf, json={'review':review['review']}).json() == done.json()
                 path = start()
-                accounts = browser.post(path+'/messages', headers=csrf, json={'text':'Show my accounts'}).json()['data']['accounts']
+                account_reply = browser.post(path+'/messages', headers=csrf, json={'text':'Show my accounts'}).json()
+                accounts = account_reply['data']['accounts']
                 assert len(accounts) == 1
+                assert 'account ending' in account_reply['message'].lower()
+                assert account_reply['suggested_actions'] == ['view_accounts']
                 number = accounts[0]['account_number']
                 options = browser.get(path+'/inputs').json()['tools']
                 issue = next(t for t in options if t['name']=='issue_card')
