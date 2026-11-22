@@ -49,6 +49,19 @@ def normalise_compound_intents(intents: list[str], allowed_tools: dict) -> list[
     return list(dict.fromkeys(intents))
 
 
+def country_transition_invalidations() -> dict[str, Any]:
+    """Clear every authorization artifact bound to the previous country."""
+    return {
+        'geographic_decision': None,
+        'geographic_binding': None,
+        'action_plan': [],
+        'fincrime_approved': False,
+        'fincrime_case_id': None,
+        'fincrime_approval_reason': None,
+        'pending_fincrime_approval': False,
+    }
+
+
 def _find_keyword_pos(text: str, keywords: tuple[str, ...]) -> int:
     """Helper to find earliest keyword occurrence using word boundaries."""
     best_pos = -1
@@ -609,8 +622,12 @@ class SupervisorAgent:
             )
         )
         if country_changed:
-            # Country transitioned across conversation turns: invalidate stale decision and plans
-            state = {**state, 'geographic_decision': None, 'action_plan': []}
+            # A country-bound policy decision or staff approval cannot authorize
+            # a request after the declaration changes. In particular, a recent
+            # excluded -> permitted transition must be evaluated by POL-006 and
+            # sent for a new FinCrime review rather than inheriting an approval
+            # from the earlier country.
+            state = {**state, **country_transition_invalidations()}
             emit_agent_trace(
                 'geographic_policy',
                 outcome='country_declaration_transition',
@@ -622,7 +639,7 @@ class SupervisorAgent:
         state = {**state, 'country_context': country}
         geo_updates = {'country_context': country, 'geographic_pending_intents': []}
         if country_changed:
-            geo_updates['geographic_decision'] = None
+            geo_updates.update(country_transition_invalidations())
         geographic_notice = ''
         # Explicit replacement language cannot become additional issuance merely
         # because a model returned a different tool name.
@@ -951,6 +968,25 @@ class SupervisorAgent:
                 [],
                 "The selected action is not authorized or is currently unavailable.",
             )
+
+        # Unblocking is an explicit security transaction. Do not let a model
+        # reinterpret words such as "card" or "blocked" as a read-only card
+        # enquiry when the customer has clearly asked to reverse a freeze.
+        explicit_unblock = bool(re.search(
+            r"\b(?:unblock|un-block|unfreeze|un-freeze|reactivate|restore)\b.{0,50}\b(?:my\s+)?card\b|"
+            r"\b(?:my\s+)?card\b.{0,50}\b(?:unblock|un-block|unfreeze|un-freeze|reactivate|restore)\b",
+            clean_text,
+            re.IGNORECASE,
+        ))
+        unblock_has_followup = bool(re.search(
+            r"\b(?:and|then)\b.{0,40}\b(?:issue|new|additional|another|replace|replacement|reissue|re-issue)\b",
+            clean_text,
+            re.IGNORECASE,
+        ))
+        if explicit_unblock and not unblock_has_followup:
+            if "unblock_card" in allowed_tools:
+                return "fincrime_agent", ["unblock_card"], None
+            return "fincrime_agent", [], "Unblocking cards is not currently available."
 
         # Blocking is an independent security transaction. Explicit block-only
         # language must never inherit or be expanded into replacement, and does

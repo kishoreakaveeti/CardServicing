@@ -111,6 +111,30 @@ def test_supervisor_model_semantically_classifies_unseen_card_enquiry():
     asyncio.run(scenario())
 
 
+def test_explicit_unfreeze_cannot_be_overridden_by_model_as_view_cards():
+    async def scenario():
+        messages = AsyncMock(return_value=SimpleNamespace(
+            content=[SimpleNamespace(type="text", text='{"intents":["view_cards"]}')]
+        ))
+        model = SimpleNamespace(
+            client=SimpleNamespace(messages=SimpleNamespace(create=messages)),
+            model="claude-test",
+        )
+        supervisor = SupervisorAgent(model)
+        result = await supervisor.plan_or_route({
+            "messages": [{"role": "user", "content":
+                "Please unfreeze my temporarily frozen card. I have it safely with me."}],
+            "allowed_tools": {"view_cards": {}, "block_card": {}, "unblock_card": {}},
+            "iteration_count": 0, "handoff_history": [],
+        })
+
+        assert result["current_handoff"].intent == "unblock_card"
+        assert result["next_step"] == "fincrime_agent"
+        messages.assert_not_awaited()
+
+    asyncio.run(scenario())
+
+
 def test_cards_specialist_executes_validated_view_intent_without_second_model_call():
     async def scenario():
         agent = AsyncMock()

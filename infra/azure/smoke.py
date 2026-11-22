@@ -177,8 +177,9 @@ def main():
             record(report,'card-blocking','PASS','FinCrime workflow confirmed a temporary freeze through remote MCP')
             stage='card-unblocking'
             proposed=operation(client,path+'/messages',{'text':'Please unfreeze my temporarily frozen card. I have it safely with me.'})
-            assert proposed.get('input_tool')=='unblock_card'
-            card=selection(tools(client,path),'unblock_card','card_id')
+            assert proposed.get('input_tool')=='unblock_card', ('unblock intent response: '+json.dumps(proposed,sort_keys=True))
+            unblock_options=tools(client,path)
+            card=selection(unblock_options,'unblock_card','card_id')
             execute(client,path,'unblock_card',{}, {'card_id':card})
             record(report,'card-unblocking','PASS','Policy-authorized temporary-freeze reversal completed and replay matched')
             stage='card-replacement'

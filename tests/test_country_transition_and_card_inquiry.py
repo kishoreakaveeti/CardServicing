@@ -4,6 +4,18 @@ from card_chat.policy.geography import CountryContext, GeographicRules, evaluate
 from card_chat.policy.models import PolicyEvidence
 
 
+def test_country_transition_revokes_country_bound_fincrime_approval_source():
+    """Guard the workflow invariant even when the prior case was approved."""
+    from card_chat.orchestration.supervisor import country_transition_invalidations
+
+    transition = country_transition_invalidations()
+    assert transition["fincrime_approved"] is False
+    assert transition["fincrime_case_id"] is None
+    assert transition["pending_fincrime_approval"] is False
+    assert transition["geographic_decision"] is None
+    assert transition["geographic_binding"] is None
+
+
 def _evidence(rules):
     import hashlib
     content_hash = hashlib.sha256(b"policy").hexdigest()
