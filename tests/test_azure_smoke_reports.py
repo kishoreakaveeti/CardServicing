@@ -121,14 +121,16 @@ def test_public_smoke_replacement_supplies_country_and_verifies_actual_card_stat
     def operation(client,path,body,key=None):
         if path=='/api/conversations': return {'id':'synthetic'}
         prompts.append(body['text'])
+        if 'reissue a new one' in body['text']:
+            return {'country_required':True,'usage':{'model_calls':1}}
         name='unblock_card' if 'unfreeze' in body['text'] else 'block_card'
-        return {'input_tool':name,'usage':{'model_calls':1}}
+        return {'input_tool':name,'country_required':False,'usage':{'model_calls':1}}
     monkeypatch.setattr(module,'operation',operation)
     def execute(client,path,tool,fields,selections=None,*,expected_actions=1):
         if tool=='create_account': counts.update(active=1)
         elif tool=='unblock_card': counts.update(active=1,blocked=0)
         elif expected_actions==2:
-            assert 'I am currently in Australia' in prompts[-1]
+            assert any('I am currently in Australia' in prompt for prompt in prompts)
             counts.update(active=0 if missing_replacement else 1,blocked=1)
         else: counts.update(active=0,blocked=1)
         counts['actions']+=expected_actions

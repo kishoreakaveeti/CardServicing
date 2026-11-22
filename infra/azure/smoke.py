@@ -182,8 +182,11 @@ def main():
             execute(client,path,'unblock_card',{}, {'card_id':card})
             record(report,'card-unblocking','PASS','Policy-authorized temporary-freeze reversal completed and replay matched')
             stage='card-replacement'
-            proposed=operation(client,path+'/messages',{'text':'I am currently in Australia. Please block my card and reissue a new one.'})
+            country_prompt=operation(client,path+'/messages',{'text':'I am currently in Australia. Please block my card and reissue a new one.'})
+            assert country_prompt.get('country_required') is True
+            proposed=operation(client,path+'/messages',{'text':'Australia'})
             assert proposed.get('input_tool')=='block_card'
+            assert not proposed.get('country_required')
             card=selection(tools(client,path),'block_card','card_id')
             replaced=execute(client,path,'block_card',{'reason':'lost'}, {'card_id':card},expected_actions=2)
             assert not replaced.get('country_required')
