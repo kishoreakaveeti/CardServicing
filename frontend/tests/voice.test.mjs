@@ -63,6 +63,7 @@ test('BrowserSpeechRecognitionProvider: interim results update cleanly without m
   );
 
   assert.equal(provider.isListening(), true);
+  assert.equal(provider.currentRecognition.continuous, true);
 
   // Simulate speaking "I lost my card" with progressive interim results
   // Event 1: interim "I"
@@ -91,6 +92,37 @@ test('BrowserSpeechRecognitionProvider: interim results update cleanly without m
   // The final transcript must be exactly "I lost my card", NEVER duplicated
   assert.equal(transcripts[transcripts.length - 1], 'I lost my card');
   assert.ok(!transcripts[transcripts.length - 1].includes('I I lost'));
+});
+
+test('BrowserSpeechRecognitionProvider: a short pause restarts listening and preserves prior words', async () => {
+  const provider = new BrowserSpeechRecognitionProvider(MockSpeechRecognition);
+  const transcripts = [];
+  let ended = 0;
+
+  provider.start(
+    (t) => transcripts.push(t),
+    (err) => assert.fail(`Unexpected error: ${err}`),
+    () => { ended++; }
+  );
+
+  const firstSegment = provider.currentRecognition;
+  const firstFinal = [{ transcript: 'Please block my card' }];
+  firstFinal.isFinal = true;
+  firstSegment.emitResults([firstFinal]);
+  firstSegment.onend();
+
+  assert.equal(provider.isListening(), true);
+  assert.equal(ended, 0);
+  await new Promise((resolve) => setTimeout(resolve, 300));
+  assert.notEqual(provider.currentRecognition, firstSegment);
+
+  const secondFinal = [{ transcript: 'and replace it' }];
+  secondFinal.isFinal = true;
+  provider.currentRecognition.emitResults([secondFinal]);
+  assert.equal(transcripts.at(-1), 'Please block my card and replace it');
+
+  provider.stop();
+  assert.equal(provider.isListening(), false);
 });
 
 test('BrowserSpeechRecognitionProvider: duplicate callbacks do not duplicate final text', () => {

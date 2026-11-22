@@ -16,6 +16,7 @@ export class BrowserSpeechRecognitionProvider implements TranscriptionProvider {
   private listening: boolean = false;
   private currentRecognition: any = null;
   private SpeechRecognitionClass: any = null;
+  private restartTimer: ReturnType<typeof setTimeout> | null = null;
 
   constructor(customRecognitionClass?: any) {
     if (customRecognitionClass) {
@@ -52,14 +53,38 @@ export class BrowserSpeechRecognitionProvider implements TranscriptionProvider {
     const sessionId = ++this.activeSessionId;
     this.listening = true;
 
-    try {
-      const recognition = new this.SpeechRecognitionClass();
-      this.currentRecognition = recognition;
-      recognition.continuous = false;
-      recognition.interimResults = true;
-      recognition.lang = 'en-US';
+    let committedTranscript = '';
+    let segmentTranscript = '';
+    let ended = false;
 
-      recognition.onresult = (event: any) => {
+    const finish = (error?: string) => {
+      if (ended || this.activeSessionId !== sessionId) return;
+      ended = true;
+      this.listening = false;
+      this.currentRecognition = null;
+      if (this.restartTimer) {
+        clearTimeout(this.restartTimer);
+        this.restartTimer = null;
+      }
+      if (error) onError(error);
+      onEnd();
+    };
+
+    const beginSegment = () => {
+      if (!this.listening || ended || this.activeSessionId !== sessionId) return;
+      segmentTranscript = '';
+      let recognition: any;
+      try {
+        recognition = new this.SpeechRecognitionClass();
+        this.currentRecognition = recognition;
+        // Keep the browser listening across ordinary sentence pauses. Some Web
+        // Speech implementations still end individual recognition segments, so
+        // onend below safely starts another segment until the user presses Stop.
+        recognition.continuous = true;
+        recognition.interimResults = true;
+        recognition.lang = 'en-US';
+
+        recognition.onresult = (event: any) => {
         if (this.activeSessionId !== sessionId) return;
 
         let finalAccumulator = '';
@@ -78,41 +103,50 @@ export class BrowserSpeechRecognitionProvider implements TranscriptionProvider {
           }
         }
 
-        const combined = [finalAccumulator, interimAccumulator].filter(Boolean).join(' ').trim();
+        segmentTranscript = [finalAccumulator, interimAccumulator].filter(Boolean).join(' ').trim();
+        const combined = [committedTranscript, segmentTranscript].filter(Boolean).join(' ').trim();
         if (combined) {
           onResult(combined);
         }
-      };
+        };
 
-      recognition.onerror = (event: any) => {
+        recognition.onerror = (event: any) => {
         if (this.activeSessionId !== sessionId) return;
-        this.listening = false;
         const err = event?.error || 'unknown';
 
         if (err === 'not-allowed' || err === 'service-not-allowed') {
-          onError('Microphone access was denied. You can continue typing in the chat input.');
+          finish('Microphone access was denied. You can continue typing in the chat input.');
         } else if (err === 'no-speech') {
-          onError('No speech was detected. Please try speaking again.');
+          // A short pause is not an error. The following onend event restarts
+          // recognition while preserving everything already transcribed.
+          return;
         } else if (err === 'network') {
-          onError('Speech recognition network error. Please check your connection or type your message.');
+          finish('Speech recognition network error. Please check your connection or type your message.');
         } else {
-          onError(`Speech recognition notice: ${err}`);
+          finish(`Speech recognition notice: ${err}`);
         }
-        onEnd();
-      };
+        };
 
-      recognition.onend = () => {
-        if (this.activeSessionId !== sessionId) return;
-        this.listening = false;
-        onEnd();
-      };
+        recognition.onend = () => {
+        if (this.activeSessionId !== sessionId || ended || !this.listening) return;
+        if (segmentTranscript) {
+          committedTranscript = [committedTranscript, segmentTranscript].filter(Boolean).join(' ').trim();
+          segmentTranscript = '';
+        }
+        this.currentRecognition = null;
+        this.restartTimer = setTimeout(() => {
+          this.restartTimer = null;
+          beginSegment();
+        }, 250);
+        };
 
-      recognition.start();
-    } catch {
-      this.listening = false;
-      onError('Could not start microphone. Please try again.');
-      onEnd();
-    }
+        recognition.start();
+      } catch {
+        finish('Could not continue microphone recognition. Please try again.');
+      }
+    };
+
+    beginSegment();
   }
 
   stop(): void {
@@ -120,6 +154,10 @@ export class BrowserSpeechRecognitionProvider implements TranscriptionProvider {
     this.activeSessionId++;
     this.listening = false;
     this.currentRecognition = null;
+    if (this.restartTimer) {
+      clearTimeout(this.restartTimer);
+      this.restartTimer = null;
+    }
 
     if (prev) {
       try {
