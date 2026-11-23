@@ -27,8 +27,9 @@ flowchart TB
 
     subgraph Integration["Trusted Enterprise Integration"]
         direction LR
-        Executor["Authorised Action Executor"] --> Gateway["Governed Tool Gateway / MCP"]
-        Gateway --> DomainAPI["Domain APIs"] --> Records[("Systems of Record")]
+        Executor["Authorised Action Executor"] --> MCPClient["MCP Client<br/>Hosted inside application service"]
+        MCPClient -->|"MCP protocol"| MCPServer["MCP Server / Tool Gateway<br/>Separately deployable integration service"]
+        MCPServer --> DomainAPI["Domain APIs"] --> Records[("Systems of Record")]
     end
 
     subgraph Crosscutting["Enterprise Controls Across All Layers"]
@@ -48,10 +49,64 @@ flowchart TB
     classDef trusted fill:#dcfce7,stroke:#16a34a,color:#14532d
     class Entry,Privacy,Orchestrator,Specialists runtime
     class Validate,Rules,Approval control
-    class Executor,Gateway,DomainAPI trusted
+    class Executor,MCPClient,MCPServer,DomainAPI trusted
 ```
 
-## 2. CardServicing Deployment and Component Architecture
+## 2. CardServicing Technology Overlay on Enterprise Reference Architecture
+
+```mermaid
+%%{init: {"flowchart": {"curve": "linear", "nodeSpacing": 55, "rankSpacing": 65}}}%%
+flowchart TB
+    Consumer["Banking customer<br/>CardServicing browser"] --> Experience["Digital Channel / Experience API<br/>React + Nginx, Caddy HTTPS, FastAPI BFF"]
+
+    subgraph Runtime["Agentic Application Runtime"]
+        direction TB
+        Entry["Agent API / Workflow Entry Point<br/>FastAPI cards-agent container"] --> Privacy["Privacy Boundary<br/>Microsoft Presidio + in-memory token vault"]
+        Privacy --> Orchestrator["Stateful Supervisor / Orchestrator<br/>LangGraph StateGraph in cards-agent"]
+        Orchestrator --> Specialists["Pluggable Domain Agents<br/>Cards node in-process; FinCrime node calls remote FastAPI"]
+        Orchestrator -.-> State[("Workflow State and Checkpoints<br/>LangGraph + durable SQLite")]
+    end
+
+    subgraph Intelligence["Model and Knowledge Capabilities"]
+        direction LR
+        Models["Approved Model Access<br/>Anthropic Claude via Python SDK"]
+        Retrieval["Governed Knowledge Retrieval<br/>HybridPolicyRetriever, FastEmbed, Qdrant"]
+    end
+
+    subgraph Governance["Deterministic Governance"]
+        direction LR
+        Validate["Validate Proposals and Evidence<br/>Python validators, tool allowlists, policy hashes"] --> Rules["Policy Decision Point<br/>Python GroundedPolicyEvaluator + JSON rules<br/>OPA only synced during policy release"]
+        Rules --> Approval["Customer / Staff Approval<br/>LangGraph interrupt and resume"]
+    end
+
+    subgraph Integration["Trusted Enterprise Integration"]
+        direction LR
+        Executor["Authorised Action Executor<br/>Trusted FastAPI handler in cards-agent"] --> MCPClient["MCP Client<br/>Python MCP SDK inside cards-agent"]
+        MCPClient -->|"MCP protocol"| MCPServer["MCP Server / Tool Gateway<br/>Separate mcp-server FastAPI container<br/>Streamable HTTP at /mcp"]
+        MCPServer --> DomainAPI["Domain APIs<br/>Separate cards-api and fincrime-api FastAPI containers"] --> Records[("Systems of Record<br/>Per-service SQLite demo stores")]
+    end
+
+    subgraph Crosscutting["Enterprise Controls Across All Layers"]
+        direction LR
+        Identity["Identity and Delegated Access<br/>Keycloak OIDC + MariaDB"]
+        Audit["Observability / Audit / Security Monitoring<br/>Correlation telemetry + Azure Blob sink"]
+    end
+
+    Experience --> Entry
+    Specialists --> Validate
+    Orchestrator -.-> Models
+    Orchestrator -.-> Retrieval
+    Approval --> Executor
+
+    classDef runtime fill:#ede9fe,stroke:#7c3aed,color:#4c1d95
+    classDef control fill:#fef3c7,stroke:#d97706,color:#78350f
+    classDef trusted fill:#dcfce7,stroke:#16a34a,color:#14532d
+    class Entry,Privacy,Orchestrator,Specialists runtime
+    class Validate,Rules,Approval control
+    class Executor,MCPClient,MCPServer,DomainAPI trusted
+```
+
+## 3. CardServicing Deployment and Component Architecture
 
 ```mermaid
 %%{init: {"flowchart": {"curve": "linear", "nodeSpacing": 55, "rankSpacing": 65}}}%%
@@ -101,7 +156,7 @@ flowchart TB
     class Qdrant,MariaDB,SQLite,Blob storage
 ```
 
-## 3. CardServicing LangGraph Multi-Agent Orchestration
+## 4. CardServicing LangGraph Multi-Agent Orchestration
 
 ```mermaid
 %%{init: {"flowchart": {"curve": "linear", "nodeSpacing": 60, "rankSpacing": 70}}}%%
@@ -152,7 +207,7 @@ flowchart TB
     class Search,Plan,Confirm,Staff graphNode
 ```
 
-## 4. CardServicing RAG, Policy Governance and Trusted Execution
+## 5. CardServicing RAG, Policy Governance and Trusted Execution
 
 ```mermaid
 %%{init: {"flowchart": {"curve": "linear", "nodeSpacing": 55, "rankSpacing": 65}}}%%
